@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+version = "1.0.0"
+name = "Fit"
+readme = "README.md"
+description = "A Python package for fitting ViennaPS simulation models to experimental data."
+dependencies = [
+    "numpy>=1.24.0",
+    "ViennaLS>=4.3.1",
+    "ViennaPS>=3.5.0",
+    "dlib>=19.24.0",
+    ]
+
+[project.urls]
+Repository = "https://github.com/kenyastyle/Fit"
