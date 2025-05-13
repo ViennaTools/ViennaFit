@@ -9,6 +9,8 @@ class Project:
         self.projectPath = f"./{projectName}"
         self.projectAbsPath = os.path.abspath(self.projectPath)
 
+        self.mode = "2D"  # Default mode
+
     def initialize(self):
         # Check if the project directory already exists
         if os.path.exists(self.projectPath):
@@ -56,4 +58,11 @@ class Project:
 
         print(f"Project '{self.projectName}' loaded with the following information:")
         print(json.dumps(projectInfo, indent=4))
+
+    def setMode(self, mode: str):
+        """Set the mode of the project. Currently only 2D is supported."""
+        if mode not in ["2D", "3D"]:
+            raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
+        self.mode = mode
+        print(f"Project mode set to {self.mode}.")    
 
