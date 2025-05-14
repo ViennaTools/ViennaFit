@@ -5,5 +5,3 @@ project = fit.Project("testProject")
 project.initialize()
 
 project.load("testProject")
-
-project.load("testProject")
