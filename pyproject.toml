@@ -16,3 +16,8 @@ dependencies = [
 
 [project.urls]
 Repository = "https://github.com/kenyastyle/Fit"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'

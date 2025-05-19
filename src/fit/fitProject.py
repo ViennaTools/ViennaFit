@@ -14,10 +14,12 @@ class Project:
     def initialize(self):
         # Check if the project directory already exists
         if os.path.exists(self.projectPath):
-            print(f"Project '{self.projectName}' already exists. Continuing with existing project.")
+            print(
+                f"Project '{self.projectName}' already exists. Continuing with existing project."
+            )
             # todo: load project state from json or similar
             return
-        
+
         # Create the main project directory
         os.makedirs(self.projectPath, exist_ok=True)
 
@@ -28,13 +30,14 @@ class Project:
 
         print(f"Project '{self.projectName}' initialized with standard structure.")
 
-        # save project info to json
         # Create project information dictionary
         projectInfo = {
             "projectName": self.projectName,
+            "projectDescription": "This is a sample project description.",
             "projectPath": self.projectAbsPath,
             "createdDate": str(datetime.datetime.now()),
-            "subdirectories": ["annotations", "targets", "optRuns", "paramStudies", "hits"]
+            "optimizationRuns": [],
+            "parameterStudies": [],
         }
 
         # Save project information to JSON file
@@ -43,7 +46,6 @@ class Project:
             json.dump(projectInfo, f, indent=4)
 
         print(f"Project information saved to {projectInfoPath}")
-
 
     def load(self, projectPath: str = "projectPath"):
         self.projectPath = projectPath
@@ -64,5 +66,4 @@ class Project:
         if mode not in ["2D", "3D"]:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
         self.mode = mode
-        print(f"Project mode set to {self.mode}.")    
-
+        print(f"Project mode set to {self.mode}.")
