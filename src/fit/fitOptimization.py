@@ -23,8 +23,19 @@ class Parameter:
 class Optimization:
     def __init__(self, name: str, project: Project):
         self.name = name
+
+        # check project readiness, and set run directory
+        if project.isReady:
+            self.runDir = os.path.join(project.projectPath, "optimizationRuns", name)
+        else:
+            raise ValueError(
+                "Project is not ready. Please initialize the project first, "
+                "set the initial and target domains, and then run the optimization."
+            )
+        os.makedirs(self.runDir, exist_ok=True)
         self.project = project
-        self.initialDomain = None
+
+        # Set internal variables
         self.resultLevelSet = None
         self.applied = False
         self.processSequence = None
@@ -34,13 +45,9 @@ class Optimization:
         self.bestParameters = None
         self.bestScore = float("inf")
 
-        # Create directory for this optimization run, throw an error if it already exists
-        self.runDir = os.path.join(project.projectPath, "optRuns", name)
-        if os.path.exists(self.runDir):
-            raise FileExistsError(
-                f"Directory already exists: {self.runDir}. Please choose a different name."
-            )
-        os.makedirs(self.runDir)
+        print(
+            f"Optimization '{self.name}' assigned to project '{self.project.projectName}' and initialized in {self.runDir}"
+        )
 
     def addParameter(self, name: str, defaultValue: float = None):
         """
@@ -54,14 +61,10 @@ class Optimization:
         return self
 
     def addParameters(self, paramNames: List[str]):
-        """
-        Add multiple parameters that can be used in optimization
-
-        Args:
-            paramNames: List of parameter names
-        """
+        """Add parameters that will be used in optimization"""
         for name in paramNames:
-            self.addParameter(name)
+            if name not in self.parameters:
+                self.parameters[name] = Parameter(name)
         return self
 
     def setFixedParameter(self, name: str, value: float):
@@ -177,27 +180,51 @@ class Optimization:
 
         raise ValueError(f"No ProcessSequence subclass found in file: {absPath}")
 
-    def setProcessSequence(self, sequence: ProcessSequence):
-        """Set the process sequence to be optimized"""
-        self.processSequence = sequence
+    def setProcessSequence(self, sequence_func):
+        """
+        Set the process sequence to be optimized.
 
-        # Automatically set the initial domain to the process sequence
-        if self.initialDomain is not None:
-            self.processSequence.setInitialDomain(self.initialDomain)
+        Args:
+            sequence_func: Function with signature (domain, *, param1, param2, ...) -> domain
+                The function should accept an initial domain and parameter keywords,
+                apply the process sequence, and return the resulting domain.
 
-        return self
+        Example:
+            def my_sequence(domain, *, param1, param2):
+                model = vps.MultiParticleProcess()
+                # Configure process with params
+                # ...
+                return processed_domain
 
-    def setInitialDomain(self, passedDomain: Domain):
-        """Set the initial domain for the optimization"""
-        self.initialDomain = passedDomain
+            opt.setProcessSequence(my_sequence)
+        """
+        # Validate the function signature
+        import inspect
 
-        # Also set the initial domain for the process sequence if it exists
-        if self.processSequence is not None:
-            self.processSequence.setInitialDomain(passedDomain)
+        sig = inspect.signature(sequence_func)
 
-        # Reset result since we have a new initial domain
-        self.resultLevelSet = None
-        self.applied = False
+        # Check if first parameter exists and is positional
+        params = list(sig.parameters.values())
+        if not params or params[0].kind not in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.POSITIONAL_ONLY,
+        ):
+            raise ValueError("Process sequence must accept domain as first argument")
+
+        self.processSequence = sequence_func
+
+        # Store parameter names from function signature
+        self.sequence_params = set()
+        for param in params[1:]:  # Skip first param (domain)
+            if param.kind in (
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            ):
+                self.sequence_params.add(param.name)
+
+        print(
+            f"Process sequence set with parameters: {', '.join(self.sequence_params)}"
+        )
         return self
 
     def saveParameters(self, filename: str = "parameters.json"):
@@ -290,3 +317,27 @@ class Optimization:
         # After optimization, save results
         self.saveBestResult()
         self.saveParameters("finalParameters.json")
+
+    def validate(self):
+        """Validate that all required parameters are defined"""
+        if not hasattr(self, "processSequence"):
+            raise ValueError("No process sequence has been set")
+
+        if not self.parameters:
+            raise ValueError("No parameters have been defined")
+
+        # Check that all sequence parameters are defined
+        missing = self.sequence_params - set(self.parameters.keys())
+        if missing:
+            raise ValueError(f"Missing required parameters: {', '.join(missing)}")
+
+        # Check that all parameters have values or ranges set
+        unset = [
+            name
+            for name, param in self.parameters.items()
+            if param.value is None and not param.isFixed
+        ]
+        if unset:
+            raise ValueError(f"Parameters without values or ranges: {', '.join(unset)}")
+
+        return True

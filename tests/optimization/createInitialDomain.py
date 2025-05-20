@@ -58,3 +58,75 @@ domainInitial.insertNextLevelSetAsMaterial(domainBottom, vps.Material.Si)
 
 p1.setInitialDomain(domainInitial)
 p1.setTargetLevelSet(domainTarget)
+
+opt1 = fit.Optimization("run1", p1)
+
+
+def processSequence1(
+    domain, *, neutralStickP, ionPowerCosine, neutralRate, ionRate, ionEnergy
+):
+    """
+    Process sequence for optimization.
+
+    Args:
+        domain: Initial ViennaPS domain
+        neutralStickP: Sticking probability for neutrals
+        ionPowerCosine: Ion angular distribution power
+        neutralRate: Neutral particle rate
+        ionRate: Ion particle rate
+        ionEnergy: Ion energy in eV
+
+    Returns:
+        Processed domain
+    """
+    model = vps.MultiParticleProcess()
+
+    # Set the parameters for the neutral
+    sticking = {vps.Material.Si: neutralStickP}
+    model.addNeutralParticle(sticking, label="neutral")
+
+    # Set the parameters for the ion
+    model.addIonParticle(sourcePower=ionPowerCosine, meanEnergy=ionEnergy, label="ion")
+
+    def rateFunction(fluxes, material):
+        if material == vps.Material.Si:
+            return fluxes[0] * neutralRate + fluxes[1] * ionRate
+        return 0.0
+
+    model.setRateFunction(rateFunction)
+
+    result = vps.Domain()
+    result.deepCopy(domain)
+
+    process = vps.Process()
+    process.setDomain(result)
+    process.setProcessModel(model)
+    process.setProcessDuration(1.0)
+    process.apply()
+
+    return result
+
+
+# Set up optimization
+opt1.setProcessSequence(processSequence1)
+
+# Parameters will be automatically detected from function signature
+opt1.addParameters(
+    ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
+)
+
+# Set variable parameters with ranges
+opt1.setVariableParameters(
+    {
+        "neutralStickP": (0.001, 0.9),
+        "ionPowerCosine": (1.0, 900.0),
+        "neutralRate": (1.0, 70.0),
+        "ionRate": (1.0, 40.0),
+    }
+)
+
+# Set fixed parameters
+opt1.setFixedParameters({"ionEnergy": 100.0})
+
+# Validate before optimization
+opt1.validate()

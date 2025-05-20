@@ -171,3 +171,13 @@ class Project:
 
         print(f"Target level set saved to {self.projectInfoPath}")
         return self
+
+    def isReady(self):
+        """Check if the project is ready for optimization/sensitivity studies."""
+        if self.initialDomain is None:
+            print("Initial domain is not set.")
+            return False
+        if self.targetLevelSet is None:
+            print("Target level set is not set.")
+            return False
+        return True
