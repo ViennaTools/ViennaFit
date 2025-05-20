@@ -4,29 +4,63 @@ import datetime
 
 
 class Project:
-    def __init__(self, projectName: str = "UnnamedProject"):
-        self.projectName = projectName
-        self.projectPath = f"./{projectName}"
-        self.projectAbsPath = os.path.abspath(self.projectPath)
+    def __init__(self):
+        self.projectName = None
+        self.projectPath = None
+        self.projectAbsPath = None
+        self.projectInfoPath = None
 
         self.mode = "2D"  # Default mode
 
+        self.initialDomain = None
+        self.targetLevelSet = None
+
+    def setName(self, name: str):
+        """Set the name of the project."""
+        self.projectName = name
+        self.projectPath = f"./{name}"
+        self.projectAbsPath = os.path.abspath(self.projectPath)
+        self.projectInfoPath = os.path.join(
+            self.projectAbsPath, f"{self.projectName}-info.json"
+        )
+        print(f"Project name set to '{self.projectName}'.")
+
     def initialize(self):
+        """Initialize the project with a standard directory structure."""
+        if self.projectName is None:
+            raise ValueError("Project name must be set before initialization.")
+
         # Check if the project directory already exists
         if os.path.exists(self.projectPath):
-            print(
-                f"Project '{self.projectName}' already exists. Continuing with existing project."
+            raise FileExistsError(
+                "Project already exists. Please choose a different name."
             )
-            # todo: load project state from json or similar
-            return
 
         # Create the main project directory
         os.makedirs(self.projectPath, exist_ok=True)
 
         # Create subdirectories
-        subdirs = ["annotations", "targets", "optRuns", "paramStudies", "hits"]
+        subdirs = [
+            "domains",
+            "optimizationRuns",
+            "locSensStudies",
+            "globSensStudies",
+            "hits",
+        ]
         for subdir in subdirs:
             os.makedirs(os.path.join(self.projectPath, subdir), exist_ok=True)
+
+        # Create folders within the domains directory
+        domainSubdirs = [
+            "annotations",
+            "initialDomain",
+            "targetDomain",
+            "optimalDomains",
+        ]
+        for subdir in domainSubdirs:
+            os.makedirs(
+                os.path.join(self.projectPath, "domains", subdir), exist_ok=True
+            )
 
         print(f"Project '{self.projectName}' initialized with standard structure.")
 
@@ -36,27 +70,47 @@ class Project:
             "projectDescription": "This is a sample project description.",
             "projectPath": self.projectAbsPath,
             "createdDate": str(datetime.datetime.now()),
+            "lastModifiedDate": str(datetime.datetime.now()),
+            "mode": self.mode,
+            "initialDomain": None,
+            "targetLevelSet": None,
             "optimizationRuns": [],
-            "parameterStudies": [],
+            "locSensStudies": [],
+            "globSensStudies": [],
         }
 
         # Save project information to JSON file
-        projectInfoPath = os.path.join(self.projectPath, "projectInfo.json")
-        with open(projectInfoPath, "w") as f:
+        with open(self.projectInfoPath, "w") as f:
             json.dump(projectInfo, f, indent=4)
 
-        print(f"Project information saved to {projectInfoPath}")
+        print(f"Project information saved to {self.projectInfoPath}")
 
     def load(self, projectPath: str = "projectPath"):
-        self.projectPath = projectPath
-        if not os.path.exists(self.projectPath):
-            print(f"Project '{self.projectName}' does not exist.")
-            return
+        if not os.path.exists(projectPath):
+            raise FileNotFoundError(
+                f"Project directory '{projectPath}' does not exist."
+            )
 
-        # Load project info from json
-        projectInfoPath = os.path.join(self.projectPath, "projectInfo.json")
+        # if projethPath does not end with .json, construct the path
+        if not projectPath.endswith(".json"):
+            # project name is last part of the path
+            projectName = os.path.basename(projectPath)
+            print(projectName)
+            projectInfoPath = os.path.join(projectPath, f"{projectName}-info.json")
+
+        # load the project information from the JSON file
         with open(projectInfoPath, "r") as f:
             projectInfo = json.load(f)
+        self.projectName = projectInfo["projectName"]
+        self.projectPath = projectInfo["projectPath"]
+        self.projectAbsPath = os.path.abspath(self.projectPath)
+        self.projectInfoPath = projectInfoPath
+        self.mode = projectInfo["mode"]
+        self.initialDomain = projectInfo["initialDomain"]
+        self.targetLevelSet = projectInfo["targetLevelSet"]
+        self.optimizationRuns = projectInfo["optimizationRuns"]
+        self.locSensStudies = projectInfo["locSensStudies"]
+        self.globSensStudies = projectInfo["globSensStudies"]
 
         print(f"Project '{self.projectName}' loaded with the following information:")
         print(json.dumps(projectInfo, indent=4))
@@ -67,3 +121,53 @@ class Project:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
         self.mode = mode
         print(f"Project mode set to {self.mode}.")
+
+    def setInitialDomain(self, domain):
+        """Set the initial domain for the project."""
+        self.initialDomain = domain
+
+        # Save the initial domain to the inital domain directory
+        initialDomainDir = os.path.join(self.projectPath, "domains", "initialDomain")
+        os.makedirs(initialDomainDir, exist_ok=True)
+        domainPath = os.path.join(
+            initialDomainDir, f"{self.projectName}-initialDomain.vpsd"
+        )
+
+        if self.mode == "2D":
+            import viennaps2d as vps
+
+            vps.Writer(domain, domainPath).apply()
+        elif self.mode == "3D":
+            import viennaps3d as vps
+
+            vps.Writer(domain, domainPath).apply()
+        else:
+            raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
+
+        print(f"Initial domain saved to {self.projectInfoPath}")
+        return self
+
+    def setTargetLevelSet(self, levelSet):
+        """Set the target level set for the project."""
+        self.targetLevelSet = levelSet
+
+        # Save the target level set to the target domain directory
+        targetDomainDir = os.path.join(self.projectPath, "domains", "targetDomain")
+        os.makedirs(targetDomainDir, exist_ok=True)
+        domainPath = os.path.join(
+            targetDomainDir, f"{self.projectName}-targetDomain.lvst"
+        )
+
+        if self.mode == "2D":
+            import viennals2d as vls
+
+            vls.Writer(levelSet, domainPath).apply()
+        elif self.mode == "3D":
+            import viennals3d as vls
+
+            vls.Writer(levelSet, domainPath).apply()
+        else:
+            raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
+
+        print(f"Target level set saved to {self.projectInfoPath}")
+        return self
