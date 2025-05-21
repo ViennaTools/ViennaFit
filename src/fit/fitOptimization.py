@@ -1,5 +1,6 @@
 from .fitProject import Project
 from .fitProcessSequence import ProcessSequence
+from .fitDistanceMetrics import distanceMetric
 from viennaps2d import Domain
 import importlib.util
 import sys
@@ -39,6 +40,7 @@ class Optimization:
         self.resultLevelSet = None
         self.applied = False
         self.processSequence = None
+        self.distanceMetric = None
 
         # Parameter handling
         self.parameters: Dict[str, Parameter] = {}
@@ -49,22 +51,9 @@ class Optimization:
             f"Optimization '{self.name}' assigned to project '{self.project.projectName}' and initialized in {self.runDir}"
         )
 
-    def addParameter(self, name: str, defaultValue: float = None):
-        """
-        Add a parameter that can be used in optimization
-
-        Args:
-            name: Parameter name
-            defaultValue: Default value for the parameter (optional)
-        """
-        self.parameters[name] = Parameter(name=name, value=defaultValue)
-        return self
-
-    def addParameters(self, paramNames: List[str]):
-        """Add parameters that will be used in optimization"""
-        for name in paramNames:
-            if name not in self.parameters:
-                self.parameters[name] = Parameter(name)
+    def setParameterNames(self, paramNames: List[str]):
+        """Specifies names of parameters that will be used in optimization"""
+        self.parameters = paramNames
         return self
 
     def setFixedParameter(self, name: str, value: float):
@@ -341,3 +330,26 @@ class Optimization:
             raise ValueError(f"Parameters without values or ranges: {', '.join(unset)}")
 
         return True
+
+    def setDistanceMetric(self, metric: str):
+        """
+        Set the distance metric for comparing level sets which will be minimized
+
+        Args:
+            metric: Distance metric to be used.
+                    Options include:
+                        - 'CA' (Compare area mismatch),
+                        - 'CSF' (Compare sparse field),
+                        - 'CNB' (Compare narrow band),
+                        - 'CA+CSF' (Sum of CA and CSF),
+                        - 'CA+CNB' (Sum of CA and CNB).
+        """
+
+        if metric not in ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB"]:
+            raise ValueError(
+                f"Invalid distance metric: {metric}. "
+                "Options are 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB'."
+            )
+
+        self.distanceMetric()
+        return self
