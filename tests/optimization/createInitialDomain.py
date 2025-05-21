@@ -62,35 +62,31 @@ p1.setTargetLevelSet(domainTarget)
 opt1 = fit.Optimization("run1", p1)
 
 
-def processSequence1(
-    domain, *, neutralStickP, ionPowerCosine, neutralRate, ionRate, ionEnergy
-):
+def processSequence1(domain, params):
     """
     Process sequence for optimization.
 
     Args:
         domain: Initial ViennaPS domain
-        neutralStickP: Sticking probability for neutrals
-        ionPowerCosine: Ion angular distribution power
-        neutralRate: Neutral particle rate
-        ionRate: Ion particle rate
-        ionEnergy: Ion energy in eV
+        params: Parameters for the process
 
     Returns:
-        Processed domain
+        resulting ViennLS domain which will be compared with the target
     """
     model = vps.MultiParticleProcess()
 
     # Set the parameters for the neutral
-    sticking = {vps.Material.Si: neutralStickP}
+    sticking = {vps.Material.Si: params.neutralStickP}
     model.addNeutralParticle(sticking, label="neutral")
 
     # Set the parameters for the ion
-    model.addIonParticle(sourcePower=ionPowerCosine, meanEnergy=ionEnergy, label="ion")
+    model.addIonParticle(
+        sourcePower=params.ionPowerCosine, meanEnergy=params.ionEnergy, label="ion"
+    )
 
     def rateFunction(fluxes, material):
         if material == vps.Material.Si:
-            return fluxes[0] * neutralRate + fluxes[1] * ionRate
+            return fluxes[0] * params.neutralRate + fluxes[1] * params.ionRate
         return 0.0
 
     model.setRateFunction(rateFunction)
@@ -111,7 +107,7 @@ def processSequence1(
 opt1.setProcessSequence(processSequence1)
 
 # Parameters will be automatically detected from function signature
-opt1.addParameters(
+opt1.setParameterNames(
     ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
 )
 
@@ -127,6 +123,10 @@ opt1.setVariableParameters(
 
 # Set fixed parameters
 opt1.setFixedParameters({"ionEnergy": 100.0})
+
+opt1.setDistanceMetric("CA")
+
+opt1.setDistanceMetric("CA+CSF")
 
 # Validate before optimization
 opt1.validate()
