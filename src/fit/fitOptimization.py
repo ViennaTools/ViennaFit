@@ -1,24 +1,12 @@
 from .fitProject import Project
 from .fitProcessSequence import ProcessSequence
-from .fitDistanceMetrics import distanceMetric
+from .fitDistanceMetrics import constuctDistanceMetric
 from viennaps2d import Domain
 import importlib.util
 import sys
 import os
 import json
-from dataclasses import dataclass, asdict
 from typing import Dict, List, Tuple, Any, Optional
-
-
-@dataclass
-class Parameter:
-    """Class to store parameter information"""
-
-    name: str
-    value: float = None
-    minValue: float = None
-    maxValue: float = None
-    isFixed: bool = False
 
 
 class Optimization:
@@ -43,7 +31,9 @@ class Optimization:
         self.distanceMetric = None
 
         # Parameter handling
-        self.parameters: Dict[str, Parameter] = {}
+        self.parameterNames = []
+        self.fixedParameters = {}
+        self.variableParameters = {}
         self.bestParameters = None
         self.bestScore = float("inf")
 
@@ -53,22 +43,7 @@ class Optimization:
 
     def setParameterNames(self, paramNames: List[str]):
         """Specifies names of parameters that will be used in optimization"""
-        self.parameters = paramNames
-        return self
-
-    def setFixedParameter(self, name: str, value: float):
-        """
-        Set a parameter as fixed with a specific value
-
-        Args:
-            name: Parameter name
-            value: Fixed value for this parameter
-        """
-        if name not in self.parameters:
-            self.addParameter(name)
-
-        self.parameters[name].value = value
-        self.parameters[name].isFixed = True
+        self.parameterNames = paramNames
         return self
 
     def setFixedParameters(self, fixedParams: Dict[str, float]):
@@ -78,31 +53,18 @@ class Optimization:
         Args:
             fixedParams: Dictionary mapping parameter names to fixed values
         """
+        if self.parameterNames is None:
+            raise ValueError(
+                "Parameter names must be set before defining fixed parameters"
+            )
         for name, value in fixedParams.items():
-            self.setFixedParameter(name, value)
-        return self
-
-    def setVariableParameter(self, name: str, minValue: float, maxValue: float):
-        """
-        Set a parameter as variable with a range for optimization
-
-        Args:
-            name: Parameter name
-            minValue: Minimum value for optimization
-            maxValue: Maximum value for optimization
-        """
-        if name not in self.parameters:
-            self.addParameter(name)
-
-        param = self.parameters[name]
-        param.minValue = minValue
-        param.maxValue = maxValue
-        param.isFixed = False
-
-        # Set to middle of range if no value exists
-        if param.value is None:
-            param.value = (minValue + maxValue) / 2
-
+            if name not in self.parameterNames:
+                raise ValueError(
+                    f"Parameter '{name}' is not defined in parameter names"
+                )
+            if name in self.variableParameters:
+                raise ValueError(f"Parameter '{name}' is already set as variable")
+            self.fixedParameters[name] = value
         return self
 
     def setVariableParameters(self, varParams: Dict[str, Tuple[float, float]]):
@@ -110,10 +72,21 @@ class Optimization:
         Set multiple parameters as variable with ranges
 
         Args:
-            varParams: Dictionary mapping parameter names to tuples of (minValue, maxValue)
+            varParams: Dictionary mapping parameter names to tuples of (lowerBound, upperBound)
         """
-        for name, (minVal, maxVal) in varParams.items():
-            self.setVariableParameter(name, minVal, maxVal)
+        if self.parameterNames is None:
+            raise ValueError(
+                "Parameter names must be set before defining variable parameters"
+            )
+        for name, (lowerBound, upperBound) in varParams.items():
+            if name not in self.parameterNames:
+                raise ValueError(
+                    f"Parameter '{name}' is not defined in parameter names. \
+                    The current parameter names are: {self.parameterNames}"
+                )
+            if name in self.fixedParameters:
+                raise ValueError(f"Parameter '{name}' is already set as fixed")
+            self.variableParameters[name] = (lowerBound, upperBound)
         return self
 
     def getParameterDict(self):
@@ -127,8 +100,8 @@ class Optimization:
     def getVariableBounds(self):
         """Get bounds for variable parameters as lists"""
         varParams = self.getVariableParameterList()
-        lowerBounds = [p.minValue for p in varParams]
-        upperBounds = [p.maxValue for p in varParams]
+        lowerBounds = [p.lowerBound for p in varParams]
+        upperBounds = [p.upperBound for p in varParams]
         return lowerBounds, upperBounds
 
     def loadProcessSequence(self, filePath: str):
@@ -224,8 +197,8 @@ class Optimization:
         paramDict = {
             name: {
                 "value": param.value,
-                "minValue": param.minValue,
-                "maxValue": param.maxValue,
+                "lowerBound": param.lowerBound,
+                "upperBound": param.upperBound,
                 "isFixed": param.isFixed,
             }
             for name, param in self.parameters.items()
@@ -312,22 +285,16 @@ class Optimization:
         if not hasattr(self, "processSequence"):
             raise ValueError("No process sequence has been set")
 
-        if not self.parameters:
+        if not self.parameterNames:
             raise ValueError("No parameters have been defined")
 
-        # Check that all sequence parameters are defined
-        missing = self.sequence_params - set(self.parameters.keys())
-        if missing:
-            raise ValueError(f"Missing required parameters: {', '.join(missing)}")
-
-        # Check that all parameters have values or ranges set
-        unset = [
-            name
-            for name, param in self.parameters.items()
-            if param.value is None and not param.isFixed
-        ]
-        if unset:
-            raise ValueError(f"Parameters without values or ranges: {', '.join(unset)}")
+        # if the union of the fixed and variable parameters is not equal to the parameter names
+        if set(self.fixedParameters.keys()).union(
+            set(self.variableParameters.keys())
+        ) != set(self.parameterNames):
+            raise ValueError(
+                "The union of fixed and variable parameters does not match the parameter names"
+            )
 
         return True
 
@@ -351,5 +318,5 @@ class Optimization:
                 "Options are 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB'."
             )
 
-        self.distanceMetric()
+        pass  # Placeholder for actual distance metric implementation
         return self
