@@ -11,6 +11,7 @@ import json
 import inspect
 import time
 from typing import Dict, List, Tuple, Any, Optional
+from .fitObjectiveWrapper import ObjectiveWrapper
 
 
 class Optimization:
@@ -25,7 +26,12 @@ class Optimization:
                 "Project is not ready. Please initialize the project first, "
                 "set the initial and target domains, and then run the optimization."
             )
-        os.makedirs(self.runDir, exist_ok=True)
+        if os.path.exists(self.runDir):
+            raise FileExistsError(
+                f"Run directory already exists: {self.runDir}. \n "
+                "Please choose a different name or delete the existing directory."
+            )
+        os.makedirs(self.runDir, exist_ok=False)
         self.project = project
 
         # Set internal variables
@@ -355,10 +361,7 @@ class Optimization:
         saveAllEvaluations: bool = False,
         saveVisualization: bool = True,
     ):
-        """
-        Apply the optimization process.
-        This method should be called after setting up the optimization parameters.
-        """
+        """Apply the optimization."""
         if not self.applied:
             self.validate()
             self.applied = True
@@ -368,75 +371,25 @@ class Optimization:
         if self.optimizer == "dlib":
             from dlib import find_min_global
 
-            # Get variable parameter bounds as separate lists
+            # Get variable parameter bounds
             lowerBounds = []
             upperBounds = []
             for lower, upper in self.variableParameters.values():
                 lowerBounds.append(lower)
                 upperBounds.append(upper)
 
-            # Verify we have bounds for all variable parameters
+            # Verify bounds
             if not lowerBounds or not upperBounds:
                 raise ValueError("No bounds defined for variable parameters")
-
             if len(lowerBounds) != len(self.variableParameters):
                 raise ValueError("Missing bounds for some variable parameters")
 
-            def objectiveFunctionWrapper(*x):
-                """
-                Wrapper for the objective function that handles fixed and variable parameters.
+            # Create objective function wrapper
+            objectiveFunction = ObjectiveWrapper.create(self.optimizer, self)
 
-                Args:
-                    x: List of values for variable parameters in the order they were defined
-
-                Returns:
-                    float: Distance metric value between result and target
-                """
-                # Create parameter dictionary with fixed parameters
-                paramDict = self.fixedParameters.copy()
-
-                # Add variable parameters
-                for value, (name, _) in zip(x, self.variableParameters.items()):
-                    paramDict[name] = value
-
-                # Start timer
-                startTime = time.time()
-                # Create deep copy of initial domain
-                domainCopy = Domain()
-                domainCopy.deepCopy(self.project.initialDomain)
-
-                # Apply process sequence
-                resultDomain = self.processSequence(domainCopy, paramDict)
-
-                # dummy implementation, to be improved
-                if self.distanceMetric == "CA+CSF":
-                    ca = vls.CompareArea(resultDomain, self.project.targetLevelSet)
-                    ca.apply()
-                    csf = vls.CompareSparseField(
-                        resultDomain, self.project.targetLevelSet
-                    )
-                    csf.apply()
-
-                objectiveValue = ca.getAreaMismatch() + csf.getSumSquaredDifferences()
-
-                elapsedTime = time.time() - startTime
-
-                # Update best result if this is better
-                if objectiveValue < self.bestScore:
-                    self.bestScore = objectiveValue
-                    self.bestParameters = paramDict.copy()
-
-                # write the evaluation to a text progress file
-                saveEvalToProgressFile(
-                    [*x, elapsedTime, objectiveValue],
-                    os.path.join(self.runDir, "progress.txt"),
-                )
-
-                return objectiveValue
-
-            # Run the optimization
+            # Run optimization
             result = find_min_global(
-                objectiveFunctionWrapper,
+                objectiveFunction,
                 lowerBounds,
                 upperBounds,
                 numEvaluations,
