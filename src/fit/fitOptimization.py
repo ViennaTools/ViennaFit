@@ -248,55 +248,6 @@ class Optimization:
 
         print(f"Best result saved to {filepath}")
 
-    def objectiveFunction(self, x, paramNames=None):
-        """
-        Objective function for optimization
-
-        Args:
-            x: List of parameter values for variable parameters
-            paramNames: Optional list of parameter names corresponding to x values
-                      If None, uses the order from getVariableParameterList()
-
-        Returns:
-            Objective function value
-        """
-        # Get variable parameters in correct order
-        varParams = self.getVariableParameterList()
-
-        # If parameter names are provided, use them to map values
-        if paramNames is None:
-            paramNames = [p.name for p in varParams]
-
-        # Update parameter values
-        for i, value in enumerate(x):
-            name = paramNames[i]
-            self.parameters[name].value = value
-
-        # Get complete parameter dictionary including fixed ones
-        paramsDict = self.getParameterDict()
-
-        # Convert to a simple object with attributes for easier access in the process sequence
-        class Params:
-            pass
-
-        paramsObj = Params()
-        for name, value in paramsDict.items():
-            setattr(paramsObj, name, value)
-
-        # Apply process sequence with current parameters
-        self.processSequence.apply(paramsObj)
-
-        # Get result (this would be based on a comparison with target data)
-        # For now, this is just a placeholder
-        result = 0.0  # This should be calculated based on your objective function
-
-        # Update best result if this is better
-        if result < self.bestScore:
-            self.bestScore = result
-            self.bestParameters = paramsDict.copy()
-
-        return result
-
     def validate(self):
         """Validate that all required parameters are defined"""
         if not hasattr(self, "processSequence"):
