@@ -1,17 +1,13 @@
 from .fitProject import Project
 from .fitProcessSequence import ProcessSequence
-from .fitDistanceMetrics import constuctDistanceMetric
-from .fitUtilities import saveEvalToProgressFile
+from .fitOptimizerWrapper import OptimizerWrapper
 from viennaps2d import Domain
-import viennals2d as vls
 import importlib.util
 import sys
 import os
 import json
 import inspect
-import time
-from typing import Dict, List, Tuple, Any, Optional
-from .fitObjectiveWrapper import ObjectiveWrapper
+from typing import Dict, List, Tuple
 
 
 class Optimization:
@@ -368,31 +364,31 @@ class Optimization:
         else:
             print("Optimization has already been applied.")
 
-        if self.optimizer == "dlib":
-            from dlib import find_min_global
+        # Create optimizer wrapper
+        optimizer = OptimizerWrapper.create(self.optimizer, self)
 
-            # Get variable parameter bounds
-            lowerBounds = []
-            upperBounds = []
-            for lower, upper in self.variableParameters.values():
-                lowerBounds.append(lower)
-                upperBounds.append(upper)
-
-            # Verify bounds
-            if not lowerBounds or not upperBounds:
-                raise ValueError("No bounds defined for variable parameters")
-            if len(lowerBounds) != len(self.variableParameters):
-                raise ValueError("Missing bounds for some variable parameters")
-
-            # Create objective function wrapper
-            objectiveFunction = ObjectiveWrapper.create(self.optimizer, self)
-
+        try:
             # Run optimization
-            result = find_min_global(
-                objectiveFunction,
-                lowerBounds,
-                upperBounds,
-                numEvaluations,
-            )
+            result = optimizer.optimize(numEvaluations)
 
-            print(f"Optimization result: {result}")
+            # Save results
+            if result["success"]:
+                self.bestParameters.update(result["x"])
+                self.bestScore = result["fun"]
+
+                print(f"Optimization completed successfully:")
+                print(f"  Function evaluations: {result['nfev']}")
+                print(f"  Best score: {result['fun']:.6f}")
+                print("  Best parameters:")
+                for name, value in result["x"].items():
+                    print(f"    {name}: {value:.6f}")
+
+                # Save final results
+                self.saveBestResult()
+
+            else:
+                print("Optimization failed to converge")
+
+        except Exception as e:
+            print(f"Optimization failed with error: {str(e)}")
+            raise
