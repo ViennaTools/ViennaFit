@@ -1,11 +1,15 @@
 from .fitProject import Project
 from .fitProcessSequence import ProcessSequence
 from .fitDistanceMetrics import constuctDistanceMetric
+from .fitUtilities import saveEvalToProgressFile
 from viennaps2d import Domain
+import viennals2d as vls
 import importlib.util
 import sys
 import os
 import json
+import inspect
+import time
 from typing import Dict, List, Tuple, Any, Optional
 
 
@@ -29,6 +33,7 @@ class Optimization:
         self.applied = False
         self.processSequence = None
         self.distanceMetric = None
+        self.optimizer = "dlib"
 
         # Parameter handling
         self.parameterNames = []
@@ -95,7 +100,7 @@ class Optimization:
 
     def getVariableParameterList(self):
         """Get list of variable parameters for optimization algorithms"""
-        return [param for param in self.parameters.values() if not param.isFixed]
+        return self.variableParameters.keys()
 
     def getVariableBounds(self):
         """Get bounds for variable parameters as lists"""
@@ -142,52 +147,73 @@ class Optimization:
 
         raise ValueError(f"No ProcessSequence subclass found in file: {absPath}")
 
-    def setProcessSequence(self, sequence_func):
+    def setProcessSequence(self, processFunction):
         """
         Set the process sequence to be optimized.
 
         Args:
-            sequence_func: Function with signature (domain, *, param1, param2, ...) -> domain
-                The function should accept an initial domain and parameter keywords,
+            processFunction: Function with signature:
+                (domain: viennaps2d.Domain, params: dict[str, float]) -> viennaps2d.Domain
+                The function should take an initial domain and parameter dictionary,
                 apply the process sequence, and return the resulting domain.
 
-        Example:
-            def my_sequence(domain, *, param1, param2):
-                model = vps.MultiParticleProcess()
-                # Configure process with params
-                # ...
-                return processed_domain
+        Returns:
+            self: For method chaining
 
-            opt.setProcessSequence(my_sequence)
+        Raises:
+            ValueError: If function signature doesn't match requirements
+            TypeError: If parameter types don't match requirements
         """
-        # Validate the function signature
-        import inspect
+        functionSignature = inspect.signature(processFunction)
+        functionParams = list(functionSignature.parameters.values())
 
-        sig = inspect.signature(sequence_func)
+        # Check function has exactly 2 parameters
+        if len(functionParams) != 2:
+            raise ValueError(
+                f"Process sequence must have exactly 2 parameters, got {len(functionParams)}"
+            )
 
-        # Check if first parameter exists and is positional
-        params = list(sig.parameters.values())
-        if not params or params[0].kind not in (
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            inspect.Parameter.POSITIONAL_ONLY,
+        # Check first parameter (domain)
+        domainParam = functionParams[0]
+        if (
+            domainParam.annotation != Domain
+            and domainParam.annotation != inspect.Parameter.empty
         ):
-            raise ValueError("Process sequence must accept domain as first argument")
+            raise TypeError(
+                f"First parameter must be a viennaps2d.Domain, got {domainParam.annotation}"
+            )
 
-        self.processSequence = sequence_func
+        # Check second parameter (params dict)
+        paramsParam = functionParams[1]
+        expectedType = dict[str, float]
+        if (
+            paramsParam.annotation != expectedType
+            and paramsParam.annotation != inspect.Parameter.empty
+        ):
+            raise TypeError(
+                f"Second parameter must be Dict[str, float], got {paramsParam.annotation}"
+            )
 
-        # Store parameter names from function signature
-        self.sequence_params = set()
-        for param in params[1:]:  # Skip first param (domain)
-            if param.kind in (
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                inspect.Parameter.KEYWORD_ONLY,
-            ):
-                self.sequence_params.add(param.name)
+        self.processSequence = processFunction
 
-        print(
-            f"Process sequence set with parameters: {', '.join(self.sequence_params)}"
-        )
+        # Save passed process function into a file
+        processFilePath = os.path.join(self.runDir, f"{self.name}-processSequence.py")
+
+        # Get the source code of the function
+        source = inspect.getsource(processFunction)
+
+        # Save to file with imports at top
+        with open(processFilePath, "w") as f:
+            f.write("import viennaps2d as vps\n")
+            f.write("import viennals2d as vls\n\n")
+            f.write(source)
+
+        print(f"Process sequence set: {processFunction.__name__}")
+        print(f"Process sequence saved to: {processFilePath}")
         return self
+
+    def loadProcessSequence(self, filePath: str):
+        pass  # Placeholder for implementation
 
     def saveParameters(self, filename: str = "parameters.json"):
         """Save parameter configuration to file"""
@@ -269,17 +295,6 @@ class Optimization:
 
         return result
 
-    def optimize(self):
-        """Run the optimization"""
-        # Save initial parameter configuration
-        self.saveParameters("initialParameters.json")
-
-        print("Running optimization...")
-
-        # After optimization, save results
-        self.saveBestResult()
-        self.saveParameters("finalParameters.json")
-
     def validate(self):
         """Validate that all required parameters are defined"""
         if not hasattr(self, "processSequence"):
@@ -287,6 +302,9 @@ class Optimization:
 
         if not self.parameterNames:
             raise ValueError("No parameters have been defined")
+
+        if not self.distanceMetric:
+            raise ValueError("No distance metric has been set")
 
         # if the union of the fixed and variable parameters is not equal to the parameter names
         if set(self.fixedParameters.keys()).union(
@@ -318,5 +336,110 @@ class Optimization:
                 "Options are 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB'."
             )
 
-        pass  # Placeholder for actual distance metric implementation
+        self.distanceMetric = metric
         return self
+
+    def setOptimizer(self, optimizer: str):
+        """
+        Set the optimizer to be used for the optimization process.
+
+        Args:
+            optimizer: The name of the optimizer to be used.
+        """
+        self.optimizer = optimizer
+        return self
+
+    def apply(
+        self,
+        numEvaluations: int = 100,
+        saveAllEvaluations: bool = False,
+        saveVisualization: bool = True,
+    ):
+        """
+        Apply the optimization process.
+        This method should be called after setting up the optimization parameters.
+        """
+        if not self.applied:
+            self.validate()
+            self.applied = True
+        else:
+            print("Optimization has already been applied.")
+
+        if self.optimizer == "dlib":
+            from dlib import find_min_global
+
+            # Get variable parameter bounds as separate lists
+            lowerBounds = []
+            upperBounds = []
+            for lower, upper in self.variableParameters.values():
+                lowerBounds.append(lower)
+                upperBounds.append(upper)
+
+            # Verify we have bounds for all variable parameters
+            if not lowerBounds or not upperBounds:
+                raise ValueError("No bounds defined for variable parameters")
+
+            if len(lowerBounds) != len(self.variableParameters):
+                raise ValueError("Missing bounds for some variable parameters")
+
+            def objectiveFunctionWrapper(*x):
+                """
+                Wrapper for the objective function that handles fixed and variable parameters.
+
+                Args:
+                    x: List of values for variable parameters in the order they were defined
+
+                Returns:
+                    float: Distance metric value between result and target
+                """
+                # Create parameter dictionary with fixed parameters
+                paramDict = self.fixedParameters.copy()
+
+                # Add variable parameters
+                for value, (name, _) in zip(x, self.variableParameters.items()):
+                    paramDict[name] = value
+
+                # Start timer
+                startTime = time.time()
+                # Create deep copy of initial domain
+                domainCopy = Domain()
+                domainCopy.deepCopy(self.project.initialDomain)
+
+                # Apply process sequence
+                resultDomain = self.processSequence(domainCopy, paramDict)
+
+                # dummy implementation, to be improved
+                if self.distanceMetric == "CA+CSF":
+                    ca = vls.CompareArea(resultDomain, self.project.targetLevelSet)
+                    ca.apply()
+                    csf = vls.CompareSparseField(
+                        resultDomain, self.project.targetLevelSet
+                    )
+                    csf.apply()
+
+                objectiveValue = ca.getAreaMismatch() + csf.getSumSquaredDifferences()
+
+                elapsedTime = time.time() - startTime
+
+                # Update best result if this is better
+                if objectiveValue < self.bestScore:
+                    self.bestScore = objectiveValue
+                    self.bestParameters = paramDict.copy()
+
+                # write the evaluation to a text progress file
+                saveEvalToProgressFile(
+                    [*x, elapsedTime, objectiveValue],
+                    os.path.join(self.runDir, "progress.txt"),
+                )
+
+                return objectiveValue
+
+            # Run the optimization
+            result = find_min_global(
+                objectiveFunctionWrapper,
+                lowerBounds,
+                upperBounds,
+                numEvaluations,
+            )
+
+            print(f"Optimization result: {result}")

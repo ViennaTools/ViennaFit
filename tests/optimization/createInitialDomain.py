@@ -62,13 +62,13 @@ p1.setTargetLevelSet(domainTarget)
 opt1 = fit.Optimization("run1", p1)
 
 
-def processSequence1(domain, params):
+def processSequence1(domain: vps.Domain, params: dict[str, float]):
     """
     Process sequence for optimization.
 
     Args:
         domain: Initial ViennaPS domain
-        params: Parameters for the process
+        params: Parameters for the process as dictionary
 
     Returns:
         resulting ViennLS domain which will be compared with the target
@@ -76,29 +76,32 @@ def processSequence1(domain, params):
     model = vps.MultiParticleProcess()
 
     # Set the parameters for the neutral
-    sticking = {vps.Material.Si: params.neutralStickP}
+    sticking = {vps.Material.Si: params["neutralStickP"]}  # Use dict access
     model.addNeutralParticle(sticking, label="neutral")
 
     # Set the parameters for the ion
     model.addIonParticle(
-        sourcePower=params.ionPowerCosine, meanEnergy=params.ionEnergy, label="ion"
+        sourcePower=params["ionPowerCosine"],  # Use dict access
+        meanEnergy=params["ionEnergy"],  # Use dict access
+        label="ion",
     )
 
     def rateFunction(fluxes, material):
         if material == vps.Material.Si:
-            return fluxes[0] * params.neutralRate + fluxes[1] * params.ionRate
+            return (
+                fluxes[0] * params["neutralRate"] + fluxes[1] * params["ionRate"]
+            )  # Use dict access
         return 0.0
 
     model.setRateFunction(rateFunction)
 
-    result = vps.Domain()
-    result.deepCopy(domain)
-
     process = vps.Process()
-    process.setDomain(result)
+    process.setDomain(domain)
     process.setProcessModel(model)
     process.setProcessDuration(1.0)
     process.apply()
+
+    result = domain.getLevelSets()[-1]
 
     return result
 
@@ -124,9 +127,9 @@ opt1.setVariableParameters(
 # Set fixed parameters
 opt1.setFixedParameters({"ionEnergy": 100.0})
 
-opt1.setDistanceMetric("CA")
-
 opt1.setDistanceMetric("CA+CSF")
 
 # Validate before optimization
 opt1.validate()
+
+opt1.apply()
