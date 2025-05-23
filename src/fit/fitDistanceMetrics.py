@@ -1,5 +1,6 @@
 from typing import Callable
 import viennals2d as vls
+import os
 
 
 class DistanceMetric:
@@ -10,7 +11,7 @@ class DistanceMetric:
     @staticmethod
     def create(
         metricName: str,
-    ) -> Callable[[vls.Domain, vls.Domain, bool], float]:
+    ) -> Callable[[vls.Domain, vls.Domain, bool, str], float]:
         """
         Create a distance metric function based on metric name.
 
@@ -27,6 +28,10 @@ class DistanceMetric:
             return DistanceMetric._compareArea
         elif metricName == "CSF":
             return DistanceMetric._compareSparseField
+        elif metricName == "CNB":
+            return DistanceMetric._compareNarrowBand
+        elif metricName == "CA+CNB":
+            return DistanceMetric._compareAreaAndNarrowBand
         else:
             raise ValueError(
                 f"Invalid distance metric: {metricName}. "
@@ -43,6 +48,7 @@ class DistanceMetric:
             mesh = vls.Mesh()
             ca.setOutputMesh(mesh)
         ca.apply()
+
         return ca.getAreaMismatch()
 
     @staticmethod
@@ -59,7 +65,10 @@ class DistanceMetric:
 
     @staticmethod
     def _compareAreaAndSparseField(
-        domain1: vls.Domain, domain2: vls.Domain, saveVisualization: bool = False
+        domain1: vls.Domain,
+        domain2: vls.Domain,
+        saveVisualization: bool = False,
+        writePath: str = None,
     ) -> float:
         """Compare domains using both area and sparse field metrics."""
         ca = vls.CompareArea(domain1, domain2)
@@ -73,5 +82,19 @@ class DistanceMetric:
 
         ca.apply()
         csf.apply()
+
+        vls.VTKWriter(caMesh, f"CA.vtp").apply()
+        vls.VTKWriter(csfMesh, f"CSF.vtp").apply()
+
+        if saveVisualization:
+            # Save meshes to progress directory with evaluation counter
+            caPath = os.path.join(
+                f"{writePath}-CA.vtu",
+            )
+            csfPath = os.path.join(
+                f"{writePath}-CSF.vtp",
+            )
+            vls.VTKWriter(caMesh, caPath).apply()
+            vls.VTKWriter(csfMesh, csfPath).apply()
 
         return ca.getAreaMismatch() + csf.getSumSquaredDifferences()

@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, Callable
+from typing import Dict, Tuple, Callable, List
 from viennaps2d import Domain
 from .fitUtilities import saveEvalToProgressFile
 from .fitDistanceMetrics import DistanceMetric
@@ -41,19 +41,19 @@ class BaseObjectiveWrapper:
         self.optimization = optimization
         self.distanceMetric = DistanceMetric.create(optimization.distanceMetric)
 
+    def _saveEvaluationData(
+        self, paramValues: List[float], elapsedTime: float, objectiveValue: float
+    ):
+        """Save evaluation data to progress file."""
+        saveEvalToProgressFile(
+            [*paramValues, elapsedTime, objectiveValue],
+            os.path.join(self.optimization.runDir, "progress.txt"),
+        )
+
     def _evaluateObjective(
         self, paramDict: Dict[str, float], saveVisualization: bool = False
     ) -> Tuple[float, float]:
-        """
-        Run process sequence with given parameters and calculate objective value.
-
-        Args:
-            paramDict: Dictionary of parameter names and values
-            saveVisualization: Whether to save visualization meshes
-
-        Returns:
-            Tuple[float, float]: (objective_value, elapsed_time)
-        """
+        """Run process sequence and evaluate result."""
         startTime = time.time()
 
         # Create deep copy of initial domain
@@ -63,14 +63,35 @@ class BaseObjectiveWrapper:
         # Apply process sequence
         resultDomain = self.optimization.processSequence(domainCopy, paramDict)
 
-        # Calculate objective value using distance metric - no tuple unpacking
+        self.optimization.evalCounter += 1
+
+        # Calculate objective value using distance metric
         objectiveValue = self.distanceMetric(
             resultDomain,
             self.optimization.project.targetLevelSet,
             saveVisualization,
+            os.path.join(
+                self.optimization.progressDir,
+                f"{self.optimization.name}-{self.optimization.evalCounter}",
+            ),
         )
 
         elapsedTime = time.time() - startTime
+
+        newBest = objectiveValue <= self.optimization.bestScore
+
+        if newBest:
+            self.optimization.bestScore = objectiveValue
+            self.optimization.bestParameters = paramDict.copy()
+
+        if newBest or self.optimization.saveAllEvaluations:
+            domainCopy.saveSurfaceMesh(
+                os.path.join(
+                    self.optimization.progressDir,
+                    f"{self.optimization.name}-{self.optimization.evalCounter}.vtp",
+                ),
+                True,
+            )
 
         return objectiveValue, elapsedTime
 
@@ -79,15 +100,7 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
     """Objective function wrapper for dlib optimizer."""
 
     def __call__(self, *x):
-        """
-        Wrapper compatible with dlib's find_min_global.
-
-        Args:
-            *x: Variable parameter values in order of definition
-
-        Returns:
-            float: Objective function value
-        """
+        """Wrapper compatible with dlib's find_min_global."""
         # Create parameter dictionary with fixed parameters
         paramDict = self.optimization.fixedParameters.copy()
 
@@ -100,15 +113,7 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
             paramDict, self.optimization.saveVisualization
         )
 
-        # Update best result if better
-        if objectiveValue < self.optimization.bestScore:
-            self.optimization.bestScore = objectiveValue
-            self.optimization.bestParameters = paramDict.copy()
-
         # Save evaluation data
-        saveEvalToProgressFile(
-            [*x, elapsedTime, objectiveValue],
-            os.path.join(self.optimization.runDir, "progress.txt"),
-        )
+        self._saveEvaluationData(list(x), elapsedTime, objectiveValue)
 
         return objectiveValue

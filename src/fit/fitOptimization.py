@@ -17,6 +17,7 @@ class Optimization:
         # check project readiness, and set run directory
         if project.isReady:
             self.runDir = os.path.join(project.projectPath, "optimizationRuns", name)
+            self.progressDir = os.path.join(self.runDir, "progress")
         else:
             raise ValueError(
                 "Project is not ready. Please initialize the project first, "
@@ -28,6 +29,7 @@ class Optimization:
                 "Please choose a different name or delete the existing directory."
             )
         os.makedirs(self.runDir, exist_ok=False)
+        os.makedirs(self.progressDir, exist_ok=False)
         self.project = project
 
         # Set internal variables
@@ -314,6 +316,7 @@ class Optimization:
             self.saveVisualization = saveVisualization
             self.saveAllEvaluations = saveAllEvaluations
             self.applied = True
+            self.evalCounter = 0
         else:
             print("Optimization has already been applied.")
 
