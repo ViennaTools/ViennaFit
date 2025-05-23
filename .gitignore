@@ -179,5 +179,10 @@ cython_debug/
 *.vtk
 *.vtu
 *.vtp
+*.vpsd
+*.lvst
+
+progress*
+run*
 
 *json
