@@ -1,6 +1,7 @@
 from typing import Dict, Tuple, Callable
 from viennaps2d import Domain
 from .fitUtilities import saveEvalToProgressFile
+from .fitDistanceMetrics import DistanceMetric
 import viennals2d as vls
 import time
 import os
@@ -38,10 +39,17 @@ class BaseObjectiveWrapper:
 
     def __init__(self, optimization):
         self.optimization = optimization
+        self.distanceMetric = DistanceMetric.create(optimization.distanceMetric)
 
-    def _evaluateProcess(self, paramDict: Dict[str, float]) -> Tuple[float, float]:
+    def _evaluateObjective(
+        self, paramDict: Dict[str, float], saveVisualization: bool = False
+    ) -> Tuple[float, float]:
         """
-        Evaluate process sequence with given parameters.
+        Run process sequence with given parameters and calculate objective value.
+
+        Args:
+            paramDict: Dictionary of parameter names and values
+            saveVisualization: Whether to save visualization meshes
 
         Returns:
             Tuple[float, float]: (objective_value, elapsed_time)
@@ -55,19 +63,12 @@ class BaseObjectiveWrapper:
         # Apply process sequence
         resultDomain = self.optimization.processSequence(domainCopy, paramDict)
 
-        # Calculate objective value based on distance metric
-        if self.optimization.distanceMetric == "CA+CSF":
-            ca = vls.CompareArea(resultDomain, self.optimization.project.targetLevelSet)
-            ca.apply()
-            csf = vls.CompareSparseField(
-                resultDomain, self.optimization.project.targetLevelSet
-            )
-            csf.apply()
-            objectiveValue = ca.getAreaMismatch() + csf.getSumSquaredDifferences()
-        else:
-            raise NotImplementedError(
-                f"Distance metric {self.optimization.distanceMetric} not implemented"
-            )
+        # Calculate objective value using distance metric - no tuple unpacking
+        objectiveValue = self.distanceMetric(
+            resultDomain,
+            self.optimization.project.targetLevelSet,
+            saveVisualization,
+        )
 
         elapsedTime = time.time() - startTime
 
@@ -95,7 +96,9 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
             paramDict[name] = value
 
         # Evaluate process
-        objectiveValue, elapsedTime = self._evaluateProcess(paramDict)
+        objectiveValue, elapsedTime = self._evaluateObjective(
+            paramDict, self.optimization.saveVisualization
+        )
 
         # Update best result if better
         if objectiveValue < self.optimization.bestScore:

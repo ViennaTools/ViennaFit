@@ -311,6 +311,8 @@ class Optimization:
         """Apply the optimization."""
         if not self.applied:
             self.validate()
+            self.saveVisualization = saveVisualization
+            self.saveAllEvaluations = saveAllEvaluations
             self.applied = True
         else:
             print("Optimization has already been applied.")
