@@ -1,6 +1,9 @@
 import os
 import json
 import datetime
+from viennaps2d import Reader
+from viennals2d import Reader as lsReader
+from viennals2d import Domain as lsDomain
 
 
 class Project:
@@ -13,7 +16,9 @@ class Project:
         self.mode = "2D"  # Default mode
 
         self.initialDomain = None
+        self.initialDomainPath = None
         self.targetLevelSet = None
+        self.targetLevelSetPath = None
 
     def setName(self, name: str):
         """Set the name of the project."""
@@ -72,8 +77,8 @@ class Project:
             "createdDate": str(datetime.datetime.now()),
             "lastModifiedDate": str(datetime.datetime.now()),
             "mode": self.mode,
-            "initialDomain": None,
-            "targetLevelSet": None,
+            "initialDomainPath": "",
+            "targetLevelSetPath": "",
             "optimizationRuns": [],
             "locSensStudies": [],
             "globSensStudies": [],
@@ -106,12 +111,34 @@ class Project:
         self.projectAbsPath = os.path.abspath(self.projectPath)
         self.projectInfoPath = projectInfoPath
         self.mode = projectInfo["mode"]
-        self.initialDomain = projectInfo["initialDomain"]
-        self.targetLevelSet = projectInfo["targetLevelSet"]
+        self.initialDomainPath = projectInfo["initialDomainPath"]
+        self.targetLevelSetPath = projectInfo["targetLevelSetPath"]
         self.optimizationRuns = projectInfo["optimizationRuns"]
         self.locSensStudies = projectInfo["locSensStudies"]
         self.globSensStudies = projectInfo["globSensStudies"]
 
+        self.initialDomain = Reader(
+            os.path.join(
+                self.projectPath,
+                "domains",
+                "initialDomain",
+                f"{self.projectName}-initialDomain.vpsd",
+            )
+        ).apply()
+
+        targetDomain = lsDomain()
+        lsReader(
+            targetDomain,
+            os.path.join(
+                self.projectPath,
+                "domains",
+                "targetDomain",
+                f"{self.projectName}-targetDomain.lvst",
+            ),
+        ).apply()
+        self.targetLevelSet = targetDomain
+
+        # Print project information
         print(f"Project '{self.projectName}' loaded with the following information:")
         print(json.dumps(projectInfo, indent=4))
 
@@ -143,8 +170,8 @@ class Project:
             vps.Writer(domain, domainPath).apply()
         else:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
-
-        print(f"Initial domain saved to {self.projectInfoPath}")
+        self.initialDomainPath = domainPath
+        print(f"Initial domain saved to {initialDomainDir}")
         return self
 
     def setTargetLevelSet(self, levelSet):
@@ -169,7 +196,8 @@ class Project:
         else:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
 
-        print(f"Target level set saved to {self.projectInfoPath}")
+        self.targetLevelSetPath = domainPath
+        print(f"Target level set saved to {targetDomainDir}")
         return self
 
     def isReady(self):
