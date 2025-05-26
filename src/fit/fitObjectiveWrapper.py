@@ -37,9 +37,9 @@ class ObjectiveWrapper:
 class BaseObjectiveWrapper:
     """Base class for objective function wrappers."""
 
-    def __init__(self, optimization):
-        self.optimization = optimization
-        self.distanceMetric = DistanceMetric.create(optimization.distanceMetric)
+    def __init__(self, study):
+        self.study = study
+        self.distanceMetric = DistanceMetric.create(study.distanceMetric)
 
     def _saveEvaluationData(
         self, paramValues: List[float], elapsedTime: float, objectiveValue: float
@@ -47,7 +47,7 @@ class BaseObjectiveWrapper:
         """Save evaluation data to progress file."""
         saveEvalToProgressFile(
             [*paramValues, elapsedTime, objectiveValue],
-            os.path.join(self.optimization.runDir, "progress.txt"),
+            os.path.join(self.study.runDir, "progress.txt"),
         )
 
     def _evaluateObjective(
@@ -58,42 +58,120 @@ class BaseObjectiveWrapper:
 
         # Create deep copy of initial domain
         domainCopy = Domain()
-        domainCopy.deepCopy(self.optimization.project.initialDomain)
+        domainCopy.deepCopy(self.study.project.initialDomain)
 
         # Apply process sequence
-        resultDomain = self.optimization.processSequence(domainCopy, paramDict)
+        resultDomain = self.study.processSequence(domainCopy, paramDict)
 
-        self.optimization.evalCounter += 1
+        self.study.evalCounter += 1
 
         # Calculate objective value using distance metric
         objectiveValue = self.distanceMetric(
             resultDomain,
-            self.optimization.project.targetLevelSet,
+            self.study.project.targetLevelSet,
             saveVisualization,
             os.path.join(
-                self.optimization.progressDir,
-                f"{self.optimization.name}-{self.optimization.evalCounter}",
+                self.study.progressDir,
+                f"{self.study.name}-{self.study.evalCounter}",
             ),
         )
 
         elapsedTime = time.time() - startTime
 
-        newBest = objectiveValue <= self.optimization.bestScore
+        newBest = objectiveValue <= self.study.bestScore
 
         if newBest:
-            self.optimization.bestScore = objectiveValue
-            self.optimization.bestParameters = paramDict.copy()
+            self.study.bestScore = objectiveValue
+            self.study.bestParameters = paramDict.copy()
 
-        if newBest or self.optimization.saveAllEvaluations:
+        if newBest or self.study.saveAllEvaluations:
             domainCopy.saveSurfaceMesh(
                 os.path.join(
-                    self.optimization.progressDir,
-                    f"{self.optimization.name}-{self.optimization.evalCounter}.vtp",
+                    self.study.progressDir,
+                    f"{self.study.name}-{self.study.evalCounter}.vtp",
                 ),
                 True,
             )
 
         return objectiveValue, elapsedTime
+
+    def evaluateParameterSpace(
+        self,
+        baseParams: Dict[str, float],
+        varParams: Dict[str, Tuple[float, float, float]],
+        nEvals: Tuple[int],
+    ) -> Dict:
+        """
+        Evaluate objective function across parameter space for sensitivity analysis.
+
+        Args:
+            baseParams: Dictionary of fixed parameter values
+            varParams: Dictionary mapping parameter names to (lower, poi, upper) bounds
+            nEvals: Tuple of evaluation counts for each parameter
+
+        Returns:
+            Dict containing evaluation results
+        """
+        import numpy as np
+
+        # Create base parameter dict with POI values for variable parameters
+        evalParams = baseParams.copy()
+        for paramName, (_, poi, _) in varParams.items():
+            evalParams[paramName] = poi
+
+        # First evaluate at POI
+        print("\nEvaluating at Point of Interest...")
+        poiValue, poiTime = self._evaluateObjective(
+            evalParams, self.study.saveVisualization
+        )
+        print(f"POI objective value: {poiValue:.6f}")
+
+        # Then evaluate along each parameter axis
+        results = {}
+        for paramIdx, (paramName, (lb, poi, ub)) in enumerate(varParams.items()):
+            print(f"\nEvaluating parameter: {paramName}")
+
+            # Create parameter values to evaluate
+            nPoints = nEvals[paramIdx]
+            paramValues = []
+
+            # Add points between lb and poi
+            if nPoints > 1:
+                leftPoints = list(np.linspace(lb, poi, (nPoints + 1) // 2)[:-1])
+                paramValues.extend(leftPoints)
+
+            # Add POI
+            paramValues.append(poi)
+
+            # Add points between poi and ub
+            if nPoints > 1:
+                rightPoints = list(np.linspace(poi, ub, (nPoints + 1) // 2)[1:])
+                paramValues.extend(rightPoints)
+
+            # Evaluate at each point
+            paramResults = []
+            for value in paramValues:
+                currentParams = evalParams.copy()  # Copy from complete POI params
+                currentParams[paramName] = value  # Only modify current parameter
+
+                objValue, evalTime = self._evaluateObjective(
+                    currentParams, self.study.saveVisualization
+                )
+                # Save evaluation data
+                self._saveEvaluationData(
+                    list(currentParams.values()), evalTime, objValue
+                )
+                paramResults.append(
+                    {"value": value, "objective": objValue, "time": evalTime}
+                )
+                print(f"  {paramName} = {value:.6f}: objective = {objValue:.6f}")
+
+            results[paramName] = paramResults
+
+        return {
+            "poi": {"params": evalParams, "objective": poiValue, "time": poiTime},
+            "parameter_studies": results,
+        }
 
 
 class DlibObjectiveWrapper(BaseObjectiveWrapper):
@@ -102,15 +180,15 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
     def __call__(self, *x):
         """Wrapper compatible with dlib's find_min_global."""
         # Create parameter dictionary with fixed parameters
-        paramDict = self.optimization.fixedParameters.copy()
+        paramDict = self.study.fixedParameters.copy()
 
         # Add variable parameters - x contains individual floats
-        for value, (name, _) in zip(x, self.optimization.variableParameters.items()):
+        for value, (name, _) in zip(x, self.study.variableParameters.items()):
             paramDict[name] = value
 
         # Evaluate process
         objectiveValue, elapsedTime = self._evaluateObjective(
-            paramDict, self.optimization.saveVisualization
+            paramDict, self.study.saveVisualization
         )
 
         # Save evaluation data
