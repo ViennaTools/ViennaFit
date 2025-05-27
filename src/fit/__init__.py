@@ -2,9 +2,11 @@
 
 # Import main classes to make them available at package level
 from .fitProject import Project
-from .fitProcessSequence import ProcessSequence
-from .fitLocalSensitivityStudy import LocalSensitivityStudy
+from .fitStudy import Study
+
 from .fitOptimization import Optimization
+from .fitLocalSensitivityStudy import LocalSensitivityStudy
+
 from .fitUtilities import readPointsFromFile
 
 

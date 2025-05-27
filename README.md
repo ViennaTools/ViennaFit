@@ -21,10 +21,9 @@ pip install .
 
 ## To do:
 - Add postprocessing 
-- Completed studies added to project info
-- loadProcess sequence
 - Add further optimizers
 - Add globalSensStudy
 - Custom range + presets for localSensStudy
 - Objective function options
 - 3D implementation
+- Add custom objective function
