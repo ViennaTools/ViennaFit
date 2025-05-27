@@ -47,10 +47,6 @@ class Project:
         # Create subdirectories
         subdirs = [
             "domains",
-            "optimizationRuns",
-            "locSensStudies",
-            "globSensStudies",
-            "hits",
         ]
         for subdir in subdirs:
             os.makedirs(os.path.join(self.projectPath, subdir), exist_ok=True)
@@ -79,9 +75,6 @@ class Project:
             "mode": self.mode,
             "initialDomainPath": "",
             "targetLevelSetPath": "",
-            "optimizationRuns": [],
-            "locSensStudies": [],
-            "globSensStudies": [],
         }
 
         # Save project information to JSON file
