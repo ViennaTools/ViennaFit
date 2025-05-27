@@ -6,6 +6,7 @@ from .fitStudy import Study
 
 from .fitOptimization import Optimization
 from .fitLocalSensitivityStudy import LocalSensitivityStudy
+from .fitGlobalSensitivityStudy import GlobalSensitivityStudy
 
 from .fitUtilities import readPointsFromFile
 

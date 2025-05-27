@@ -1,9 +1,8 @@
 # Fit
 A Python package for fitting ViennaPS simulation models to experimental data.
 
-## Overview
-
-```py
+## Installing
+```bash
 # Clone the repository
 git clone https://github.com/kenyastyle/Fit.git
 cd Fit
@@ -27,3 +26,11 @@ pip install .
 - Objective function options
 - 3D implementation
 - Add custom objective function
+
+<!-- ## Building
+The project can be built using
+```bash
+cd Fit
+pyproject-build
+
+``` -->
