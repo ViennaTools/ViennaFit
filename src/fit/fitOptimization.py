@@ -1,7 +1,7 @@
 from .fitProject import Project
 from .fitProcessSequence import ProcessSequence
 from .fitOptimizerWrapper import OptimizerWrapper
-from viennaps2d import Domain
+import viennaps2d as vps
 import importlib.util
 import sys
 import os
@@ -130,26 +130,36 @@ class Optimization:
         sys.modules[moduleName] = module
         spec.loader.exec_module(module)
 
-        # Try to find a ProcessSequence subclass in the module
+        # Look for function with correct signature
         for itemName in dir(module):
             item = getattr(module, itemName)
-            if (
-                isinstance(item, type)
-                and issubclass(item, ProcessSequence)
-                and item != ProcessSequence
-            ):
-                # Create an instance of the found ProcessSequence subclass
-                sequence = item()
-                self.processSequence = sequence
+            if callable(item) and not isinstance(item, type):
+                try:
+                    sig = inspect.signature(item)
+                    params = list(sig.parameters.values())
 
-                # Set the initial domain if it exists
-                if self.initialDomain is not None:
-                    sequence.setInitialDomain(self.initialDomain)
+                    # Check function has exactly 2 parameters
+                    if len(params) == 2:
+                        # Check parameter types
+                        if (
+                            params[0].annotation == vps.Domain
+                            or params[0].annotation == inspect.Parameter.empty
+                        ):
+                            if (
+                                params[1].annotation == dict[str, float]
+                                or params[1].annotation == inspect.Parameter.empty
+                            ):
+                                self.processSequence = item
+                                print(
+                                    f"Successfully loaded process sequence: {itemName}"
+                                )
+                                return self
+                except ValueError:
+                    continue
 
-                print(f"Successfully loaded process sequence: {itemName}")
-                return self
-
-        raise ValueError(f"No ProcessSequence subclass found in file: {absPath}")
+        raise ValueError(
+            f"No suitable process sequence function found in file: {absPath}"
+        )
 
     def setProcessSequence(self, processFunction):
         """
@@ -180,7 +190,7 @@ class Optimization:
         # Check first parameter (domain)
         domainParam = functionParams[0]
         if (
-            domainParam.annotation != Domain
+            domainParam.annotation != vps.Domain
             and domainParam.annotation != inspect.Parameter.empty
         ):
             raise TypeError(
@@ -215,9 +225,6 @@ class Optimization:
         print(f"Process sequence set: {processFunction.__name__}")
         print(f"Process sequence saved to: {processFilePath}")
         return self
-
-    def loadProcessSequence(self, filePath: str):
-        pass  # Placeholder for implementation
 
     def saveParameters(self, filename: str = "parameters.json"):
         """Save parameter configuration to file"""
