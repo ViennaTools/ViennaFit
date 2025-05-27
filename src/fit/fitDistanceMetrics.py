@@ -83,9 +83,6 @@ class DistanceMetric:
         ca.apply()
         csf.apply()
 
-        vls.VTKWriter(caMesh, f"CA.vtp").apply()
-        vls.VTKWriter(csfMesh, f"CSF.vtp").apply()
-
         if saveVisualization:
             # Save meshes to progress directory with evaluation counter
             caPath = os.path.join(
