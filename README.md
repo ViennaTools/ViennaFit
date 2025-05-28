@@ -1,4 +1,4 @@
-# Fit
+# ViennaFit
 A Python package for fitting ViennaPS simulation models to experimental data.
 
 ## Installing
