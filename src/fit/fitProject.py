@@ -7,33 +7,41 @@ from viennals2d import Domain as lsDomain
 
 
 class Project:
-    def __init__(self):
-        self.projectName = None
-        self.projectPath = None
-        self.projectAbsPath = None
-        self.projectInfoPath = None
+    def __init__(self, name: str = None, projectDir: str = "./"):
+        """
+        Initialize a Fit project.
 
+        Args:
+            name: Name of the project. If provided, project paths will be set immediately.
+            projectDir: Directory where the project will be created. Defaults to current directory.
+        """
+        # Set project name and paths
+        self.projectName = name
         self.mode = "2D"  # Default mode
 
+        # Domain related attributes
         self.initialDomain = None
         self.initialDomainPath = None
         self.targetLevelSet = None
         self.targetLevelSetPath = None
 
-    def setName(self, name: str):
-        """Set the name of the project."""
-        self.projectName = name
-        self.projectPath = f"./{name}"
-        self.projectAbsPath = os.path.abspath(self.projectPath)
-        self.projectInfoPath = os.path.join(
-            self.projectAbsPath, f"{self.projectName}-info.json"
-        )
-        print(f"Project name set to '{self.projectName}'.")
+        # Set paths if name is provided
+        if name is not None:
+            self.projectPath = os.path.join(projectDir, name)
+            self.projectAbsPath = os.path.abspath(self.projectPath)
+            self.projectInfoPath = os.path.join(
+                self.projectAbsPath, f"{name}-info.json"
+            )
+            print(f"Project '{name}' will be created in '{self.projectAbsPath}'.")
+        else:
+            self.projectPath = None
+            self.projectAbsPath = None
+            self.projectInfoPath = None
 
     def initialize(self):
         """Initialize the project with a standard directory structure."""
         if self.projectName is None:
-            raise ValueError("Project name must be set before initialization.")
+            raise ValueError("Project name must be provided during initialization.")
 
         # Check if the project directory already exists
         if os.path.exists(self.projectPath):
@@ -82,6 +90,7 @@ class Project:
             json.dump(projectInfo, f, indent=4)
 
         print(f"Project information saved to {self.projectInfoPath}")
+        return self
 
     def load(self, projectPath: str = "projectPath"):
         if not os.path.exists(projectPath):
