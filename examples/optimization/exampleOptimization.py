@@ -1,13 +1,23 @@
-import viennals2d as vls
 import viennaps2d as vps
+import os
 
 import fit
 
 p1 = fit.Project()
-p1.load("../../projects/exampleProject")
 
+projectToLoad = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "projects/exampleProject",
+)
 
-opt1 = fit.Optimization("run1", p1)
+print(f"Loading project from: {projectToLoad}")
+
+# Load the project from a file or directory.
+p1.load(projectToLoad)
+
+runNubmer = 4
+
+opt1 = fit.Optimization(f"run{runNubmer}", p1)
 
 
 # Define a process sequence function whose parameters will be optimized.
@@ -79,8 +89,5 @@ opt1.setVariableParameters(
 opt1.setFixedParameters({"ionEnergy": 100.0})
 
 opt1.setDistanceMetric("CA+CSF")
-
-# Validate before optimization
-opt1.validate()
 
 opt1.apply(saveVisualization=True)

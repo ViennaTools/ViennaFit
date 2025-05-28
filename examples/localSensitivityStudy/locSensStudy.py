@@ -4,7 +4,10 @@ import os
 
 # Load the project
 p1 = fit.Project()
-p1.load("../../projects/exampleProject")
+projectToLoad = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "projects/exampleProject",
+)
 
 
 lss1 = fit.LocalSensitivityStudy("lss1", p1)

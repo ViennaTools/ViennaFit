@@ -4,7 +4,10 @@ import os
 
 # Create project and load data
 p1 = fit.Project()
-p1.load("../../projects/exampleProject")
+projectToLoad = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "projects/exampleProject",
+)
 
 # Create global sensitivity study
 gss = fit.GlobalSensitivityStudy("gss1", p1)
