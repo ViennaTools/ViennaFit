@@ -1,4 +1,4 @@
-import fit
+import viennafit as fit
 
 # # Option 1: Create and initialize in separate steps
 # project = fit.Project("exampleProject")

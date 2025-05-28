@@ -1,7 +1,7 @@
 import viennaps2d as vps
 import os
 
-import fit
+import viennafit as fit
 
 p1 = fit.Project()
 projectToLoad = os.path.join(

@@ -1,7 +1,7 @@
 import viennals2d as vls
 import viennaps2d as vps
 
-import fit
+import viennafit as fit
 
 
 # In this example we create initial and target domains and assign them to a project.

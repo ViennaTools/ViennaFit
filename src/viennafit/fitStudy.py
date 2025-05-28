@@ -5,7 +5,7 @@ import sys
 import os
 import json
 import inspect
-from typing import Dict, List, Tuple, Any, Callable
+from typing import Dict, List, Callable
 
 
 class Study:
