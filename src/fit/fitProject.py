@@ -117,7 +117,7 @@ class Project:
         self.targetLevelSetPath = projectInfo["targetLevelSetPath"]
 
         # If initialDomainPath is None, skip loading the initial domain
-        if self.initialDomainPath is None:
+        if self.initialDomainPath == "":
             self.initialDomain = None
         else:
             # Load the initial domain
@@ -131,7 +131,7 @@ class Project:
             ).apply()
 
         # If targetLevelSetPath is None, skip loading the target level set
-        if self.targetLevelSetPath is None:
+        if self.targetLevelSetPath == "":
             self.targetLevelSet = None
         else:
             # Load the target level set
@@ -227,6 +227,8 @@ class Project:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
 
         self.initialDomainPath = domainPath
+        # Update project info with the initial domain path
+        self.updateProjectInfo("initialDomainPath", domainPath)
         print(f"Initial domain and visualization meshes saved to {initialDomainDir}")
         return self
 
@@ -290,6 +292,8 @@ class Project:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
 
         self.targetLevelSetPath = domainPath
+        # Update project info with the target level set path
+        self.updateProjectInfo("targetLevelSetPath", domainPath)
         print(f"Target level set and visualization meshes saved to {targetDomainDir}")
         return self
 
@@ -302,3 +306,46 @@ class Project:
             print("Target level set is not set.")
             return False
         return True
+
+    def updateProjectInfo(self, field: str, value):
+        """
+        Update a field in the project info file.
+
+        Args:
+            field: Name of the field to update
+            value: New value for the field
+
+        Returns:
+            self: For method chaining
+        """
+        if self.projectInfoPath is None or not os.path.exists(self.projectInfoPath):
+            raise ValueError(
+                "Project information file does not exist. Initialize or load a project first."
+            )
+
+        # Load current project info
+        with open(self.projectInfoPath, "r") as f:
+            projectInfo = json.load(f)
+
+        # Update the specified field
+        if field in projectInfo:
+            projectInfo[field] = value
+        else:
+            print(
+                f"Warning: Field '{field}' does not exist in project info. Adding it."
+            )
+            projectInfo[field] = value
+
+        # Always update last modified date
+        projectInfo["lastModifiedDate"] = str(datetime.datetime.now())
+
+        # Save updated info back to file
+        with open(self.projectInfoPath, "w") as f:
+            json.dump(projectInfo, f, indent=4)
+
+        # Also update the corresponding instance variable if it exists
+        if hasattr(self, field):
+            setattr(self, field, value)
+
+        print(f"Updated project info field '{field}'")
+        return self
