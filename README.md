@@ -5,7 +5,7 @@ A Python package for fitting ViennaPS simulation models to experimental data.
 ```bash
 # Clone the repository
 git clone https://github.com/ViennaTools/ViennaFit
-cd Fit
+cd ViennaFit
 
 # Install the package and dependencies
 pip install .
