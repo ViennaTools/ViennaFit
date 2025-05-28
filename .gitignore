@@ -186,3 +186,6 @@ progress*
 run*
 
 *json
+
+# the projects directory 
+projects/

@@ -25,7 +25,6 @@ pip install .
 - Objective function options
 - 3D implementation
 - Add custom objective function
-- Add project info updater
 
 <!-- ## Building
 The project can be built using
