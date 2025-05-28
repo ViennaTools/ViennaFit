@@ -8,7 +8,7 @@ projectToLoad = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "projects/exampleProject",
 )
-
+p1.load(projectToLoad)
 
 lss1 = fit.LocalSensitivityStudy("lss1", p1)
 

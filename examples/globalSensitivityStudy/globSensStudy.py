@@ -8,6 +8,7 @@ projectToLoad = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "projects/exampleProject",
 )
+p1.load(projectToLoad)
 
 # Create global sensitivity study
 gss = fit.GlobalSensitivityStudy("gss1", p1)

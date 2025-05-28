@@ -4,20 +4,13 @@ import os
 import fit
 
 p1 = fit.Project()
-
 projectToLoad = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "projects/exampleProject",
 )
-
-print(f"Loading project from: {projectToLoad}")
-
-# Load the project from a file or directory.
 p1.load(projectToLoad)
 
-runNubmer = 4
-
-opt1 = fit.Optimization(f"run{runNubmer}", p1)
+opt1 = fit.Optimization("run1", p1)
 
 
 # Define a process sequence function whose parameters will be optimized.
