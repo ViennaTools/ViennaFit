@@ -16,7 +16,7 @@ dependencies = [
     ]
 
 [project.urls]
-Repository = "https://github.com/kenyastyle/Fit"
+Repository = "https://github.com/ViennaTools/ViennaFit.git"
 
 [tool.black]
 line-length = 88
