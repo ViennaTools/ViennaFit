@@ -106,30 +106,37 @@ class Project:
         self.mode = projectInfo["mode"]
         self.initialDomainPath = projectInfo["initialDomainPath"]
         self.targetLevelSetPath = projectInfo["targetLevelSetPath"]
-        self.optimizationRuns = projectInfo["optimizationRuns"]
-        self.locSensStudies = projectInfo["locSensStudies"]
-        self.globSensStudies = projectInfo["globSensStudies"]
 
-        self.initialDomain = Reader(
-            os.path.join(
-                self.projectPath,
-                "domains",
-                "initialDomain",
-                f"{self.projectName}-initialDomain.vpsd",
-            )
-        ).apply()
+        # If initialDomainPath is None, skip loading the initial domain
+        if self.initialDomainPath is None:
+            self.initialDomain = None
+        else:
+            # Load the initial domain
+            self.initialDomain = Reader(
+                os.path.join(
+                    self.projectPath,
+                    "domains",
+                    "initialDomain",
+                    f"{self.projectName}-initialDomain.vpsd",
+                )
+            ).apply()
 
-        targetDomain = lsDomain()
-        lsReader(
-            targetDomain,
-            os.path.join(
-                self.projectPath,
-                "domains",
-                "targetDomain",
-                f"{self.projectName}-targetDomain.lvst",
-            ),
-        ).apply()
-        self.targetLevelSet = targetDomain
+        # If targetLevelSetPath is None, skip loading the target level set
+        if self.targetLevelSetPath is None:
+            self.targetLevelSet = None
+        else:
+            # Load the target level set
+            targetDomain = lsDomain()
+            lsReader(
+                targetDomain,
+                os.path.join(
+                    self.projectPath,
+                    "domains",
+                    "targetDomain",
+                    f"{self.projectName}-targetDomain.lvst",
+                ),
+            ).apply()
+            self.targetLevelSet = targetDomain
 
         # Print project information
         print(f"Project '{self.projectName}' loaded with the following information:")
@@ -146,34 +153,83 @@ class Project:
         """Set the initial domain for the project."""
         self.initialDomain = domain
 
-        # Save the initial domain to the inital domain directory
+        # Create directories if needed
         initialDomainDir = os.path.join(self.projectPath, "domains", "initialDomain")
         os.makedirs(initialDomainDir, exist_ok=True)
+
+        # Save the initial domain to the initial domain directory
         domainPath = os.path.join(
             initialDomainDir, f"{self.projectName}-initialDomain.vpsd"
         )
 
         if self.mode == "2D":
             import viennaps2d as vps
+            import viennals2d as vls
 
+            # Save the domain
             vps.Writer(domain, domainPath).apply()
+
+            # Extract and visualize only the last level set (index -1)
+            if domain.getLevelSets():
+                lastLevelSet = domain.getLevelSets()[-1]
+
+                # Create mesh visualization
+                meshLS = vls.Mesh()
+                vls.ToMesh(lastLevelSet, meshLS).apply()
+                meshPath = os.path.join(
+                    initialDomainDir, f"{self.projectName}-initialDomain-ls.vtp"
+                )
+                vls.VTKWriter(meshLS, meshPath).apply()
+
+                # Create surface mesh visualization
+                meshSurface = vls.Mesh()
+                vls.ToSurfaceMesh(lastLevelSet, meshSurface).apply()
+                surfacePath = os.path.join(
+                    initialDomainDir, f"{self.projectName}-initialDomain-surface.vtp"
+                )
+                vls.VTKWriter(meshSurface, surfacePath).apply()
+
         elif self.mode == "3D":
             import viennaps3d as vps
+            import viennals3d as vls
 
             vps.Writer(domain, domainPath).apply()
+
+            # Extract and visualize only the last level set (index -1)
+            if domain.getLevelSets():
+                lastLevelSet = domain.getLevelSets()[-1]
+
+                # Create mesh visualization
+                meshLS = vls.Mesh()
+                vls.ToMesh(lastLevelSet, meshLS).apply()
+                meshPath = os.path.join(
+                    initialDomainDir, f"{self.projectName}-initialDomain-ls.vtp"
+                )
+                vls.VTKWriter(meshLS, meshPath).apply()
+
+                # Create surface mesh visualization
+                meshSurface = vls.Mesh()
+                vls.ToSurfaceMesh(lastLevelSet, meshSurface).apply()
+                surfacePath = os.path.join(
+                    initialDomainDir, f"{self.projectName}-initialDomain-surface.vtp"
+                )
+                vls.VTKWriter(meshSurface, surfacePath).apply()
         else:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
+
         self.initialDomainPath = domainPath
-        print(f"Initial domain saved to {initialDomainDir}")
+        print(f"Initial domain and visualization meshes saved to {initialDomainDir}")
         return self
 
     def setTargetLevelSet(self, levelSet):
         """Set the target level set for the project."""
         self.targetLevelSet = levelSet
 
-        # Save the target level set to the target domain directory
+        # Create directories if needed
         targetDomainDir = os.path.join(self.projectPath, "domains", "targetDomain")
         os.makedirs(targetDomainDir, exist_ok=True)
+
+        # Save the target level set
         domainPath = os.path.join(
             targetDomainDir, f"{self.projectName}-targetDomain.lvst"
         )
@@ -181,16 +237,51 @@ class Project:
         if self.mode == "2D":
             import viennals2d as vls
 
+            # Save the level set
             vls.Writer(levelSet, domainPath).apply()
+
+            # Create mesh visualization
+            meshLS = vls.Mesh()
+            vls.ToMesh(levelSet, meshLS).apply()
+            meshPath = os.path.join(
+                targetDomainDir, f"{self.projectName}-targetDomain-ls.vtp"
+            )
+            vls.VTKWriter(meshLS, meshPath).apply()
+
+            # Create surface mesh visualization
+            meshSurface = vls.Mesh()
+            vls.ToSurfaceMesh(levelSet, meshSurface).apply()
+            surfacePath = os.path.join(
+                targetDomainDir, f"{self.projectName}-targetDomain-surface.vtp"
+            )
+            vls.VTKWriter(meshSurface, surfacePath).apply()
+
         elif self.mode == "3D":
             import viennals3d as vls
 
+            # Save the level set
             vls.Writer(levelSet, domainPath).apply()
+
+            # Create mesh visualization
+            meshLS = vls.Mesh()
+            vls.ToMesh(levelSet, meshLS).apply()
+            meshPath = os.path.join(
+                targetDomainDir, f"{self.projectName}-targetDomain-ls.vtp"
+            )
+            vls.VTKWriter(meshLS, meshPath).apply()
+
+            # Create surface mesh visualization
+            meshSurface = vls.Mesh()
+            vls.ToSurfaceMesh(levelSet, meshSurface).apply()
+            surfacePath = os.path.join(
+                targetDomainDir, f"{self.projectName}-targetDomain-surface.vtp"
+            )
+            vls.VTKWriter(meshSurface, surfacePath).apply()
         else:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
 
         self.targetLevelSetPath = domainPath
-        print(f"Target level set saved to {targetDomainDir}")
+        print(f"Target level set and visualization meshes saved to {targetDomainDir}")
         return self
 
     def isReady(self):
