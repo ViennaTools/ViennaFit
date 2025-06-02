@@ -7,7 +7,7 @@ Does not work with older ViennaPS versions.
 
 ```bash
 # Clone the repository
-git clone https://github.com/kenyastyle/Fit.git
+git clone https://github.com/ViennaTools/ViennaFit
 cd Fit
 
 # Install the package and dependencies
