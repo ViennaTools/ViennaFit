@@ -12,7 +12,8 @@ class Study:
     """Base class for all parameter studies (optimization, sensitivity analysis, etc.)"""
 
     def __init__(self, name: str, project: Project, studyType: str):
-        self.name = name
+        # self.name = name
+        base_name = name
         self.project = project
 
         # Check project readiness
@@ -23,12 +24,27 @@ class Study:
             )
 
         # Set up directories
-        self.runDir = os.path.join(project.projectPath, studyType, name)
-        if os.path.exists(self.runDir):
-            raise FileExistsError(
-                f"Run directory already exists: {self.runDir}. \n"
-                "Please choose a different name or delete the existing directory."
-            )
+        run_dir = os.path.join(project.projectPath, studyType, base_name)
+        if os.path.exists(run_dir):
+            index = 1
+            while True:
+                alt_name = f"{base_name}_{index}"
+                alt_run_dir = os.path.join(project.projectPath, studyType, alt_name)
+                if not os.path.exists(alt_run_dir):
+                    run_dir = alt_run_dir
+                    name = alt_name
+                    print(
+                        f"Run directory already exists. Renaming study to '{name}' "
+                        f"and using directory: {run_dir}"
+                    )
+                    break
+                index += 1
+            # raise FileExistsError(
+            #     f"Run directory already exists: {self.runDir}. \n"
+            #     "Please choose a different name or delete the existing directory."
+            # )
+        self.name = name
+        self.runDir = run_dir
         os.makedirs(self.runDir, exist_ok=False)
 
         # Create progress directory (name may vary in subclasses)
