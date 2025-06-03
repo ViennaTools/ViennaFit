@@ -27,14 +27,14 @@ class Project:
 
         # Set paths if name is provided
         if name is not None:
-            base_name = name
-            abs_base = os.path.abspath(os.path.join(projectDir, base_name))
+            baseName = name
+            absBase = os.path.abspath(os.path.join(projectDir, baseName))
 
             # Check if the project directory already exists
             index = 1
-            while os.path.exists(abs_base):
-                name = f"{base_name}_{index}"
-                abs_base = os.path.abspath(os.path.join(projectDir, name))
+            while os.path.exists(absBase):
+                name = f"{baseName}_{index}"
+                absBase = os.path.abspath(os.path.join(projectDir, name))
                 index += 1
                 print(f"Project directory exists. Trying '{name}'...")
 
@@ -54,12 +54,6 @@ class Project:
         """Initialize the project with a standard directory structure."""
         if self.projectName is None:
             raise ValueError("Project name must be provided during initialization.")
-
-        # # Check if the project directory already exists
-        # if os.path.exists(self.projectPath):
-        #     raise FileExistsError(
-        #         "Project already exists. Please choose a different name."
-        #     )
 
         # Create the main project directory
         os.makedirs(self.projectPath, exist_ok=True)
