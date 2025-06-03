@@ -95,6 +95,21 @@ class Optimization(Study):
 
         print(f"Parameters saved to {filepath}")
 
+    def saveResults(self, filename: str = "results.json"):
+        """Save results to file"""
+        filepath = os.path.join(self.runDir, filename)
+
+        result = {
+            "bestScore": self.bestScore,
+            "bestParameters": self.bestParameters,
+            "bestEvaluation#": self.bestEvaluationNumber,
+        }
+
+        with open(filepath, "w") as f:
+            json.dump(result, f, indent=4)
+
+        print(f"Results saved to {filepath}")
+
     def setOptimizer(self, optimizer: str):
         """Set the optimizer to be used"""
         self.optimizer = optimizer
@@ -137,9 +152,10 @@ class Optimization(Study):
                 print("  Best parameters:")
                 for name, value in result["x"].items():
                     print(f"    {name}: {value:.6f}")
+                print(f" Best evaluation #: {self.bestEvaluationNumber}")
 
                 # Save final results
-                self.saveBestResult()
+                self.saveResults()
 
             else:
                 print("Optimization failed to converge")

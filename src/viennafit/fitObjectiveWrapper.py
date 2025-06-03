@@ -83,6 +83,7 @@ class BaseObjectiveWrapper:
         if newBest:
             self.study.bestScore = objectiveValue
             self.study.bestParameters = paramDict.copy()
+            self.study.bestEvaluationNumber = self.study.evalCounter
 
         if newBest or self.study.saveAllEvaluations:
             domainCopy.saveSurfaceMesh(

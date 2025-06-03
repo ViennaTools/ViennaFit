@@ -72,7 +72,7 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
         objectiveFunction = ObjectiveWrapper.create("dlib", self.optimization)
 
         # Run optimization
-        result = find_min_global(
+        x, fx = find_min_global(
             objectiveFunction,
             lowerBounds,
             upperBounds,
@@ -81,11 +81,11 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
 
         # Format results
         parameterNames = list(self.optimization.variableParameters.keys())
-        optimizedParams = dict(zip(parameterNames, result.x))
+        optimizedParams = dict(zip(parameterNames, x))
 
         return {
             "success": True,
             "x": optimizedParams,
-            "fun": result.objective_value,
-            "nfev": result.nfev,
+            "fun": fx,
+            "nfev": numEvaluations
         }

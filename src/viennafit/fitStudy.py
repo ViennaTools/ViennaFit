@@ -12,7 +12,8 @@ class Study:
     """Base class for all parameter studies (optimization, sensitivity analysis, etc.)"""
 
     def __init__(self, name: str, project: Project, studyType: str):
-        self.name = name
+        # self.name = name
+        baseName = name
         self.project = project
 
         # Check project readiness
@@ -23,12 +24,24 @@ class Study:
             )
 
         # Set up directories
-        self.runDir = os.path.join(project.projectPath, studyType, name)
-        if os.path.exists(self.runDir):
-            raise FileExistsError(
-                f"Run directory already exists: {self.runDir}. \n"
-                "Please choose a different name or delete the existing directory."
-            )
+        runDir = os.path.join(project.projectPath, studyType, baseName)
+        if os.path.exists(runDir):
+            index = 1
+            while True:
+                altName = f"{baseName}_{index}"
+                altRunDir = os.path.join(project.projectPath, studyType, altName)
+                if not os.path.exists(altRunDir):
+                    runDir = altRunDir
+                    name = altName
+                    print(
+                        f"Run directory already exists. Renaming study to '{name}' "
+                        f"and using directory: {runDir}"
+                    )
+                    break
+                index += 1
+
+        self.name = name
+        self.runDir = runDir
         os.makedirs(self.runDir, exist_ok=False)
 
         # Create progress directory (name may vary in subclasses)
@@ -50,6 +63,7 @@ class Study:
         self.variableParameters = {}
         self.bestParameters = None
         self.bestScore = float("inf")
+        self.bestEvaluationNumber = None
 
         print(
             f"{studyType.capitalize()} '{self.name}' assigned to project '{self.project.projectName}'"
@@ -191,17 +205,6 @@ class Study:
         print(f"Process sequence set: {processFunction.__name__}")
         print(f"Process sequence saved to: {processFilePath}")
         return self
-
-    def saveBestResult(self, filename: str = "bestResult.json"):
-        """Save best result to file"""
-        filepath = os.path.join(self.runDir, filename)
-
-        result = {"bestScore": self.bestScore, "bestParameters": self.bestParameters}
-
-        with open(filepath, "w") as f:
-            json.dump(result, f, indent=4)
-
-        print(f"Best result saved to {filepath}")
 
     def validate(self):
         """Validate that all required parameters are defined"""
