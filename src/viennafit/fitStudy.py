@@ -63,6 +63,7 @@ class Study:
         self.variableParameters = {}
         self.bestParameters = None
         self.bestScore = float("inf")
+        self.bestEvaluationNumber = None
 
         print(
             f"{studyType.capitalize()} '{self.name}' assigned to project '{self.project.projectName}'"
@@ -204,17 +205,6 @@ class Study:
         print(f"Process sequence set: {processFunction.__name__}")
         print(f"Process sequence saved to: {processFilePath}")
         return self
-
-    def saveBestResult(self, filename: str = "bestResult.json"):
-        """Save best result to file"""
-        filepath = os.path.join(self.runDir, filename)
-
-        result = {"bestScore": self.bestScore, "bestParameters": self.bestParameters}
-
-        with open(filepath, "w") as f:
-            json.dump(result, f, indent=4)
-
-        print(f"Best result saved to {filepath}")
 
     def validate(self):
         """Validate that all required parameters are defined"""
