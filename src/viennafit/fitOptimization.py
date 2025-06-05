@@ -4,6 +4,7 @@ from .fitStudy import Study
 import viennaps2d as vps
 import os
 import json
+import shutil
 from typing import Dict, List, Tuple
 
 
@@ -107,6 +108,19 @@ class Optimization(Study):
 
         with open(filepath, "w") as f:
             json.dump(result, f, indent=4)
+
+        bestDomainFile = f"{self.name}-{self.bestEvaluationNumber}.vtp"
+        bestDomainPath = os.path.join(self.runDir, "progress", bestDomainFile)
+        if os.path.exists(bestDomainPath):
+            projectDomainDir = os.path.join(
+                self.project.projectAbsPath, "domains", "optimalDomains"
+            )
+            os.makedirs(projectDomainDir, exist_ok=True)
+            targetPath = os.path.join(projectDomainDir, bestDomainFile)
+            shutil.copy2(bestDomainPath, targetPath)
+            print(f"Best domain copied to {targetPath}")
+        else:
+            print(f"Best domain file {bestDomainFile} not found in progress directory")
 
         print(f"Results saved to {filepath}")
 
