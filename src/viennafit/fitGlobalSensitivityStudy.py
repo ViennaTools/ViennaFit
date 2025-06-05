@@ -6,7 +6,9 @@ import json
 import numpy as np
 from typing import Dict, Tuple
 from SALib.sample import saltelli
+from SALib.sample import fast_sampler as fastSampler
 from SALib.analyze import sobol
+from SALib.analyze import fast as fastAnalyzer
 
 
 class GlobalSensitivityStudy(Study):
@@ -69,6 +71,27 @@ class GlobalSensitivityStudy(Study):
         self.secondOrder = secondOrder
         return self
 
+    def setSamplingMethod(self, method: str = "saltelli"):
+        """
+        Set the sampling method for sensitivity analysis.
+
+        Args:
+            method: Sampling method to use. Options are:
+                - 'saltelli': Saltelli's extension of Sobol sequence (default)
+                - 'fast': Fourier Amplitude Sensitivity Test, more efficient for many parameters
+
+        Returns:
+            self: For method chaining
+        """
+        if method not in ["saltelli", "fast"]:
+            raise ValueError(
+                f"Invalid sampling method: {method}. "
+                "Options are 'saltelli' or 'fast'."
+            )
+
+        self.samplingMethod = method
+        return self
+
     def _prepareSALibProblem(self):
         """Prepare the problem dictionary for SALib"""
         return {
@@ -102,13 +125,21 @@ class GlobalSensitivityStudy(Study):
             # Create SALib problem definition
             problem = self._prepareSALibProblem()
 
-            # Generate samples using Saltelli's extension of Sobol sequence
-            print(
-                f"Generating {self.numSamples} base samples (total samples: {self.numSamples*(2*len(self.variableParameters)+2)})"
-            )
-            paramValues = saltelli.sample(
-                problem, self.numSamples, calc_second_order=self.secondOrder
-            )
+            # Generate samples based on selected method
+            if self.samplingMethod == "saltelli":
+                print(
+                    f"Generating {self.numSamples} base samples using Saltelli method "
+                    f"(total samples: {self.numSamples*(2*len(self.variableParameters)+2)})"
+                )
+                paramValues = saltelli.sample(
+                    problem, self.numSamples, calc_second_order=self.secondOrder
+                )
+            else:  # FAST method
+                print(
+                    f"Generating samples using FAST method "
+                    f"(total samples: {self.numSamples * len(self.variableParameters)})"
+                )
+                paramValues = fastSampler.sample(problem, self.numSamples)
 
             # Save parameter samples to file
             samplesPath = os.path.join(self.runDir, "parameter_samples.csv")
@@ -172,48 +203,104 @@ class GlobalSensitivityStudy(Study):
                 comments="",
             )
 
-            # Perform sensitivity analysis
+            # Perform sensitivity analysis based on selected method
             print("Performing sensitivity analysis...")
-            Si = sobol.analyze(
-                problem, Y, calc_second_order=self.secondOrder, print_to_console=False
-            )
+            if self.samplingMethod == "saltelli":
+                Si = sobol.analyze(
+                    problem,
+                    Y,
+                    calc_second_order=self.secondOrder,
+                    print_to_console=False,
+                )
 
-            # Format results for JSON saving
-            sensitivityResults = {
-                "firstOrder": {
-                    name: float(value)
-                    for name, value in zip(problem["names"], Si["S1"])
-                },
-                "firstOrderConf": {
-                    name: float(value)
-                    for name, value in zip(problem["names"], Si["S1_conf"])
-                },
-                "totalOrder": {
-                    name: float(value)
-                    for name, value in zip(problem["names"], Si["ST"])
-                },
-                "totalOrderConf": {
-                    name: float(value)
-                    for name, value in zip(problem["names"], Si["ST_conf"])
-                },
-            }
+                # Format results for JSON saving
+                sensitivityResults = {
+                    "method": "sobol",
+                    "firstOrder": {
+                        name: float(value)
+                        for name, value in zip(problem["names"], Si["S1"])
+                    },
+                    "firstOrderConf": {
+                        name: float(value)
+                        for name, value in zip(problem["names"], Si["S1_conf"])
+                    },
+                    "totalOrder": {
+                        name: float(value)
+                        for name, value in zip(problem["names"], Si["ST"])
+                    },
+                    "totalOrderConf": {
+                        name: float(value)
+                        for name, value in zip(problem["names"], Si["ST_conf"])
+                    },
+                }
 
-            if self.secondOrder:
-                # Create second-order indices as a dict with parameter pair keys
-                secondOrderIndices = {}
-                for i, p1 in enumerate(problem["names"]):
-                    for j, p2 in enumerate(problem["names"]):
-                        if i > j:  # Only include unique combinations
-                            secondOrderIndices[f"{p1}_{p2}"] = float(Si["S2"][i, j])
+                if self.secondOrder:
+                    # Create second-order indices as a dict with parameter pair keys
+                    secondOrderIndices = {}
+                    for i, p1 in enumerate(problem["names"]):
+                        for j, p2 in enumerate(problem["names"]):
+                            if i > j:  # Only include unique combinations
+                                secondOrderIndices[f"{p1}_{p2}"] = float(Si["S2"][i, j])
 
-                secondOrderConf = {}
-                for i, p1 in enumerate(problem["names"]):
-                    for j, p2 in enumerate(problem["names"]):
-                        if i > j:
-                            secondOrderConf[f"{p1}_{p2}"] = float(Si["S2_conf"][i, j])
+                    secondOrderConf = {}
+                    for i, p1 in enumerate(problem["names"]):
+                        for j, p2 in enumerate(problem["names"]):
+                            if i > j:
+                                secondOrderConf[f"{p1}_{p2}"] = float(
+                                    Si["S2_conf"][i, j]
+                                )
 
-                sensitivityResults["secondOrder"] = secondOrderIndices
-                sensitivityResults["secondOrderConf"] = secondOrderConf
+                    sensitivityResults["secondOrder"] = secondOrderIndices
+                    sensitivityResults["secondOrderConf"] = secondOrderConf
+
+                # Print top sensitivity indices
+                print("\nParameter Sensitivities (Total Order):")
+                sortedParams = sorted(
+                    sensitivityResults["totalOrder"].items(),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+
+                for param, value in sortedParams:
+                    conf = sensitivityResults["totalOrderConf"][param]
+                    print(f"  {param}: {value:.4f} ± {conf:.4f}")
+
+            else:  # FAST method
+                Si = fastAnalyzer.analyze(problem, Y, print_to_console=False)
+
+                # Format results for JSON saving - FAST only provides first order
+                # and total order indices
+                sensitivityResults = {
+                    "method": "fast",
+                    "firstOrder": {
+                        name: float(value)
+                        for name, value in zip(problem["names"], Si["S1"])
+                    },
+                    "firstOrderConf": {
+                        name: float(value)
+                        for name, value in zip(problem["names"], Si["S1_conf"])
+                    },
+                    "totalOrder": {
+                        name: float(value)
+                        for name, value in zip(problem["names"], Si["ST"])
+                    },
+                    "totalOrderConf": {
+                        name: float(value)
+                        for name, value in zip(problem["names"], Si["ST_conf"])
+                    },
+                }
+
+                # Print first order indices
+                print("\nParameter Sensitivities (First Order):")
+                sortedParams = sorted(
+                    sensitivityResults["firstOrder"].items(),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+
+                for param, value in sortedParams:
+                    conf = sensitivityResults["firstOrderConf"][param]
+                    print(f"  {param}: {value:.4f} ± {conf:.4f}")
 
             # Save sensitivity analysis results
             resultsPath = os.path.join(self.runDir, "sensitivity_results.json")
@@ -221,18 +308,6 @@ class GlobalSensitivityStudy(Study):
                 json.dump(sensitivityResults, f, indent=2)
 
             print(f"\nSensitivity analysis results saved to: {resultsPath}")
-
-            # Print top sensitivity indices
-            print("\nParameter Sensitivities (Total Order):")
-            sortedParams = sorted(
-                sensitivityResults["totalOrder"].items(),
-                key=lambda x: x[1],
-                reverse=True,
-            )
-
-            for param, value in sortedParams:
-                conf = sensitivityResults["totalOrderConf"][param]
-                print(f"  {param}: {value:.4f} ± {conf:.4f}")
 
         except Exception as e:
             print(f"Global sensitivity study failed with error: {str(e)}")
