@@ -40,7 +40,10 @@ class DistanceMetric:
 
     @staticmethod
     def _compareArea(
-        domain1: vls.Domain, domain2: vls.Domain, saveVisualization: bool = False
+        domain1: vls.Domain,
+        domain2: vls.Domain,
+        saveVisualization: bool = False,
+        writePath: str = None,
     ) -> float:
         """Compare domains using area mismatch."""
         ca = vls.CompareArea(domain1, domain2)
@@ -49,11 +52,21 @@ class DistanceMetric:
             ca.setOutputMesh(mesh)
         ca.apply()
 
+        if saveVisualization:
+            # Save mesh to progress directory with evaluation counter
+            caPath = os.path.join(
+                f"{writePath}-CA.vtu",
+            )
+            vls.VTKWriter(mesh, caPath).apply()
+
         return ca.getAreaMismatch()
 
     @staticmethod
     def _compareSparseField(
-        domain1: vls.Domain, domain2: vls.Domain, saveVisualization: bool = False
+        domain1: vls.Domain,
+        domain2: vls.Domain,
+        saveVisualization: bool = False,
+        writePath: str = None,
     ) -> float:
         """Compare domains using sparse field difference."""
         csf = vls.CompareSparseField(domain1, domain2)
@@ -61,6 +74,14 @@ class DistanceMetric:
             mesh = vls.Mesh()
             csf.setOutputMesh(mesh)
         csf.apply()
+
+        if saveVisualization:
+            # Save mesh to progress directory with evaluation counter
+            csfPath = os.path.join(
+                f"{writePath}-CSF.vtp",
+            )
+            vls.VTKWriter(mesh, csfPath).apply()
+
         return csf.getSumSquaredDifferences()
 
     @staticmethod
