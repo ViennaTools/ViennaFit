@@ -355,3 +355,46 @@ class Project:
 
         print(f"Updated project info field '{field}'")
         return self
+
+    def setInitialDomainFromFile(self, filePath: str):
+        """
+        Set initial domain from file and copy it to project structure.
+        
+        Args:
+            filePath: Path to the domain file (.vpsd format)
+        """
+        if not os.path.exists(filePath):
+            raise FileNotFoundError(f"Domain file '{filePath}' does not exist.")
+        
+        if not filePath.endswith('.vpsd'):
+            raise ValueError("Initial domain file must be in .vpsd format.")
+        
+        # Load the domain
+        domain = Reader(filePath).apply()
+        
+        # Use existing setInitialDomain method to save to project structure
+        self.setInitialDomain(domain)
+        print(f"Initial domain set from '{filePath}' and saved to project")
+        return self
+
+    def setTargetDomainFromFile(self, filePath: str):
+        """
+        Set target domain from file and copy it to project structure.
+        
+        Args:
+            filePath: Path to the level set file (.lvst format)
+        """
+        if not os.path.exists(filePath):
+            raise FileNotFoundError(f"Target domain file '{filePath}' does not exist.")
+        
+        if not filePath.endswith('.lvst'):
+            raise ValueError("Target domain file must be in .lvst format.")
+        
+        # Load the level set
+        levelSet = lsDomain()
+        lsReader(levelSet, filePath).apply()
+        
+        # Use existing setTargetLevelSet method to save to project structure
+        self.setTargetLevelSet(levelSet)
+        print(f"Target domain set from '{filePath}' and saved to project")
+        return self
