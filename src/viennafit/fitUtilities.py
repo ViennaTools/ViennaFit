@@ -18,6 +18,7 @@ def readPointsFromFile(
     shiftY=0,
     shiftZ=0,
     mode="3D",
+    reflectX=False,
 ):
     try:
         with open(filename, "r") as file:
@@ -27,6 +28,9 @@ def readPointsFromFile(
                 elif mode == "2D":
                     x, y = map(float, line.strip().split())
                     z = 0.0  # Default z value for 2D mode
+
+                if reflectX:
+                    x = -x
 
                 minx = min(minx, x)
                 miny = min(miny, y)
