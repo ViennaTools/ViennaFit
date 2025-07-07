@@ -13,6 +13,7 @@ dependencies = [
     "viennaps @ git+https://github.com/ViennaTools/ViennaPS.git@master",
     "dlib>=19.24.0",
     "SALib >= 1.5.1",
+    "pytest>=6.0.0",
     ]
 
 [project.urls]
