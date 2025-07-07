@@ -31,12 +31,25 @@ class Project:
             absBase = os.path.abspath(os.path.join(projectDir, baseName))
 
             # Check if the project directory already exists
-            index = 1
-            while os.path.exists(absBase):
-                name = f"{baseName}_{index}"
-                absBase = os.path.abspath(os.path.join(projectDir, name))
-                index += 1
-                print(f"Project directory exists. Trying '{name}'...")
+            if os.path.exists(absBase):
+                # Find the highest existing index
+                maxIndex = 0
+
+                if os.path.exists(projectDir):
+                    for existingDir in os.listdir(projectDir):
+                        if (
+                            existingDir.startswith(f"{baseName}_")
+                            and existingDir[len(baseName) + 1 :].isdigit()
+                        ):
+                            existingIndex = int(existingDir[len(baseName) + 1 :])
+                            maxIndex = max(maxIndex, existingIndex)
+
+                # Use the next available index
+                newIndex = maxIndex + 1
+                name = f"{baseName}_{newIndex}"
+                print(
+                    f"Project directory already exists. Renaming project to '{name}'..."
+                )
 
             self.projectName = name
             self.projectPath = os.path.join(projectDir, name)
@@ -359,19 +372,19 @@ class Project:
     def setInitialDomainFromFile(self, filePath: str):
         """
         Set initial domain from file and copy it to project structure.
-        
+
         Args:
             filePath: Path to the domain file (.vpsd format)
         """
         if not os.path.exists(filePath):
             raise FileNotFoundError(f"Domain file '{filePath}' does not exist.")
-        
-        if not filePath.endswith('.vpsd'):
+
+        if not filePath.endswith(".vpsd"):
             raise ValueError("Initial domain file must be in .vpsd format.")
-        
+
         # Load the domain
         domain = Reader(filePath).apply()
-        
+
         # Use existing setInitialDomain method to save to project structure
         self.setInitialDomain(domain)
         print(f"Initial domain set from '{filePath}' and saved to project")
@@ -380,20 +393,20 @@ class Project:
     def setTargetDomainFromFile(self, filePath: str):
         """
         Set target domain from file and copy it to project structure.
-        
+
         Args:
             filePath: Path to the level set file (.lvst format)
         """
         if not os.path.exists(filePath):
             raise FileNotFoundError(f"Target domain file '{filePath}' does not exist.")
-        
-        if not filePath.endswith('.lvst'):
+
+        if not filePath.endswith(".lvst"):
             raise ValueError("Target domain file must be in .lvst format.")
-        
+
         # Load the level set
         levelSet = lsDomain()
         lsReader(levelSet, filePath).apply()
-        
+
         # Use existing setTargetLevelSet method to save to project structure
         self.setTargetLevelSet(levelSet)
         print(f"Target domain set from '{filePath}' and saved to project")

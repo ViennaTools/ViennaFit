@@ -26,19 +26,27 @@ class Study:
         # Set up directories
         runDir = os.path.join(project.projectPath, studyType, baseName)
         if os.path.exists(runDir):
-            index = 1
-            while True:
-                altName = f"{baseName}_{index}"
-                altRunDir = os.path.join(project.projectPath, studyType, altName)
-                if not os.path.exists(altRunDir):
-                    runDir = altRunDir
-                    name = altName
-                    print(
-                        f"Run directory already exists. Renaming study to '{name}' "
-                        f"and using directory: {runDir}"
-                    )
-                    break
-                index += 1
+            # Find the highest existing index
+            studyDir = os.path.join(project.projectPath, studyType)
+            maxIndex = 0
+
+            if os.path.exists(studyDir):
+                for existingDir in os.listdir(studyDir):
+                    if (
+                        existingDir.startswith(f"{baseName}_")
+                        and existingDir[len(baseName) + 1 :].isdigit()
+                    ):
+                        existingIndex = int(existingDir[len(baseName) + 1 :])
+                        maxIndex = max(maxIndex, existingIndex)
+
+            # Use the next available index
+            newIndex = maxIndex + 1
+            name = f"{baseName}_{newIndex}"
+            runDir = os.path.join(project.projectPath, studyType, name)
+            print(
+                f"Run directory already exists. Renaming study to '{name}' "
+                f"and using directory: {runDir}"
+            )
 
         self.name = name
         self.runDir = runDir
