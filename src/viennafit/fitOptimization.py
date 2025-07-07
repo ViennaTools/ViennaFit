@@ -61,10 +61,6 @@ class Optimization(Study):
             self.variableParameters[name] = (lowerBound, upperBound)
         return self
 
-    def getParameterDict(self):
-        """Get a dictionary of all parameter values"""
-        return {name: param.value for name, param in self.parameters.items()}
-
     def getVariableParameterList(self):
         """Get list of variable parameters for optimization algorithms"""
         return self.variableParameters.keys()
@@ -76,34 +72,18 @@ class Optimization(Study):
         upperBounds = [p.upperBound for p in varParams]
         return lowerBounds, upperBounds
 
-    def saveParameters(self, filename: str = "parameters.json"):
-        """Save parameter configuration to file"""
-        filepath = os.path.join(self.runDir, filename)
-
-        # Convert parameters to serializable dictionary
-        paramDict = {
-            name: {
-                "value": param.value,
-                "lowerBound": param.lowerBound,
-                "upperBound": param.upperBound,
-                "isFixed": param.isFixed,
-            }
-            for name, param in self.parameters.items()
-        }
-
-        with open(filepath, "w") as f:
-            json.dump(paramDict, f, indent=4)
-
-        print(f"Parameters saved to {filepath}")
-
     def saveResults(self, filename: str = "results.json"):
         """Save results to file"""
         filepath = os.path.join(self.runDir, filename)
 
         result = {
             "bestScore": self.bestScore,
-            "bestParameters": self.bestParameters,
             "bestEvaluation#": self.bestEvaluationNumber,
+            "bestParameters": self.bestParameters,
+            "fixedParameters": self.fixedParameters,
+            "variableParameters": self.variableParameters,
+            "optimizer": self.optimizer,
+            "numEvaluations": self.numEvaluations,
         }
 
         with open(filepath, "w") as f:
@@ -124,6 +104,30 @@ class Optimization(Study):
 
         print(f"Results saved to {filepath}")
 
+    def saveStartingConfiguration(self):
+        """Save the starting configuration of the optimization"""
+        if not self.applied:
+            raise RuntimeError(
+                "Optimization must be applied before saving configuration"
+            )
+
+        config = {
+            "name": self.name,
+            "parameterNames": self.parameterNames,
+            "fixedParameters": self.fixedParameters,
+            "variableParameters": self.variableParameters,
+            "optimizer": self.optimizer,
+            "numEvaluations": self.numEvaluations,
+        }
+
+        configFile = os.path.join(
+            self.runDir, self.name + "-startingConfiguration.json"
+        )
+        with open(configFile, "w") as f:
+            json.dump(config, f, indent=4)
+
+        print(f"Starting configuration saved to {configFile}")
+
     def setOptimizer(self, optimizer: str):
         """Set the optimizer to be used"""
         self.optimizer = optimizer
@@ -142,6 +146,8 @@ class Optimization(Study):
             self.saveAllEvaluations = saveAllEvaluations
             self.applied = True
             self.evalCounter = 0
+            self.numEvaluations = numEvaluations
+            self.saveStartingConfiguration()
         else:
             print("Optimization has already been applied.")
             return
@@ -151,7 +157,7 @@ class Optimization(Study):
 
         try:
             # Run optimization
-            result = optimizer.optimize(numEvaluations)
+            result = optimizer.optimize(self.numEvaluations)
 
             # Save results
             if result["success"]:
@@ -169,7 +175,7 @@ class Optimization(Study):
                 print(f" Best evaluation #: {self.bestEvaluationNumber}")
 
                 # Save final results
-                self.saveResults()
+                self.saveResults(self.name + "-final-results.json")
 
             else:
                 print("Optimization failed to converge")
