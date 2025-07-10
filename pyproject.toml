@@ -9,9 +9,9 @@ readme = "README.md"
 description = "A Python package for fitting ViennaPS simulation models to experimental data."
 dependencies = [
     "numpy>=1.24.0",
-    "viennals @ git+https://github.com/ViennaTools/ViennaLS.git@master",
-    "viennaps @ git+https://github.com/ViennaTools/ViennaPS.git@master",
+    "viennaps>=3.5.1",
     "dlib>=19.24.0",
+    "nevergrad>=1.0.12",
     "SALib >= 1.5.1",
     ]
 

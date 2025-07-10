@@ -15,11 +15,14 @@ pip install .
 ```
 
 ## Requirements (will be installed automatically)
-- Python 3.10+
-- ViennaLS 4.3.1+
-- ViennaPS d155e3f and later
+- ViennaPS 3.5.1+
 - NumPy 1.24.0+
 - dlib 19.24.0+
+- nevergrad 1.0.12+
+- SALib >= 1.5.1+
+
+## Python version
+- Python 3.10+
 
 ## To do:
 - Add postprocessing 
