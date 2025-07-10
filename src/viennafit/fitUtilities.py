@@ -181,3 +181,69 @@ def loadProgressFileArrays(filename):
     # Extract objective function values (last column)
     Y = dataArray[:, -1]
     return X, Y
+
+
+def loadOptimumFromResultsFile(filename):
+    """
+    Load the optimum parameters and results from a JSON results file.
+
+    Args:
+        filename (str): Path to the JSON results file.
+
+    Returns:
+        dict: Dictionary containing the optimization results including:
+            - bestParameters: Dictionary of optimized parameter values
+            - bestScore: Best objective function value achieved
+            - bestEvaluation#: Evaluation number where best result was found
+            - fixedParameters: Dictionary of fixed parameters
+            - variableParameters: Dictionary of variable parameter bounds
+            - optimizer: Name of optimizer used
+            - numEvaluations: Total number of evaluations performed
+    """
+    if not filename.endswith(".json"):
+        raise ValueError("Results file must be in JSON format (.json extension)")
+
+    try:
+        with open(filename, "r") as file:
+            results = json.load(file)
+
+        # Validate that required fields are present
+        required_fields = ["bestParameters", "bestScore"]
+        for field in required_fields:
+            if field not in results:
+                raise KeyError(f"Required field '{field}' not found in results file")
+
+        return results
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Results file '{filename}' not found")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON format in results file: {e}")
+
+
+def getOptimumParameters(filename):
+    """
+    Extract only the optimum parameter values from a results file.
+
+    Args:
+        filename (str): Path to the JSON results file.
+
+    Returns:
+        dict: Dictionary containing only the best parameter values.
+    """
+    results = loadOptimumFromResultsFile(filename)
+    return results["bestParameters"]
+
+
+def getOptimumScore(filename):
+    """
+    Extract only the best objective function value from a results file.
+
+    Args:
+        filename (str): Path to the JSON results file.
+
+    Returns:
+        float: Best objective function value achieved.
+    """
+    results = loadOptimumFromResultsFile(filename)
+    return results["bestScore"]
