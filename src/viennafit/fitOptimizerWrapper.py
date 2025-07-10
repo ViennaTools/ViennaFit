@@ -19,6 +19,8 @@ class OptimizerWrapper:
         """
         if optimizer == "dlib":
             return DlibOptimizerWrapper(optimization)
+        elif optimizer == "nevergrad":
+            return NevergradOptimizerWrapper(optimization)
         else:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
 
@@ -87,5 +89,50 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
             "success": True,
             "x": optimizedParams,
             "fun": fx,
-            "nfev": numEvaluations
+            "nfev": numEvaluations,
+        }
+
+
+class NevergradOptimizerWrapper(BaseOptimizerWrapper):
+    """Wrapper for Nevergrad optimizer."""
+
+    def optimize(self, numEvaluations: int) -> Dict[str, Any]:
+        """Run optimization using Nevergrad."""
+        import nevergrad as ng
+
+        # Get bounds and parameter names in consistent order
+        parameterNames = list(self.optimization.variableParameters.keys())
+        lowerBounds, upperBounds = self.getBounds()
+
+        # Create starting point at center of bounds
+        startingPoint = [
+            (lower + upper) / 2 for lower, upper in zip(lowerBounds, upperBounds)
+        ]
+
+        # Create parametrization
+        parametrization = ng.p.Array(init=startingPoint)
+        parametrization.set_bounds(lowerBounds, upperBounds)
+
+        # Create objective function
+        objectiveFunction = ObjectiveWrapper.create("nevergrad", self.optimization)
+
+        # Create optimizer
+        optimizer = ng.optimizers.NGOpt4(
+            parametrization=parametrization,
+            budget=numEvaluations,
+            num_workers=1,  # Single-threaded for simplicity
+        )
+
+        # Run optimization
+        recommendation = optimizer.minimize(objectiveFunction)
+
+        # Format results - recommendation.value is an array, map to parameter names
+        optimizedParamValues = recommendation.value
+        optimizedParams = dict(zip(parameterNames, optimizedParamValues))
+
+        return {
+            "success": True,
+            "x": optimizedParams,
+            "fun": recommendation.loss,
+            "nfev": numEvaluations,
         }

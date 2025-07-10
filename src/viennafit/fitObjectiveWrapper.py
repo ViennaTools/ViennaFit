@@ -24,14 +24,16 @@ class ObjectiveWrapper:
         """
         if optimizer == "dlib":
             wrapper = DlibObjectiveWrapper(optimization)
-
-            # Create a regular function that calls the wrapper
-            def wrappedObjectiveFunction(*args):
-                return wrapper(*args)
-
-            return wrappedObjectiveFunction
+        elif optimizer == "nevergrad":
+            wrapper = NevergradObjectiveWrapper(optimization)
         else:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
+
+        # Create a regular function that calls the wrapper
+        def wrappedObjectiveFunction(*args):
+            return wrapper(*args)
+
+        return wrappedObjectiveFunction
 
 
 class BaseObjectiveWrapper:
@@ -194,5 +196,40 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
 
         # Save evaluation data
         self._saveEvaluationData(list(x), elapsedTime, objectiveValue)
+
+        return objectiveValue
+
+
+class NevergradObjectiveWrapper(BaseObjectiveWrapper):
+    """Objective function wrapper for Nevergrad optimizer."""
+
+    def __call__(self, x):
+        """
+        Wrapper compatible with Nevergrad's optimization.
+
+        Args:
+            x: Array/list of parameter values (not individual arguments like dlib)
+        """
+        # Nevergrad passes parameters as a single array/list argument
+        if hasattr(x, "__iter__") and not isinstance(x, str):
+            paramValues = list(x)
+        else:
+            # If x is a single value, wrap it in a list
+            paramValues = [x]
+
+        # Create parameter dictionary with fixed parameters
+        paramDict = self.study.fixedParameters.copy()
+
+        # Add variable parameters - map array values to parameter names
+        for value, (name, _) in zip(paramValues, self.study.variableParameters.items()):
+            paramDict[name] = value
+
+        # Evaluate process
+        objectiveValue, elapsedTime = self._evaluateObjective(
+            paramDict, self.study.saveVisualization
+        )
+
+        # Save evaluation data
+        self._saveEvaluationData(paramValues, elapsedTime, objectiveValue)
 
         return objectiveValue
