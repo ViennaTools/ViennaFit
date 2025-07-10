@@ -44,12 +44,16 @@ class BaseObjectiveWrapper:
         self.distanceMetric = DistanceMetric.create(study.distanceMetric)
 
     def _saveEvaluationData(
-        self, paramValues: List[float], elapsedTime: float, objectiveValue: float
+        self,
+        paramValues: List[float],
+        elapsedTime: float,
+        objectiveValue: float,
+        filename: str,
     ):
         """Save evaluation data to progress file."""
         saveEvalToProgressFile(
             [*paramValues, elapsedTime, objectiveValue],
-            os.path.join(self.study.runDir, "progress.txt"),
+            os.path.join(self.study.runDir, filename + ".txt"),
         )
 
     def _evaluateObjective(
@@ -86,6 +90,13 @@ class BaseObjectiveWrapper:
             self.study.bestScore = objectiveValue
             self.study.bestParameters = paramDict.copy()
             self.study.bestEvaluationNumber = self.study.evalCounter
+            """Save evaluation data to progress file."""
+            self._saveEvaluationData(
+                [self.study.evalCounter] + list(paramDict.values()),
+                elapsedTime,
+                objectiveValue,
+                "progress",
+            )
 
         if newBest or self.study.saveAllEvaluations:
             domainCopy.saveSurfaceMesh(
@@ -162,7 +173,7 @@ class BaseObjectiveWrapper:
                 )
                 # Save evaluation data
                 self._saveEvaluationData(
-                    list(currentParams.values()), evalTime, objValue
+                    list(currentParams.values()), evalTime, objValue, "progressAll"
                 )
                 paramResults.append(
                     {"value": value, "objective": objValue, "time": evalTime}
@@ -195,7 +206,7 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
         )
 
         # Save evaluation data
-        self._saveEvaluationData(list(x), elapsedTime, objectiveValue)
+        self._saveEvaluationData(list(x), elapsedTime, objectiveValue, "progressAll")
 
         return objectiveValue
 
@@ -230,6 +241,8 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
         )
 
         # Save evaluation data
-        self._saveEvaluationData(paramValues, elapsedTime, objectiveValue)
+        self._saveEvaluationData(
+            paramValues, elapsedTime, objectiveValue, "progressAll"
+        )
 
         return objectiveValue
