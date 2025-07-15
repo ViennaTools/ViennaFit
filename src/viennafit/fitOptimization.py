@@ -5,6 +5,9 @@ import viennaps2d as vps
 import os
 import json
 import shutil
+import matplotlib.pyplot as plt
+import numpy as np
+import ast
 from typing import Dict, List, Tuple
 
 
@@ -104,6 +107,138 @@ class Optimization(Study):
 
         print(f"Results saved to {filepath}")
 
+    def _parseProgressFile(self, file_path: str):
+        """Parse progress file containing Python list strings into numpy array"""
+        try:
+            with open(file_path, 'r') as f:
+                lines = f.readlines()
+            
+            data_rows = []
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('#'):  # Skip empty lines and comments
+                    try:
+                        # Parse the Python list string
+                        data_list = ast.literal_eval(line)
+                        if isinstance(data_list, list):
+                            # Convert strings to floats
+                            data_row = [float(x) for x in data_list]
+                            data_rows.append(data_row)
+                    except (ValueError, SyntaxError):
+                        # Skip malformed lines
+                        continue
+            
+            if data_rows:
+                # Convert to numpy array, handling variable column counts
+                max_cols = max(len(row) for row in data_rows)
+                # Pad shorter rows with NaN if needed
+                padded_rows = []
+                for row in data_rows:
+                    if len(row) < max_cols:
+                        row.extend([np.nan] * (max_cols - len(row)))
+                    padded_rows.append(row)
+                
+                return np.array(padded_rows)
+            else:
+                return np.array([])
+                
+        except Exception as e:
+            print(f"Error parsing file {file_path}: {e}")
+            return np.array([])
+
+    def saveVisualizationPlots(self):
+        """Save matplotlib visualization plots after optimization completion"""
+        if not self.applied or not self.bestParameters:
+            print("No optimization results to visualize")
+            return
+        
+        # Create plots directory
+        plots_dir = os.path.join(self.runDir, "plots")
+        os.makedirs(plots_dir, exist_ok=True)
+        
+        # 1. Variable parameter position plots
+        if self.variableParameters:
+            fig, axes = plt.subplots(len(self.variableParameters), 1, 
+                                   figsize=(10, 2*len(self.variableParameters)))
+            if len(self.variableParameters) == 1:
+                axes = [axes]
+            
+            for i, (param_name, (lower_bound, upper_bound)) in enumerate(self.variableParameters.items()):
+                if param_name in self.bestParameters:
+                    optimal_value = self.bestParameters[param_name]
+                    
+                    # Create range visualization
+                    x_range = np.linspace(lower_bound, upper_bound, 100)
+                    y_line = np.ones_like(x_range) * 0.5
+                    
+                    axes[i].plot(x_range, y_line, 'k-', linewidth=2, label='Parameter range')
+                    axes[i].scatter([optimal_value], [0.5], color='red', s=100, 
+                                  label=f'Optimum: {optimal_value:.4f}', zorder=5)
+                    axes[i].set_xlim(lower_bound, upper_bound)
+                    axes[i].set_ylim(0, 1)
+                    axes[i].set_xlabel(f'{param_name}')
+                    axes[i].set_ylabel('Position')
+                    axes[i].set_title(f'Optimal {param_name} within bounds')
+                    axes[i].legend()
+                    axes[i].grid(True, alpha=0.3)
+                    
+                    # Remove y-axis ticks as they're not meaningful
+                    axes[i].set_yticks([])
+            
+            plt.tight_layout()
+            param_plot_path = os.path.join(plots_dir, f"{self.name}-parameter-positions.png")
+            plt.savefig(param_plot_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"Parameter position plots saved to {param_plot_path}")
+        
+        # 2. Convergence plot for progressAll.txt
+        progress_all_file = os.path.join(self.runDir, "progressAll.txt")
+        if os.path.exists(progress_all_file):
+            data = self._parseProgressFile(progress_all_file)
+            if data.size > 0:
+                plt.figure(figsize=(10, 6))
+                # Use first column as evaluation number and last column as objective value
+                eval_numbers = np.arange(1, len(data) + 1)  # Create evaluation numbers
+                objective_values = data[:, -1]  # Last column is typically objective value
+                
+                plt.plot(eval_numbers, objective_values, 'b-', linewidth=2)
+                plt.scatter(eval_numbers, objective_values, color='blue', s=20, alpha=0.6)
+                plt.xlabel('Evaluation Number')
+                plt.ylabel('Objective Function Value')
+                plt.title('Convergence History (All Evaluations)')
+                plt.grid(True, alpha=0.3)
+                
+                convergence_all_path = os.path.join(plots_dir, f"{self.name}-convergence-all.png")
+                plt.savefig(convergence_all_path, dpi=300, bbox_inches='tight')
+                plt.close()
+                print(f"Convergence plot (all evaluations) saved to {convergence_all_path}")
+            else:
+                print("No valid data found in progressAll.txt")
+        
+        # 3. Convergence plot for progress.txt
+        progress_file = os.path.join(self.runDir, "progress.txt")
+        if os.path.exists(progress_file):
+            data = self._parseProgressFile(progress_file)
+            if data.size > 0:
+                plt.figure(figsize=(10, 6))
+                # Use first column as evaluation number and last column as objective value
+                eval_numbers = np.arange(1, len(data) + 1)  # Create evaluation numbers
+                objective_values = data[:, -1]  # Last column is typically objective value
+                
+                plt.plot(eval_numbers, objective_values, 'g-', linewidth=2)
+                plt.scatter(eval_numbers, objective_values, color='green', s=20, alpha=0.6)
+                plt.xlabel('Evaluation Number')
+                plt.ylabel('Best Objective Function Value')
+                plt.title('Convergence History (Best Values)')
+                plt.grid(True, alpha=0.3)
+                
+                convergence_best_path = os.path.join(plots_dir, f"{self.name}-convergence-best.png")
+                plt.savefig(convergence_best_path, dpi=300, bbox_inches='tight')
+                plt.close()
+                print(f"Convergence plot (best values) saved to {convergence_best_path}")
+            else:
+                print("No valid data found in progress.txt")
+
     def saveStartingConfiguration(self):
         """Save the starting configuration of the optimization"""
         if not self.applied:
@@ -176,6 +311,10 @@ class Optimization(Study):
 
                 # Save final results
                 self.saveResults(self.name + "-final-results.json")
+                
+                # Save visualization plots if requested
+                if self.saveVisualization:
+                    self.saveVisualizationPlots()
 
             else:
                 print("Optimization failed to converge")
