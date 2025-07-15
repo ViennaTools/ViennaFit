@@ -1,6 +1,12 @@
 from .fitProject import Project
 from .fitOptimizerWrapper import OptimizerWrapper
 from .fitStudy import Study
+from .fitUtilities import (
+    createProgressManager, 
+    ProgressMetadata, 
+    migrateLegacyProgressFile,
+    ProgressDataManager
+)
 import viennaps2d as vps
 import os
 import json
@@ -9,12 +15,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import ast
 from typing import Dict, List, Tuple
+from datetime import datetime
 
 
 class Optimization(Study):
     def __init__(self, name: str, project: Project):
         super().__init__(name, project, "optimizationRuns")
         self.optimizer = "dlib"  # Default optimizer
+        self.progressManager = None  # Will be initialized in apply()
+        self.storageFormat = "csv"  # Default storage format
 
     def setParameterNames(self, paramNames: List[str]):
         """Specifies names of parameters that will be used in optimization"""
@@ -191,53 +200,68 @@ class Optimization(Study):
             plt.close()
             print(f"Parameter position plots saved to {param_plot_path}")
         
-        # 2. Convergence plot for progressAll.txt
-        progress_all_file = os.path.join(self.runDir, "progressAll.txt")
-        if os.path.exists(progress_all_file):
-            data = self._parseProgressFile(progress_all_file)
-            if data.size > 0:
-                plt.figure(figsize=(10, 6))
-                # Use first column as evaluation number and last column as objective value
-                eval_numbers = np.arange(1, len(data) + 1)  # Create evaluation numbers
-                objective_values = data[:, -1]  # Last column is typically objective value
-                
-                plt.plot(eval_numbers, objective_values, 'b-', linewidth=2)
-                plt.scatter(eval_numbers, objective_values, color='blue', s=20, alpha=0.6)
-                plt.xlabel('Evaluation Number')
-                plt.ylabel('Objective Function Value')
-                plt.title('Convergence History (All Evaluations)')
-                plt.grid(True, alpha=0.3)
-                
-                convergence_all_path = os.path.join(plots_dir, f"{self.name}-convergence-all.png")
-                plt.savefig(convergence_all_path, dpi=300, bbox_inches='tight')
-                plt.close()
-                print(f"Convergence plot (all evaluations) saved to {convergence_all_path}")
-            else:
-                print("No valid data found in progressAll.txt")
+        # Try to use new progress manager first, fallback to legacy parsing
+        evalNumbersAll = np.array([])
+        objectiveValuesAll = np.array([])
+        evalNumbersBest = np.array([])
+        objectiveValuesBest = np.array([])
         
-        # 3. Convergence plot for progress.txt
-        progress_file = os.path.join(self.runDir, "progress.txt")
-        if os.path.exists(progress_file):
-            data = self._parseProgressFile(progress_file)
-            if data.size > 0:
-                plt.figure(figsize=(10, 6))
-                # Use first column as evaluation number and last column as objective value
-                eval_numbers = np.arange(1, len(data) + 1)  # Create evaluation numbers
-                objective_values = data[:, -1]  # Last column is typically objective value
-                
-                plt.plot(eval_numbers, objective_values, 'g-', linewidth=2)
-                plt.scatter(eval_numbers, objective_values, color='green', s=20, alpha=0.6)
-                plt.xlabel('Evaluation Number')
-                plt.ylabel('Best Objective Function Value')
-                plt.title('Convergence History (Best Values)')
-                plt.grid(True, alpha=0.3)
-                
-                convergence_best_path = os.path.join(plots_dir, f"{self.name}-convergence-best.png")
-                plt.savefig(convergence_best_path, dpi=300, bbox_inches='tight')
-                plt.close()
-                print(f"Convergence plot (best values) saved to {convergence_best_path}")
-            else:
-                print("No valid data found in progress.txt")
+        if self.progressManager:
+            # Load data using new progress manager
+            try:
+                self.progressManager.loadData()
+                evalNumbersAll, objectiveValuesAll = self.progressManager.getAllConvergenceData()
+                evalNumbersBest, objectiveValuesBest = self.progressManager.getConvergenceData()
+            except Exception as e:
+                print(f"Error loading data from progress manager: {e}")
+                self.progressManager = None  # Fallback to legacy parsing
+        
+        # Fallback to legacy parsing if no progress manager or it failed
+        if self.progressManager is None:
+            # 2. Convergence plot for progressAll.txt
+            progressAllFile = os.path.join(self.runDir, "progressAll.txt")
+            if os.path.exists(progressAllFile):
+                data = self._parseProgressFile(progressAllFile)
+                if data.size > 0:
+                    evalNumbersAll = np.arange(1, len(data) + 1)
+                    objectiveValuesAll = data[:, -1]
+            
+            # 3. Convergence plot for progress.txt
+            progressFile = os.path.join(self.runDir, "progress.txt")
+            if os.path.exists(progressFile):
+                data = self._parseProgressFile(progressFile)
+                if data.size > 0:
+                    evalNumbersBest = np.arange(1, len(data) + 1)
+                    objectiveValuesBest = data[:, -1]
+        
+        # Generate convergence plots
+        if evalNumbersAll.size > 0:
+            plt.figure(figsize=(10, 6))
+            plt.plot(evalNumbersAll, objectiveValuesAll, 'b-', linewidth=2)
+            plt.scatter(evalNumbersAll, objectiveValuesAll, color='blue', s=20, alpha=0.6)
+            plt.xlabel('Evaluation Number')
+            plt.ylabel('Objective Function Value')
+            plt.title('Convergence History (All Evaluations)')
+            plt.grid(True, alpha=0.3)
+            
+            convergenceAllPath = os.path.join(plots_dir, f"{self.name}-convergence-all.png")
+            plt.savefig(convergenceAllPath, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"Convergence plot (all evaluations) saved to {convergenceAllPath}")
+        
+        if evalNumbersBest.size > 0:
+            plt.figure(figsize=(10, 6))
+            plt.plot(evalNumbersBest, objectiveValuesBest, 'g-', linewidth=2)
+            plt.scatter(evalNumbersBest, objectiveValuesBest, color='green', s=20, alpha=0.6)
+            plt.xlabel('Evaluation Number')
+            plt.ylabel('Best Objective Function Value')
+            plt.title('Convergence History (Best Values)')
+            plt.grid(True, alpha=0.3)
+            
+            convergenceBestPath = os.path.join(plots_dir, f"{self.name}-convergence-best.png")
+            plt.savefig(convergenceBestPath, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"Convergence plot (best values) saved to {convergenceBestPath}")
 
     def saveStartingConfiguration(self):
         """Save the starting configuration of the optimization"""
@@ -268,6 +292,69 @@ class Optimization(Study):
         self.optimizer = optimizer
         return self
 
+    def setStorageFormat(self, storageFormat: str):
+        """Set the storage format for progress data (csv or numpy)"""
+        if storageFormat.lower() not in ["csv", "numpy"]:
+            raise ValueError(f"Unsupported storage format: {storageFormat}")
+        self.storageFormat = storageFormat.lower()
+        return self
+    
+    def migrateLegacyProgressFiles(self):
+        """Migrate existing progress.txt and progressAll.txt files to new format"""
+        if not self.applied:
+            print("Optimization must be applied first")
+            return
+            
+        # Migrate progress.txt (best evaluations)
+        legacyProgressFile = os.path.join(self.runDir, "progress.txt")
+        if os.path.exists(legacyProgressFile):
+            newProgressFile = os.path.join(self.runDir, "progressBest")
+            
+            # Create metadata for migration
+            metadata = None
+            if hasattr(self, 'parameterNames') and self.parameterNames:
+                metadata = ProgressMetadata(
+                    runName=self.name,
+                    parameterNames=self.parameterNames,
+                    parameterBounds=self.variableParameters,
+                    fixedParameters=self.fixedParameters,
+                    optimizer=self.optimizer,
+                    createdTime=datetime.now().isoformat(),
+                    description=f"Migrated from legacy progress.txt for {self.name}"
+                )
+            
+            migrateLegacyProgressFile(
+                legacyProgressFile,
+                newProgressFile,
+                self.storageFormat,
+                metadata
+            )
+        
+        # Migrate progressAll.txt (all evaluations)
+        legacyProgressAllFile = os.path.join(self.runDir, "progressAll.txt")
+        if os.path.exists(legacyProgressAllFile):
+            newProgressAllFile = os.path.join(self.runDir, "progressAll")
+            
+            # Create metadata for migration
+            metadata = None
+            if hasattr(self, 'parameterNames') and self.parameterNames:
+                metadata = ProgressMetadata(
+                    runName=self.name,
+                    parameterNames=self.parameterNames,
+                    parameterBounds=self.variableParameters,
+                    fixedParameters=self.fixedParameters,
+                    optimizer=self.optimizer,
+                    createdTime=datetime.now().isoformat(),
+                    description=f"Migrated from legacy progressAll.txt for {self.name}"
+                )
+            
+            migrateLegacyProgressFile(
+                legacyProgressAllFile,
+                newProgressAllFile,
+                self.storageFormat,
+                metadata
+            )
+
     def apply(
         self,
         numEvaluations: int = 100,
@@ -283,6 +370,26 @@ class Optimization(Study):
             self.evalCounter = 0
             self.numEvaluations = numEvaluations
             self.saveStartingConfiguration()
+            
+            # Initialize progress manager with metadata
+            if hasattr(self, 'parameterNames') and self.parameterNames:
+                metadata = ProgressMetadata(
+                    runName=self.name,
+                    parameterNames=self.parameterNames,
+                    parameterBounds=self.variableParameters,
+                    fixedParameters=self.fixedParameters,
+                    optimizer=self.optimizer,
+                    createdTime=datetime.now().isoformat(),
+                    description=f"Optimization run for {self.name}"
+                )
+                
+                progressFilepath = os.path.join(self.runDir, "progressAll")
+                self.progressManager = createProgressManager(
+                    progressFilepath, 
+                    self.storageFormat, 
+                    metadata
+                )
+                self.progressManager.saveMetadata()
         else:
             print("Optimization has already been applied.")
             return

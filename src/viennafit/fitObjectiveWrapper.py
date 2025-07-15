@@ -1,6 +1,6 @@
 from typing import Dict, Tuple, Callable, List
 from viennaps2d import Domain
-from .fitUtilities import saveEvalToProgressFile
+from .fitUtilities import saveEvalToProgressFile, saveEvalToProgressManager, ProgressDataManager
 from .fitDistanceMetrics import DistanceMetric
 import viennals2d as vls
 import time
@@ -42,6 +42,7 @@ class BaseObjectiveWrapper:
     def __init__(self, study):
         self.study = study
         self.distanceMetric = DistanceMetric.create(study.distanceMetric)
+        self.progressManager = getattr(study, 'progressManager', None)
 
     def _saveEvaluationData(
         self,
@@ -49,12 +50,26 @@ class BaseObjectiveWrapper:
         elapsedTime: float,
         objectiveValue: float,
         filename: str,
+        isBest: bool = False,
     ):
         """Save evaluation data to progress file."""
-        saveEvalToProgressFile(
-            [*paramValues, elapsedTime, objectiveValue],
-            os.path.join(self.study.runDir, filename + ".txt"),
-        )
+        # Use new progress manager if available
+        if self.progressManager:
+            saveEvalToProgressManager(
+                self.progressManager,
+                evaluationNumber=self.study.evalCounter,
+                parameterValues=paramValues,
+                elapsedTime=elapsedTime,
+                objectiveValue=objectiveValue,
+                isBest=isBest,
+                saveAll=True
+            )
+        else:
+            # Fallback to legacy system
+            saveEvalToProgressFile(
+                [*paramValues, elapsedTime, objectiveValue],
+                os.path.join(self.study.runDir, filename + ".txt"),
+            )
 
     def _evaluateObjective(
         self, paramDict: Dict[str, float], saveVisualization: bool = False
@@ -90,13 +105,34 @@ class BaseObjectiveWrapper:
             self.study.bestScore = objectiveValue
             self.study.bestParameters = paramDict.copy()
             self.study.bestEvaluationNumber = self.study.evalCounter
-            """Save evaluation data to progress file."""
+
+        # Save ALL evaluations to progress manager (both best and regular)
+        if self.progressManager:
+            # Order parameters according to metadata parameterNames
+            if (self.progressManager.metadata and 
+                hasattr(self.progressManager.metadata, 'parameterNames') and
+                self.progressManager.metadata.parameterNames):
+                orderedParams = [paramDict.get(name, 0.0) for name in self.progressManager.metadata.parameterNames]
+            else:
+                orderedParams = list(paramDict.values())
+            
             self._saveEvaluationData(
-                [self.study.evalCounter] + list(paramDict.values()),
+                orderedParams,
                 elapsedTime,
                 objectiveValue,
                 "progress",
+                isBest=newBest,
             )
+        else:
+            # Fallback to legacy system - only save best to progress.txt
+            if newBest:
+                self._saveEvaluationData(
+                    list(paramDict.values()),
+                    elapsedTime,
+                    objectiveValue,
+                    "progress",
+                    isBest=True,
+                )
 
         if newBest or self.study.saveAllEvaluations:
             domainCopy.saveSurfaceMesh(
@@ -172,9 +208,23 @@ class BaseObjectiveWrapper:
                     currentParams, self.study.saveVisualization
                 )
                 # Save evaluation data
-                self._saveEvaluationData(
-                    list(currentParams.values()), evalTime, objValue, "progressAll"
-                )
+                if self.progressManager:
+                    # Order parameters according to metadata parameterNames
+                    if (self.progressManager.metadata and 
+                        hasattr(self.progressManager.metadata, 'parameterNames') and
+                        self.progressManager.metadata.parameterNames):
+                        orderedParams = [currentParams.get(name, 0.0) for name in self.progressManager.metadata.parameterNames]
+                    else:
+                        orderedParams = list(currentParams.values())
+                    
+                    self._saveEvaluationData(
+                        orderedParams, evalTime, objValue, "progressAll", isBest=False
+                    )
+                else:
+                    # Fallback to legacy system
+                    self._saveEvaluationData(
+                        list(currentParams.values()), evalTime, objValue, "progressAll", isBest=False
+                    )
                 paramResults.append(
                     {"value": value, "objective": objValue, "time": evalTime}
                 )
@@ -205,8 +255,10 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
             paramDict, self.study.saveVisualization
         )
 
-        # Save evaluation data
-        self._saveEvaluationData(list(x), elapsedTime, objectiveValue, "progressAll")
+        # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
+        if not self.progressManager:
+            # Only use legacy system if no progress manager
+            self._saveEvaluationData(list(paramDict.values()), elapsedTime, objectiveValue, "progressAll", isBest=False)
 
         return objectiveValue
 
@@ -240,9 +292,11 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
             paramDict, self.study.saveVisualization
         )
 
-        # Save evaluation data
-        self._saveEvaluationData(
-            paramValues, elapsedTime, objectiveValue, "progressAll"
-        )
+        # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
+        if not self.progressManager:
+            # Only use legacy system if no progress manager
+            self._saveEvaluationData(
+                list(paramDict.values()), elapsedTime, objectiveValue, "progressAll", isBest=False
+            )
 
         return objectiveValue
