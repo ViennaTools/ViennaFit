@@ -72,7 +72,7 @@ class BaseObjectiveWrapper:
             )
 
     def _evaluateObjective(
-        self, paramDict: Dict[str, float], saveVisualization: bool = False
+        self, paramDict: Dict[str, float], saveVisualization: bool = False, saveAll: bool = False
     ) -> Tuple[float, float]:
         """Run process sequence and evaluate result."""
         startTime = time.time()
@@ -86,16 +86,28 @@ class BaseObjectiveWrapper:
 
         self.study.evalCounter += 1
 
-        # Calculate objective value using distance metric
+        # Calculate objective value using distance metric first
         objectiveValue = self.distanceMetric(
             resultDomain,
             self.study.project.targetLevelSet,
-            saveVisualization,
+            False,  # Don't save visualization yet
             os.path.join(
                 self.study.progressDir,
                 f"{self.study.name}-{self.study.evalCounter}",
             ),
         )
+        
+        # Only save visualization if saveAll is True or if current evaluation is better than current best
+        if saveVisualization and (saveAll or objectiveValue <= self.study.bestScore):
+            self.distanceMetric(
+                resultDomain,
+                self.study.project.targetLevelSet,
+                True,  # Save visualization
+                os.path.join(
+                    self.study.progressDir,
+                    f"{self.study.name}-{self.study.evalCounter}",
+                ),
+            )
 
         elapsedTime = time.time() - startTime
 
@@ -172,7 +184,7 @@ class BaseObjectiveWrapper:
         # First evaluate at POI
         print("\nEvaluating at Point of Interest...")
         poiValue, poiTime = self._evaluateObjective(
-            evalParams, self.study.saveVisualization
+            evalParams, self.study.saveVisualization, saveAll=self.study.saveAllEvaluations
         )
         print(f"POI objective value: {poiValue:.6f}")
 
@@ -205,7 +217,7 @@ class BaseObjectiveWrapper:
                 currentParams[paramName] = value  # Only modify current parameter
 
                 objValue, evalTime = self._evaluateObjective(
-                    currentParams, self.study.saveVisualization
+                    currentParams, self.study.saveVisualization, saveAll=self.study.saveAllEvaluations
                 )
                 # Save evaluation data
                 if self.progressManager:
@@ -252,7 +264,7 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
 
         # Evaluate process
         objectiveValue, elapsedTime = self._evaluateObjective(
-            paramDict, self.study.saveVisualization
+            paramDict, self.study.saveVisualization, saveAll=self.study.saveAllEvaluations
         )
 
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
@@ -289,7 +301,7 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
 
         # Evaluate process
         objectiveValue, elapsedTime = self._evaluateObjective(
-            paramDict, self.study.saveVisualization
+            paramDict, self.study.saveVisualization, saveAll=self.study.saveAllEvaluations
         )
 
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
