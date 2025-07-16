@@ -2,10 +2,10 @@ from .fitProject import Project
 from .fitOptimizerWrapper import OptimizerWrapper
 from .fitStudy import Study
 from .fitUtilities import (
-    createProgressManager, 
-    ProgressMetadata, 
+    createProgressManager,
+    ProgressMetadata,
     migrateLegacyProgressFile,
-    ProgressDataManager
+    ProgressDataManager,
 )
 import viennaps2d as vps
 import os
@@ -119,13 +119,13 @@ class Optimization(Study):
     def _parseProgressFile(self, file_path: str):
         """Parse progress file containing Python list strings into numpy array"""
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 lines = f.readlines()
-            
+
             data_rows = []
             for line in lines:
                 line = line.strip()
-                if line and not line.startswith('#'):  # Skip empty lines and comments
+                if line and not line.startswith("#"):  # Skip empty lines and comments
                     try:
                         # Parse the Python list string
                         data_list = ast.literal_eval(line)
@@ -136,7 +136,7 @@ class Optimization(Study):
                     except (ValueError, SyntaxError):
                         # Skip malformed lines
                         continue
-            
+
             if data_rows:
                 # Convert to numpy array, handling variable column counts
                 max_cols = max(len(row) for row in data_rows)
@@ -146,11 +146,11 @@ class Optimization(Study):
                     if len(row) < max_cols:
                         row.extend([np.nan] * (max_cols - len(row)))
                     padded_rows.append(row)
-                
+
                 return np.array(padded_rows)
             else:
                 return np.array([])
-                
+
         except Exception as e:
             print(f"Error parsing file {file_path}: {e}")
             return np.array([])
@@ -160,62 +160,151 @@ class Optimization(Study):
         if not self.applied or not self.bestParameters:
             print("No optimization results to visualize")
             return
-        
+
         # Create plots directory
         plots_dir = os.path.join(self.runDir, "plots")
         os.makedirs(plots_dir, exist_ok=True)
-        
+
         # 1. Variable parameter position plots
         if self.variableParameters:
-            fig, axes = plt.subplots(len(self.variableParameters), 1, 
-                                   figsize=(10, 2*len(self.variableParameters)))
-            if len(self.variableParameters) == 1:
-                axes = [axes]
-            
-            for i, (param_name, (lower_bound, upper_bound)) in enumerate(self.variableParameters.items()):
+            # Create subplots with each parameter having its own y-axis
+            num_params = len(self.variableParameters)
+            fig, axes = plt.subplots(
+                num_params, 1, figsize=(8, max(2.5, num_params * 1.2)), squeeze=False
+            )
+
+            # Adjust spacing between subplots
+            plt.subplots_adjust(hspace=0.4)
+
+            param_names = list(self.variableParameters.keys())
+
+            for i, (param_name, (lower_bound, upper_bound)) in enumerate(
+                self.variableParameters.items()
+            ):
+                ax = axes[i, 0]
+
                 if param_name in self.bestParameters:
                     optimal_value = self.bestParameters[param_name]
-                    
-                    # Create range visualization
-                    x_range = np.linspace(lower_bound, upper_bound, 100)
-                    y_line = np.ones_like(x_range) * 0.5
-                    
-                    axes[i].plot(x_range, y_line, 'k-', linewidth=2, label='Parameter range')
-                    axes[i].scatter([optimal_value], [0.5], color='red', s=100, 
-                                  label=f'Optimum: {optimal_value:.4f}', zorder=5)
-                    axes[i].set_xlim(lower_bound, upper_bound)
-                    axes[i].set_ylim(0, 1)
-                    axes[i].set_xlabel(f'{param_name}')
-                    axes[i].set_ylabel('Position')
-                    axes[i].set_title(f'Optimal {param_name} within bounds')
-                    axes[i].legend()
-                    axes[i].grid(True, alpha=0.3)
-                    
-                    # Remove y-axis ticks as they're not meaningful
-                    axes[i].set_yticks([])
-            
-            plt.tight_layout()
-            param_plot_path = os.path.join(plots_dir, f"{self.name}-parameter-positions.png")
-            plt.savefig(param_plot_path, dpi=300, bbox_inches='tight')
+
+                    # Create a single bar for this parameter
+                    bar = ax.bar(
+                        [0],
+                        [upper_bound - lower_bound],
+                        bottom=[lower_bound],
+                        color="lightblue",
+                        alpha=0.7,
+                        edgecolor="black",
+                        width=0.6,
+                    )
+
+                    # Add red dot at optimal position
+                    ax.scatter([0], [optimal_value], color="red", s=100, zorder=5)
+
+                    # Add value label on the dot - positioned better to avoid overlap
+                    ax.text(
+                        0.35,
+                        optimal_value,
+                        f"{optimal_value:.3f}",
+                        ha="left",
+                        va="center",
+                        fontsize=10,
+                        fontweight="bold",
+                        bbox=dict(
+                            boxstyle="round,pad=0.3", facecolor="white", alpha=0.8
+                        ),
+                    )
+
+                    # Set y-axis limits with some padding
+                    range_padding = (upper_bound - lower_bound) * 0.05
+                    ax.set_ylim(
+                        lower_bound - range_padding, upper_bound + range_padding
+                    )
+                    ax.set_xlim(-0.5, 0.5)
+
+                    # Remove x-axis ticks and labels
+                    ax.set_xticks([])
+
+                    # Add parameter name as y-axis label with better formatting
+                    ax.set_ylabel(
+                        param_name,
+                        fontweight="bold",
+                        fontsize=11,
+                        rotation=0,
+                        ha="right",
+                        va="center",
+                    )
+
+                    # Add grid
+                    ax.grid(True, alpha=0.3, axis="y")
+
+                    # Only show title on first subplot
+                    if i == 0:
+                        ax.set_title(
+                            "Optimal Parameter Values within Bounds",
+                            fontsize=13,
+                            pad=15,
+                        )
+
+            # Add legend outside the plot area
+            if num_params > 0:
+                from matplotlib.patches import Patch
+
+                legend_elements = [
+                    Patch(facecolor="lightblue", alpha=0.7, label="Parameter\nRange"),
+                    plt.Line2D(
+                        [0],
+                        [0],
+                        marker="o",
+                        color="w",
+                        markerfacecolor="red",
+                        markersize=10,
+                        label="Optimal\nValue",
+                    ),
+                ]
+                # Position legend outside the figure area
+                fig.legend(
+                    handles=legend_elements,
+                    loc="center right",
+                    bbox_to_anchor=(0.95, 0.5),
+                    fontsize=9,
+                    frameon=True,
+                    fancybox=True,
+                    shadow=True,
+                    handlelength=1.5,
+                    handletextpad=0.5,
+                    columnspacing=0.5,
+                )
+
+            plt.tight_layout(pad=2.0)
+            # Adjust layout to make room for legend
+            plt.subplots_adjust(right=0.78)
+            param_plot_path = os.path.join(
+                plots_dir, f"{self.name}-parameter-positions.png"
+            )
+            plt.savefig(param_plot_path, dpi=300, bbox_inches="tight")
             plt.close()
             print(f"Parameter position plots saved to {param_plot_path}")
-        
+
         # Try to use new progress manager first, fallback to legacy parsing
         evalNumbersAll = np.array([])
         objectiveValuesAll = np.array([])
         evalNumbersBest = np.array([])
         objectiveValuesBest = np.array([])
-        
+
         if self.progressManager:
             # Load data using new progress manager
             try:
                 self.progressManager.loadData()
-                evalNumbersAll, objectiveValuesAll = self.progressManager.getAllConvergenceData()
-                evalNumbersBest, objectiveValuesBest = self.progressManager.getConvergenceData()
+                evalNumbersAll, objectiveValuesAll = (
+                    self.progressManager.getAllConvergenceData()
+                )
+                evalNumbersBest, objectiveValuesBest = (
+                    self.progressManager.getConvergenceData()
+                )
             except Exception as e:
                 print(f"Error loading data from progress manager: {e}")
                 self.progressManager = None  # Fallback to legacy parsing
-        
+
         # Fallback to legacy parsing if no progress manager or it failed
         if self.progressManager is None:
             # 2. Convergence plot for progressAll.txt
@@ -225,7 +314,7 @@ class Optimization(Study):
                 if data.size > 0:
                     evalNumbersAll = np.arange(1, len(data) + 1)
                     objectiveValuesAll = data[:, -1]
-            
+
             # 3. Convergence plot for progress.txt
             progressFile = os.path.join(self.runDir, "progress.txt")
             if os.path.exists(progressFile):
@@ -233,33 +322,41 @@ class Optimization(Study):
                 if data.size > 0:
                     evalNumbersBest = np.arange(1, len(data) + 1)
                     objectiveValuesBest = data[:, -1]
-        
+
         # Generate convergence plots
         if evalNumbersAll.size > 0:
             plt.figure(figsize=(10, 6))
-            plt.plot(evalNumbersAll, objectiveValuesAll, 'b-', linewidth=2)
-            plt.scatter(evalNumbersAll, objectiveValuesAll, color='blue', s=20, alpha=0.6)
-            plt.xlabel('Evaluation Number')
-            plt.ylabel('Objective Function Value')
-            plt.title('Convergence History (All Evaluations)')
+            plt.plot(evalNumbersAll, objectiveValuesAll, "b-", linewidth=2)
+            plt.scatter(
+                evalNumbersAll, objectiveValuesAll, color="blue", s=20, alpha=0.6
+            )
+            plt.xlabel("Evaluation Number")
+            plt.ylabel("Objective Function Value")
+            plt.title("Convergence History (All Evaluations)")
             plt.grid(True, alpha=0.3)
-            
-            convergenceAllPath = os.path.join(plots_dir, f"{self.name}-convergence-all.png")
-            plt.savefig(convergenceAllPath, dpi=300, bbox_inches='tight')
+
+            convergenceAllPath = os.path.join(
+                plots_dir, f"{self.name}-convergence-all.png"
+            )
+            plt.savefig(convergenceAllPath, dpi=300, bbox_inches="tight")
             plt.close()
             print(f"Convergence plot (all evaluations) saved to {convergenceAllPath}")
-        
+
         if evalNumbersBest.size > 0:
             plt.figure(figsize=(10, 6))
-            plt.plot(evalNumbersBest, objectiveValuesBest, 'g-', linewidth=2)
-            plt.scatter(evalNumbersBest, objectiveValuesBest, color='green', s=20, alpha=0.6)
-            plt.xlabel('Evaluation Number')
-            plt.ylabel('Best Objective Function Value')
-            plt.title('Convergence History (Best Values)')
+            plt.plot(evalNumbersBest, objectiveValuesBest, "g-", linewidth=2)
+            plt.scatter(
+                evalNumbersBest, objectiveValuesBest, color="green", s=20, alpha=0.6
+            )
+            plt.xlabel("Evaluation Number")
+            plt.ylabel("Best Objective Function Value")
+            plt.title("Convergence History (Best Values)")
             plt.grid(True, alpha=0.3)
-            
-            convergenceBestPath = os.path.join(plots_dir, f"{self.name}-convergence-best.png")
-            plt.savefig(convergenceBestPath, dpi=300, bbox_inches='tight')
+
+            convergenceBestPath = os.path.join(
+                plots_dir, f"{self.name}-convergence-best.png"
+            )
+            plt.savefig(convergenceBestPath, dpi=300, bbox_inches="tight")
             plt.close()
             print(f"Convergence plot (best values) saved to {convergenceBestPath}")
 
@@ -298,21 +395,21 @@ class Optimization(Study):
             raise ValueError(f"Unsupported storage format: {storageFormat}")
         self.storageFormat = storageFormat.lower()
         return self
-    
+
     def migrateLegacyProgressFiles(self):
         """Migrate existing progress.txt and progressAll.txt files to new format"""
         if not self.applied:
             print("Optimization must be applied first")
             return
-            
+
         # Migrate progress.txt (best evaluations)
         legacyProgressFile = os.path.join(self.runDir, "progress.txt")
         if os.path.exists(legacyProgressFile):
             newProgressFile = os.path.join(self.runDir, "progressBest")
-            
+
             # Create metadata for migration
             metadata = None
-            if hasattr(self, 'parameterNames') and self.parameterNames:
+            if hasattr(self, "parameterNames") and self.parameterNames:
                 metadata = ProgressMetadata(
                     runName=self.name,
                     parameterNames=self.parameterNames,
@@ -320,24 +417,21 @@ class Optimization(Study):
                     fixedParameters=self.fixedParameters,
                     optimizer=self.optimizer,
                     createdTime=datetime.now().isoformat(),
-                    description=f"Migrated from legacy progress.txt for {self.name}"
+                    description=f"Migrated from legacy progress.txt for {self.name}",
                 )
-            
+
             migrateLegacyProgressFile(
-                legacyProgressFile,
-                newProgressFile,
-                self.storageFormat,
-                metadata
+                legacyProgressFile, newProgressFile, self.storageFormat, metadata
             )
-        
+
         # Migrate progressAll.txt (all evaluations)
         legacyProgressAllFile = os.path.join(self.runDir, "progressAll.txt")
         if os.path.exists(legacyProgressAllFile):
             newProgressAllFile = os.path.join(self.runDir, "progressAll")
-            
+
             # Create metadata for migration
             metadata = None
-            if hasattr(self, 'parameterNames') and self.parameterNames:
+            if hasattr(self, "parameterNames") and self.parameterNames:
                 metadata = ProgressMetadata(
                     runName=self.name,
                     parameterNames=self.parameterNames,
@@ -345,14 +439,11 @@ class Optimization(Study):
                     fixedParameters=self.fixedParameters,
                     optimizer=self.optimizer,
                     createdTime=datetime.now().isoformat(),
-                    description=f"Migrated from legacy progressAll.txt for {self.name}"
+                    description=f"Migrated from legacy progressAll.txt for {self.name}",
                 )
-            
+
             migrateLegacyProgressFile(
-                legacyProgressAllFile,
-                newProgressAllFile,
-                self.storageFormat,
-                metadata
+                legacyProgressAllFile, newProgressAllFile, self.storageFormat, metadata
             )
 
     def apply(
@@ -370,9 +461,9 @@ class Optimization(Study):
             self.evalCounter = 0
             self.numEvaluations = numEvaluations
             self.saveStartingConfiguration()
-            
+
             # Initialize progress manager with metadata
-            if hasattr(self, 'parameterNames') and self.parameterNames:
+            if hasattr(self, "parameterNames") and self.parameterNames:
                 metadata = ProgressMetadata(
                     runName=self.name,
                     parameterNames=self.parameterNames,
@@ -380,14 +471,12 @@ class Optimization(Study):
                     fixedParameters=self.fixedParameters,
                     optimizer=self.optimizer,
                     createdTime=datetime.now().isoformat(),
-                    description=f"Optimization run for {self.name}"
+                    description=f"Optimization run for {self.name}",
                 )
-                
+
                 progressFilepath = os.path.join(self.runDir, "progressAll")
                 self.progressManager = createProgressManager(
-                    progressFilepath, 
-                    self.storageFormat, 
-                    metadata
+                    progressFilepath, self.storageFormat, metadata
                 )
                 self.progressManager.saveMetadata()
         else:
@@ -418,7 +507,7 @@ class Optimization(Study):
 
                 # Save final results
                 self.saveResults(self.name + "-final-results.json")
-                
+
                 # Save visualization plots if requested
                 if self.saveVisualization:
                     self.saveVisualizationPlots()
