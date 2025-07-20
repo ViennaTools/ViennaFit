@@ -6,7 +6,6 @@ from .fitUtilities import (
     ProgressMetadata,
     migrateLegacyProgressFile,
     ProgressDataManager,
-    saveEvalToProgressManager,
 )
 import os
 import json
@@ -226,39 +225,15 @@ class GlobalSensitivityStudy(Study):
                 )
 
                 # Check if this is a new best
-                isBest = objectiveValue <= bestScore
-                if isBest:
+                if objectiveValue < bestScore:
                     bestScore = objectiveValue
                     bestParams = paramDict.copy()
                     self.bestScore = bestScore
                     self.bestParameters = bestParams
                     self.bestEvaluationNumber = i + 1
 
-                # Save progress using single progress manager (like optimization)
-                if self.progressManager:
-                    # Order parameters according to metadata parameterNames
-                    if (
-                        self.progressManager.metadata
-                        and hasattr(self.progressManager.metadata, "parameterNames")
-                        and self.progressManager.metadata.parameterNames
-                    ):
-                        orderedParams = [
-                            paramDict.get(name, 0.0)
-                            for name in self.progressManager.metadata.parameterNames
-                        ]
-                    else:
-                        # Fallback to variable parameter order
-                        orderedParams = [paramDict[name] for name in problem["names"]]
-
-                    saveEvalToProgressManager(
-                        self.progressManager,
-                        i + 1,  # evaluationNumber
-                        orderedParams,
-                        elapsedTime,
-                        objectiveValue,
-                        isBest,
-                        saveAll=True,
-                    )
+                # Progress is automatically saved by the objective wrapper
+                # No need to save manually here
 
                 # Progress reporting
                 if i % 10 == 0 or i == len(paramValues) - 1:
