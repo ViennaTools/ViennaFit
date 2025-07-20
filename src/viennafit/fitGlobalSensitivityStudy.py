@@ -1,10 +1,18 @@
 from .fitProject import Project
 from .fitObjectiveWrapper import BaseObjectiveWrapper
 from .fitStudy import Study
+from .fitUtilities import (
+    createProgressManager,
+    ProgressMetadata,
+    migrateLegacyProgressFile,
+    ProgressDataManager,
+    saveEvalToProgressManager,
+)
 import os
 import json
 import numpy as np
 from typing import Dict, Tuple
+from datetime import datetime
 from SALib.sample import saltelli
 from SALib.sample import fast_sampler as fastSampler
 from SALib.analyze import sobol
@@ -22,6 +30,10 @@ class GlobalSensitivityStudy(Study):
         self.numSamples = 100  # Default value
         self.secondOrder = True  # Calculate second-order indices by default
         self.samplingMethod = "saltelli"  # Default sampling method
+
+        # Progress management
+        self.progressManager = None  # Will be initialized in apply()
+        self.storageFormat = "csv"  # Default storage format
 
     def setVariableParameters(self, varParams: Dict[str, Tuple[float, float]]):
         """
@@ -92,6 +104,13 @@ class GlobalSensitivityStudy(Study):
         self.samplingMethod = method
         return self
 
+    def setStorageFormat(self, storageFormat: str):
+        """Set the storage format for progress data (csv or numpy)"""
+        if storageFormat.lower() not in ["csv", "numpy"]:
+            raise ValueError(f"Unsupported storage format: {storageFormat}")
+        self.storageFormat = storageFormat.lower()
+        return self
+
     def _prepareSALibProblem(self):
         """Prepare the problem dictionary for SALib"""
         return {
@@ -114,6 +133,25 @@ class GlobalSensitivityStudy(Study):
             self.saveAllEvaluations = saveAllEvaluations
             self.applied = True
             self.evalCounter = 0
+
+            # Initialize progress manager with metadata
+            if hasattr(self, "parameterNames") and self.parameterNames:
+                metadata = ProgressMetadata(
+                    runName=self.name,
+                    parameterNames=self.parameterNames,
+                    parameterBounds=self.variableParameters,
+                    fixedParameters=self.fixedParameters,
+                    optimizer="global_sensitivity",
+                    createdTime=datetime.now().isoformat(),
+                    description=f"Global sensitivity study for {self.name}",
+                )
+
+                # Create single progress manager (like optimization)
+                progressFilepath = os.path.join(self.runDir, "progressAll")
+                self.progressManager = createProgressManager(
+                    progressFilepath, self.storageFormat, metadata
+                )
+                self.progressManager.saveMetadata()
         else:
             print("Global sensitivity study has already been applied.")
             return
@@ -159,6 +197,10 @@ class GlobalSensitivityStudy(Study):
             Y = np.zeros(len(paramValues))
             resultsDetailed = []
 
+            # Initialize tracking for best evaluations
+            bestScore = float("inf")
+            bestParams = None
+
             for i, params in enumerate(paramValues):
                 # Create parameter dictionary for this evaluation
                 paramDict = self.fixedParameters.copy()
@@ -183,9 +225,46 @@ class GlobalSensitivityStudy(Study):
                     }
                 )
 
+                # Check if this is a new best
+                isBest = objectiveValue <= bestScore
+                if isBest:
+                    bestScore = objectiveValue
+                    bestParams = paramDict.copy()
+                    self.bestScore = bestScore
+                    self.bestParameters = bestParams
+                    self.bestEvaluationNumber = i + 1
+
+                # Save progress using single progress manager (like optimization)
+                if self.progressManager:
+                    # Order parameters according to metadata parameterNames
+                    if (
+                        self.progressManager.metadata
+                        and hasattr(self.progressManager.metadata, "parameterNames")
+                        and self.progressManager.metadata.parameterNames
+                    ):
+                        orderedParams = [
+                            paramDict.get(name, 0.0)
+                            for name in self.progressManager.metadata.parameterNames
+                        ]
+                    else:
+                        # Fallback to variable parameter order
+                        orderedParams = [paramDict[name] for name in problem["names"]]
+
+                    saveEvalToProgressManager(
+                        self.progressManager,
+                        i + 1,  # evaluationNumber
+                        orderedParams,
+                        elapsedTime,
+                        objectiveValue,
+                        isBest,
+                        saveAll=True,
+                    )
+
                 # Progress reporting
                 if i % 10 == 0 or i == len(paramValues) - 1:
                     print(f"  Completed {i+1}/{len(paramValues)} evaluations")
+                    if bestParams:
+                        print(f"    Current best score: {bestScore:.6f}")
 
             # Save detailed results
             resultsDetailedPath = os.path.join(self.runDir, "evaluation_results.json")
@@ -308,6 +387,16 @@ class GlobalSensitivityStudy(Study):
                 json.dump(sensitivityResults, f, indent=2)
 
             print(f"\nSensitivity analysis results saved to: {resultsPath}")
+
+            # Print best results summary
+            if bestParams:
+                print(f"\nBest evaluation found:")
+                print(f"  Evaluation #: {self.bestEvaluationNumber}")
+                print(f"  Best score: {bestScore:.6f}")
+                print("  Best parameters:")
+                for name, value in bestParams.items():
+                    if name in problem["names"]:  # Only show variable parameters
+                        print(f"    {name}: {value:.6f}")
 
         except Exception as e:
             print(f"Global sensitivity study failed with error: {str(e)}")
