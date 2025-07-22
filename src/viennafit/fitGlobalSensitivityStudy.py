@@ -78,9 +78,63 @@ class GlobalSensitivityStudy(Study):
         if numSamples <= 0:
             raise ValueError("numSamples must be positive")
 
+        # Check if second-order indices are requested with FAST method
+        if secondOrder and self.samplingMethod == "fast":
+            raise ValueError(
+                "ERROR: FAST method does not support second-order sensitivity indices.\n"
+                "FAST method only computes first-order and total-order indices.\n"
+                "\nOptions:\n"
+                "1. Set secondOrder=False to use FAST method with first-order indices only\n"
+                "2. Use samplingMethod='saltelli' to compute second-order indices"
+            )
+
         self.numSamples = numSamples
         self.secondOrder = secondOrder
+        
+        # Validate samples for second-order indices
+        self._validateSecondOrderSamples()
+        
         return self
+
+    def _validateSecondOrderSamples(self):
+        """Validate that enough samples are provided for second-order indices."""
+        # Check if FAST method is being used with second-order indices
+        if self.secondOrder and self.samplingMethod == "fast":
+            raise ValueError(
+                "ERROR: FAST method does not support second-order sensitivity indices.\n"
+                "FAST method only computes first-order and total-order indices.\n"
+                "\nOptions:\n"
+                "1. Set secondOrder=False to use FAST method with first-order indices only\n"
+                "2. Use samplingMethod='saltelli' to compute second-order indices"
+            )
+        
+        if (
+            self.secondOrder
+            and self.samplingMethod == "saltelli"
+            and hasattr(self, "variableParameters")
+        ):
+            num_params = len(self.variableParameters)
+            if num_params > 0:
+                # For reliable second-order Sobol indices with the Saltelli method:
+                # More samples are needed as parameter count increases due to interaction effects
+                # Formula based on empirical testing with SALib
+                min_recommended = (
+                    num_params * 500
+                )  # Simple rule: ~500 samples per parameter
+
+                if self.numSamples < min_recommended:
+                    total_evaluations = self.numSamples * (2 * num_params + 2)
+                    recommended_evaluations = min_recommended * (2 * num_params + 2)
+
+                    raise ValueError(
+                        f"ERROR: Insufficient samples for reliable second-order Sobol indices with {num_params} parameters.\n"
+                        f"Current settings would use {self.numSamples} base samples ({total_evaluations} total evaluations).\n"
+                        f"Recommended minimum: {min_recommended} base samples ({recommended_evaluations} total evaluations).\n"
+                        f"\nOptions:\n"
+                        f"1. Increase numSamples to at least {min_recommended}\n"
+                        f"2. Set secondOrder=False to calculate only first-order indices\n"
+                        f"3. Consider using 'fast' sampling method which is more efficient"
+                    )
 
     def setSamplingMethod(self, method: str = "saltelli"):
         """
@@ -98,6 +152,16 @@ class GlobalSensitivityStudy(Study):
             raise ValueError(
                 f"Invalid sampling method: {method}. "
                 "Options are 'saltelli' or 'fast'."
+            )
+
+        # Check if switching to FAST method when second-order indices are enabled
+        if method == "fast" and self.secondOrder:
+            raise ValueError(
+                "ERROR: FAST method does not support second-order sensitivity indices.\n"
+                "FAST method only computes first-order and total-order indices.\n"
+                "\nOptions:\n"
+                "1. Set secondOrder=False before switching to FAST method\n"
+                "2. Keep samplingMethod='saltelli' to compute second-order indices"
             )
 
         self.samplingMethod = method
@@ -128,6 +192,11 @@ class GlobalSensitivityStudy(Study):
         """Apply the global sensitivity study."""
         if not self.applied:
             self.validate()
+
+            # Double-check sufficient samples for second-order indices right before applying
+            # This catches cases where parameters were set after setSamplingOptions
+            self._validateSecondOrderSamples()
+
             self.saveVisualization = saveVisualization
             self.saveAllEvaluations = saveAllEvaluations
             self.applied = True
