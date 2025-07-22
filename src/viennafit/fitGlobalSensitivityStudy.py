@@ -7,10 +7,12 @@ from .fitUtilities import (
     migrateLegacyProgressFile,
     ProgressDataManager,
 )
+from .postprocessing import GSSPostprocessor
 import os
 import json
 import numpy as np
-from typing import Dict, Tuple
+import matplotlib.pyplot as plt
+from typing import Dict, Tuple, List, Optional
 from datetime import datetime
 from SALib.sample import saltelli
 from SALib.sample import fast_sampler as fastSampler
@@ -445,3 +447,58 @@ class GlobalSensitivityStudy(Study):
         except Exception as e:
             print(f"Global sensitivity study failed with error: {str(e)}")
             raise
+
+    
+    def generatePlots(self, plotTypes: Optional[List[str]] = None) -> Dict[str, List[str]]:
+        """
+        Generate plots using the unified postprocessing framework.
+        
+        Args:
+            plotTypes: List of plot types to generate. Options include:
+                       'convergence', 'parameter', 'sensitivity'. If None, generates all available plots.
+                       
+        Returns:
+            Dictionary mapping plot type names to lists of created file paths.
+        """
+        if not self.applied:
+            print("Warning: Global sensitivity study has not been applied yet. Plots may not be available.")
+            
+        try:
+            postprocessor = GSSPostprocessor(self.runDir)
+            results = postprocessor.generatePlots(plotTypes)
+            
+            totalPlots = sum(len(files) for files in results.values())
+            print(f"Generated {totalPlots} plot(s) in {postprocessor.plotsDir}")
+            
+            return results
+            
+        except Exception as e:
+            print(f"Error generating plots: {e}")
+            return {}
+    
+    def generateSensitivitySummary(self, outputFile: Optional[str] = None) -> str:
+        """
+        Generate a sensitivity analysis summary report.
+        
+        Args:
+            outputFile: Optional output file path. If None, saves to run directory.
+            
+        Returns:
+            Path to the generated report file.
+        """
+        try:
+            postprocessor = GSSPostprocessor(self.runDir)
+            summaryContent = postprocessor.generateSensitivitySummary()
+            
+            if outputFile is None:
+                outputFile = os.path.join(self.runDir, f"{self.name}-sensitivity-summary.md")
+                
+            with open(outputFile, 'w') as f:
+                f.write(summaryContent)
+                
+            print(f"Sensitivity summary report generated: {outputFile}")
+            return outputFile
+            
+        except Exception as e:
+            print(f"Error generating sensitivity summary: {e}")
+            return ""

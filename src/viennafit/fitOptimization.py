@@ -7,6 +7,7 @@ from .fitUtilities import (
     migrateLegacyProgressFile,
     ProgressDataManager,
 )
+from .postprocessing import OptimizationPostprocessor
 import viennaps2d as vps
 import os
 import json
@@ -14,7 +15,7 @@ import shutil
 import matplotlib.pyplot as plt
 import numpy as np
 import ast
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
 
@@ -155,210 +156,6 @@ class Optimization(Study):
             print(f"Error parsing file {file_path}: {e}")
             return np.array([])
 
-    def saveVisualizationPlots(self):
-        """Save matplotlib visualization plots after optimization completion"""
-        if not self.applied or not self.bestParameters:
-            print("No optimization results to visualize")
-            return
-
-        # Create plots directory
-        plots_dir = os.path.join(self.runDir, "plots")
-        os.makedirs(plots_dir, exist_ok=True)
-
-        # 1. Variable parameter position plots
-        if self.variableParameters:
-            # Create subplots with each parameter having its own y-axis
-            num_params = len(self.variableParameters)
-            fig, axes = plt.subplots(
-                num_params, 1, figsize=(8, max(2.5, num_params * 1.2)), squeeze=False
-            )
-
-            # Adjust spacing between subplots
-            plt.subplots_adjust(hspace=0.4)
-
-            param_names = list(self.variableParameters.keys())
-
-            for i, (param_name, (lower_bound, upper_bound)) in enumerate(
-                self.variableParameters.items()
-            ):
-                ax = axes[i, 0]
-
-                if param_name in self.bestParameters:
-                    optimal_value = self.bestParameters[param_name]
-
-                    # Create a single bar for this parameter
-                    bar = ax.bar(
-                        [0],
-                        [upper_bound - lower_bound],
-                        bottom=[lower_bound],
-                        color="lightblue",
-                        alpha=0.7,
-                        edgecolor="black",
-                        width=0.6,
-                    )
-
-                    # Add red dot at optimal position
-                    ax.scatter([0], [optimal_value], color="red", s=100, zorder=5)
-
-                    # Add value label on the dot - positioned better to avoid overlap
-                    ax.text(
-                        0.35,
-                        optimal_value,
-                        f"{optimal_value:.3f}",
-                        ha="left",
-                        va="center",
-                        fontsize=10,
-                        fontweight="bold",
-                        bbox=dict(
-                            boxstyle="round,pad=0.3", facecolor="white", alpha=0.8
-                        ),
-                    )
-
-                    # Set y-axis limits with some padding
-                    range_padding = (upper_bound - lower_bound) * 0.05
-                    ax.set_ylim(
-                        lower_bound - range_padding, upper_bound + range_padding
-                    )
-                    ax.set_xlim(-0.5, 0.5)
-
-                    # Remove x-axis ticks and labels
-                    ax.set_xticks([])
-
-                    # Add parameter name as y-axis label with better formatting
-                    ax.set_ylabel(
-                        param_name,
-                        fontweight="bold",
-                        fontsize=11,
-                        rotation=0,
-                        ha="right",
-                        va="center",
-                    )
-
-                    # Add grid
-                    ax.grid(True, alpha=0.3, axis="y")
-
-                    # Only show title on first subplot
-                    if i == 0:
-                        ax.set_title(
-                            "Optimal Parameter Values within Bounds",
-                            fontsize=13,
-                            pad=15,
-                        )
-
-            # Add legend outside the plot area
-            if num_params > 0:
-                from matplotlib.patches import Patch
-
-                legend_elements = [
-                    Patch(facecolor="lightblue", alpha=0.7, label="Parameter\nRange"),
-                    plt.Line2D(
-                        [0],
-                        [0],
-                        marker="o",
-                        color="w",
-                        markerfacecolor="red",
-                        markersize=10,
-                        label="Optimal\nValue",
-                    ),
-                ]
-                # Position legend outside the figure area
-                fig.legend(
-                    handles=legend_elements,
-                    loc="center right",
-                    bbox_to_anchor=(0.95, 0.5),
-                    fontsize=9,
-                    frameon=True,
-                    fancybox=True,
-                    shadow=True,
-                    handlelength=1.5,
-                    handletextpad=0.5,
-                    columnspacing=0.5,
-                )
-
-            plt.tight_layout(pad=2.0)
-            # Adjust layout to make room for legend
-            plt.subplots_adjust(right=0.78)
-            param_plot_path = os.path.join(
-                plots_dir, f"{self.name}-parameter-positions.png"
-            )
-            plt.savefig(param_plot_path, dpi=300, bbox_inches="tight")
-            plt.close()
-            print(f"Parameter position plots saved to {param_plot_path}")
-
-        # Try to use new progress manager first, fallback to legacy parsing
-        evalNumbersAll = np.array([])
-        objectiveValuesAll = np.array([])
-        evalNumbersBest = np.array([])
-        objectiveValuesBest = np.array([])
-
-        if self.progressManager:
-            # Load data using new progress manager
-            try:
-                self.progressManager.loadData()
-                evalNumbersAll, objectiveValuesAll = (
-                    self.progressManager.getAllConvergenceData()
-                )
-                evalNumbersBest, objectiveValuesBest = (
-                    self.progressManager.getConvergenceData()
-                )
-            except Exception as e:
-                print(f"Error loading data from progress manager: {e}")
-                self.progressManager = None  # Fallback to legacy parsing
-
-        # Fallback to legacy parsing if no progress manager or it failed
-        if self.progressManager is None:
-            # 2. Convergence plot for progressAll.txt
-            progressAllFile = os.path.join(self.runDir, "progressAll.txt")
-            if os.path.exists(progressAllFile):
-                data = self._parseProgressFile(progressAllFile)
-                if data.size > 0:
-                    evalNumbersAll = np.arange(1, len(data) + 1)
-                    objectiveValuesAll = data[:, -1]
-
-            # 3. Convergence plot for progress.txt
-            progressFile = os.path.join(self.runDir, "progress.txt")
-            if os.path.exists(progressFile):
-                data = self._parseProgressFile(progressFile)
-                if data.size > 0:
-                    evalNumbersBest = np.arange(1, len(data) + 1)
-                    objectiveValuesBest = data[:, -1]
-
-        # Generate convergence plots
-        if evalNumbersAll.size > 0:
-            plt.figure(figsize=(10, 6))
-            plt.plot(evalNumbersAll, objectiveValuesAll, "b-", linewidth=2)
-            plt.scatter(
-                evalNumbersAll, objectiveValuesAll, color="blue", s=20, alpha=0.6
-            )
-            plt.xlabel("Evaluation Number")
-            plt.ylabel("Objective Function Value")
-            plt.title("Convergence History (All Evaluations)")
-            plt.grid(True, alpha=0.3)
-
-            convergenceAllPath = os.path.join(
-                plots_dir, f"{self.name}-convergence-all.png"
-            )
-            plt.savefig(convergenceAllPath, dpi=300, bbox_inches="tight")
-            plt.close()
-            print(f"Convergence plot (all evaluations) saved to {convergenceAllPath}")
-
-        if evalNumbersBest.size > 0:
-            plt.figure(figsize=(10, 6))
-            plt.plot(evalNumbersBest, objectiveValuesBest, "g-", linewidth=2)
-            plt.scatter(
-                evalNumbersBest, objectiveValuesBest, color="green", s=20, alpha=0.6
-            )
-            plt.xlabel("Evaluation Number")
-            plt.ylabel("Best Objective Function Value")
-            plt.title("Convergence History (Best Values)")
-            plt.grid(True, alpha=0.3)
-
-            convergenceBestPath = os.path.join(
-                plots_dir, f"{self.name}-convergence-best.png"
-            )
-            plt.savefig(convergenceBestPath, dpi=300, bbox_inches="tight")
-            plt.close()
-            print(f"Convergence plot (best values) saved to {convergenceBestPath}")
 
     def saveStartingConfiguration(self):
         """Save the starting configuration of the optimization"""
@@ -510,7 +307,7 @@ class Optimization(Study):
 
                 # Save visualization plots if requested
                 if self.saveVisualization:
-                    self.saveVisualizationPlots()
+                    self.generatePlots()
 
             else:
                 print("Optimization failed to converge")
@@ -518,3 +315,57 @@ class Optimization(Study):
         except Exception as e:
             print(f"Optimization failed with error: {str(e)}")
             raise
+    
+    def generatePlots(self, plotTypes: Optional[List[str]] = None) -> Dict[str, List[str]]:
+        """
+        Generate plots using the unified postprocessing framework.
+        
+        Args:
+            plotTypes: List of plot types to generate. Options include:
+                       'convergence', 'parameter'. If None, generates all available plots.
+                       
+        Returns:
+            Dictionary mapping plot type names to lists of created file paths.
+        """
+        if not self.applied:
+            print("Warning: Optimization has not been applied yet. Some plots may not be available.")
+            
+        try:
+            postprocessor = OptimizationPostprocessor(self.runDir)
+            results = postprocessor.generatePlots(plotTypes)
+            
+            totalPlots = sum(len(files) for files in results.values())
+            print(f"Generated {totalPlots} plot(s) in {postprocessor.plotsDir}")
+            
+            return results
+            
+        except Exception as e:
+            print(f"Error generating plots: {e}")
+            return {}
+    
+    def generateSummaryReport(self, outputFile: Optional[str] = None) -> str:
+        """
+        Generate a summary report of the optimization results.
+        
+        Args:
+            outputFile: Optional output file path. If None, saves to run directory.
+            
+        Returns:
+            Path to the generated report file.
+        """
+        try:
+            postprocessor = OptimizationPostprocessor(self.runDir)
+            summaryContent = postprocessor.generateSummaryReport()
+            
+            if outputFile is None:
+                outputFile = os.path.join(self.runDir, f"{self.name}-summary.md")
+                
+            with open(outputFile, 'w') as f:
+                f.write(summaryContent)
+                
+            print(f"Summary report generated: {outputFile}")
+            return outputFile
+            
+        except Exception as e:
+            print(f"Error generating summary report: {e}")
+            return ""
