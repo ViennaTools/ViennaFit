@@ -11,23 +11,14 @@ from typing import Dict, List, Callable
 class Study:
     """Base class for all parameter studies (optimization, sensitivity analysis, etc.)"""
 
-    def __init__(self, name: str, project: Project, studyType: str):
-        # self.name = name
-        baseName = name
-        self.project = project
-
-        # Check project readiness
-        if not project.isReady:
-            raise ValueError(
-                "Project is not ready. Please initialize the project first, "
-                "set the initial and target domains before running the study."
-            )
-
-        # Set up directories
-        runDir = os.path.join(project.projectPath, studyType, baseName)
+    def _generateRunDirectory(self, baseName: str, studyType: str):
+        """Generate run directory with conflict resolution"""
+        runDir = os.path.join(self.project.projectPath, studyType, baseName)
+        name = baseName
+        
         if os.path.exists(runDir):
             # Find the highest existing index
-            studyDir = os.path.join(project.projectPath, studyType)
+            studyDir = os.path.join(self.project.projectPath, studyType)
             maxIndex = 0
 
             if os.path.exists(studyDir):
@@ -42,19 +33,32 @@ class Study:
             # Use the next available index
             newIndex = maxIndex + 1
             name = f"{baseName}_{newIndex}"
-            runDir = os.path.join(project.projectPath, studyType, name)
+            runDir = os.path.join(self.project.projectPath, studyType, name)
             print(
                 f"Run directory already exists. Renaming study to '{name}' "
                 f"and using directory: {runDir}"
             )
+        
+        return name, runDir
+
+    def __init__(self, name: str, project: Project, studyType: str):
+        # self.name = name
+        baseName = name
+        self.project = project
+
+        # Check project readiness
+        if not project.isReady:
+            raise ValueError(
+                "Project is not ready. Please initialize the project first, "
+                "set the initial and target domains before running the study."
+            )
+
+        # Set up directory paths (but don't create them yet)
+        name, runDir = self._generateRunDirectory(baseName, studyType)
 
         self.name = name
         self.runDir = runDir
-        os.makedirs(self.runDir, exist_ok=False)
-
-        # Create progress directory (name may vary in subclasses)
         self.progressDir = os.path.join(self.runDir, "progress")
-        os.makedirs(self.progressDir, exist_ok=False)
 
         # Common internal variables
         self.resultLevelSet = None
@@ -197,22 +201,19 @@ class Study:
             )
 
         self.processSequence = processFunction
-
-        # Save passed process function into a file
-        processFilePath = os.path.join(self.runDir, f"{self.name}-processSequence.py")
-
-        # Get the source code of the function
-        source = inspect.getsource(processFunction)
-
-        # Save to file with imports at top
-        with open(processFilePath, "w") as f:
-            f.write("import viennaps2d as vps\n")
-            f.write("import viennals2d as vls\n\n")
-            f.write(source)
-
         print(f"Process sequence set: {processFunction.__name__}")
-        print(f"Process sequence saved to: {processFilePath}")
         return self
+
+    def _saveProcessSequence(self):
+        """Save the process sequence to a file (called by subclasses in apply method)"""
+        if self.processSequence is not None:
+            processFilePath = os.path.join(self.runDir, f"{self.name}-processSequence.py")
+            source = inspect.getsource(self.processSequence)
+            with open(processFilePath, "w") as f:
+                f.write("import viennaps2d as vps\n")
+                f.write("import viennals2d as vls\n\n")
+                f.write(source)
+            print(f"Process sequence saved to: {processFilePath}")
 
     def validate(self):
         """Validate that all required parameters are defined"""
