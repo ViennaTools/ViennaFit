@@ -7,6 +7,7 @@ from .fitStudy import Study
 from .fitOptimization import Optimization
 from .fitLocalSensitivityStudy import LocalSensitivityStudy
 from .fitGlobalSensitivityStudy import GlobalSensitivityStudy
+from .fitCustomEvaluator import CustomEvaluator
 
 from .fitUtilities import readPointsFromFile
 
