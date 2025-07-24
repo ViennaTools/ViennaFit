@@ -20,11 +20,12 @@ from datetime import datetime
 
 
 class Optimization(Study):
-    def __init__(self, name: str, project: Project):
-        super().__init__(name, project, "optimizationRuns")
+    def __init__(self, project: Project):
+        super().__init__(project.projectName, project, "optimizationRuns")
         self.optimizer = "dlib"  # Default optimizer
         self.progressManager = None  # Will be initialized in apply()
         self.storageFormat = "csv"  # Default storage format
+        self.notes = None  # Optional notes for the optimization run
 
     def setParameterNames(self, paramNames: List[str]):
         """Specifies names of parameters that will be used in optimization"""
@@ -156,7 +157,6 @@ class Optimization(Study):
             print(f"Error parsing file {file_path}: {e}")
             return np.array([])
 
-
     def saveStartingConfiguration(self):
         """Save the starting configuration of the optimization"""
         if not self.applied:
@@ -171,6 +171,7 @@ class Optimization(Study):
             "variableParameters": self.variableParameters,
             "optimizer": self.optimizer,
             "numEvaluations": self.numEvaluations,
+            "notes": self.notes,
         }
 
         configFile = os.path.join(
@@ -191,6 +192,26 @@ class Optimization(Study):
         if storageFormat.lower() not in ["csv", "numpy"]:
             raise ValueError(f"Unsupported storage format: {storageFormat}")
         self.storageFormat = storageFormat.lower()
+        return self
+
+    def setName(self, name: str):
+        """Set the name for the optimization run (only allowed before apply() is called)"""
+        if self.applied:
+            raise RuntimeError("Cannot change name after optimization has been applied")
+
+        # Generate new directory paths using parent class logic
+        newName, newRunDir = self._generateRunDirectory(name, "optimizationRuns")
+
+        # Update name and paths (directories will be created when apply() is called)
+        self.name = newName
+        self.runDir = newRunDir
+        self.progressDir = os.path.join(self.runDir, "progress")
+
+        return self
+
+    def setNotes(self, notes: str):
+        """Set notes for the optimization run"""
+        self.notes = notes
         return self
 
     def migrateLegacyProgressFiles(self):
@@ -254,10 +275,25 @@ class Optimization(Study):
             self.validate()
             self.saveVisualization = saveVisualization
             self.saveAllEvaluations = saveAllEvaluations
+
+            # Create directories
+            os.makedirs(self.runDir, exist_ok=False)
+            os.makedirs(self.progressDir, exist_ok=False)
+
+            # Save process sequence to file now that directory exists
+            self._saveProcessSequence()
+
             self.applied = True
             self.evalCounter = 0
             self.numEvaluations = numEvaluations
             self.saveStartingConfiguration()
+
+            # Save notes to file if provided
+            if self.notes is not None:
+                notesFile = os.path.join(self.runDir, "notes.txt")
+                with open(notesFile, "w") as f:
+                    f.write(self.notes)
+                print(f"Notes saved to {notesFile}")
 
             # Initialize progress manager with metadata
             if hasattr(self, "parameterNames") and self.parameterNames:
@@ -315,57 +351,61 @@ class Optimization(Study):
         except Exception as e:
             print(f"Optimization failed with error: {str(e)}")
             raise
-    
-    def generatePlots(self, plotTypes: Optional[List[str]] = None) -> Dict[str, List[str]]:
+
+    def generatePlots(
+        self, plotTypes: Optional[List[str]] = None
+    ) -> Dict[str, List[str]]:
         """
         Generate plots using the unified postprocessing framework.
-        
+
         Args:
             plotTypes: List of plot types to generate. Options include:
                        'convergence', 'parameter'. If None, generates all available plots.
-                       
+
         Returns:
             Dictionary mapping plot type names to lists of created file paths.
         """
         if not self.applied:
-            print("Warning: Optimization has not been applied yet. Some plots may not be available.")
-            
+            print(
+                "Warning: Optimization has not been applied yet. Some plots may not be available."
+            )
+
         try:
             postprocessor = OptimizationPostprocessor(self.runDir)
             results = postprocessor.generatePlots(plotTypes)
-            
+
             totalPlots = sum(len(files) for files in results.values())
             print(f"Generated {totalPlots} plot(s) in {postprocessor.plotsDir}")
-            
+
             return results
-            
+
         except Exception as e:
             print(f"Error generating plots: {e}")
             return {}
-    
+
     def generateSummaryReport(self, outputFile: Optional[str] = None) -> str:
         """
         Generate a summary report of the optimization results.
-        
+
         Args:
             outputFile: Optional output file path. If None, saves to run directory.
-            
+
         Returns:
             Path to the generated report file.
         """
         try:
             postprocessor = OptimizationPostprocessor(self.runDir)
             summaryContent = postprocessor.generateSummaryReport()
-            
+
             if outputFile is None:
                 outputFile = os.path.join(self.runDir, f"{self.name}-summary.md")
-                
-            with open(outputFile, 'w') as f:
+
+            with open(outputFile, "w") as f:
                 f.write(summaryContent)
-                
+
             print(f"Summary report generated: {outputFile}")
             return outputFile
-            
+
         except Exception as e:
             print(f"Error generating summary report: {e}")
             return ""
