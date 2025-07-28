@@ -2,44 +2,43 @@ import viennafit as fit
 import viennaps2d as vps
 import os
 
-# Create project and load data
+# Load the project
 p1 = fit.Project()
 projectToLoad = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "projects/exampleProject",
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "../projects/exampleProject",
 )
 p1.load(projectToLoad)
 
-# Create global sensitivity study
-gss = fit.GlobalSensitivityStudy("gss1", p1)
+lss1 = fit.LocalSensitivityStudy("lss1", p1)
 
 # Use the process sequence from a previous optimization run
 processPath = os.path.abspath(
     os.path.join(p1.projectPath, "optimizationRuns", "run1", "run1-processSequence.py")
 )
 
-gss.loadProcessSequence(processPath)
+lss1.loadProcessSequence(processPath)
 
 # Parameters will be automatically detected from function signature
-gss.setParameterNames(
+lss1.setParameterNames(
     ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
 )
 
 # Set fixed parameters
-gss.setFixedParameters(
+lss1.setFixedParameters(
     {"ionEnergy": 100.0, "neutralStickP": 0.03, "ionPowerCosine": 300.0}
 )
 
 # Set variable parameters with ranges
-gss.setVariableParameters(
+lss1.setVariableParameters(
     {
-        "neutralRate": (1.0, 70.0),
-        "ionRate": (1.0, 40.0),
+        "neutralRate": (1.0, 40.0, 70.0),
+        "ionRate": (1.0, 5.0, 40.0),
     }
 )
 
-gss.setDistanceMetric("CA+CSF")
-gss.setSamplingOptions(numSamples=100, secondOrder=True)
+lss1.setDistanceMetric("CA+CSF")
 
-# Run the sensitivity analysis
-gss.apply(saveVisualization=False)
+lss1.validate()
+
+lss1.apply()
