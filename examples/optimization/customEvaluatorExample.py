@@ -5,7 +5,7 @@ import os
 p1 = fit.Project()
 projectToLoad = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "projects/exampleProject",
+    "../projects/exampleProject",
 )
 p1.load(projectToLoad)
 
@@ -38,8 +38,7 @@ for paramName, value in optimalParams.items():
 # This will evaluate all combinations of the variable parameters
 # while keeping other parameters at their optimal values
 results = evaluator.evaluateGrid(
-    evaluationName="parameterSweep1", 
-    saveVisualization=True
+    evaluationName="parameterSweep1", saveVisualization=True
 )
 
 # Get and display the best result from the grid
@@ -48,7 +47,7 @@ if bestResult:
     print(f"\nBest result from grid evaluation:")
     print(f"  Objective value: {bestResult['objectiveValue']:.6f}")
     print(f"  Parameters:")
-    for paramName, value in bestResult['parameters'].items():
+    for paramName, value in bestResult["parameters"].items():
         print(f"    {paramName}: {value:.6f}")
 else:
     print("No valid results found in grid evaluation.")

@@ -6,7 +6,7 @@ import os
 p1 = fit.Project()
 projectToLoad = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "projects/exampleProject",
+    "../projects/exampleProject",
 )
 p1.load(projectToLoad)
 

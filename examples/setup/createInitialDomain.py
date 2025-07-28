@@ -2,17 +2,20 @@ import viennals2d as vls
 import viennaps2d as vps
 
 import viennafit as fit
+import os
 
 
 # In this example we create initial and target domains and assign them to a project.
 
 # Load the project
 p1 = fit.Project()
-p1.load("../../projects/exampleProject")
+scriptDir = os.path.dirname(os.path.abspath(__file__))
+projectPath = os.path.abspath(os.path.join(scriptDir, "../../projects/exampleProject"))
+p1.load(projectPath)
 
 # Define the paths to the annotation files for the bottom and target domains
-annotationBottom = "../exampleData/regular-cropped-SiO2.png.dat"
-annotationTarget = "../exampleData/regular-cropped-Nitride.png.dat"
+annotationBottom = os.path.join(scriptDir, "../data/regular-cropped-SiO2.png.dat")
+annotationTarget = os.path.join(scriptDir, "../data/regular-cropped-Nitride.png.dat")
 
 gridDelta = 5
 

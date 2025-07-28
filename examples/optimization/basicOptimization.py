@@ -6,11 +6,11 @@ import viennafit as fit
 p1 = fit.Project()
 projectToLoad = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "projects/exampleProject",
+    "../projects/exampleProject",
 )
 p1.load(projectToLoad)
 
-opt1 = fit.Optimization("run1", p1)
+opt1 = fit.Optimization(p1)
 
 
 # Define a process sequence function whose parameters will be optimized.
@@ -83,4 +83,6 @@ opt1.setFixedParameters({"ionEnergy": 100.0})
 
 opt1.setDistanceMetric("CA+CSF")
 
-opt1.apply(saveVisualization=True)
+opt1.setName("run1")
+
+opt1.apply(numEvaluations=100, saveVisualization=True)

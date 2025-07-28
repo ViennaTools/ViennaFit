@@ -6,7 +6,7 @@ import os
 p1 = fit.Project()
 projectToLoad = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "projects/exampleProject",
+    "../projects/exampleProject",
 )
 p1.load(projectToLoad)
 
@@ -39,7 +39,7 @@ gss.setVariableParameters(
 )
 
 gss.setDistanceMetric("CA+CSF")
-gss.setSamplingOptions(numSamples=100, secondOrder=True)
+gss.setSamplingOptions(numSamples=1000, secondOrder=True)
 
 # Run the sensitivity analysis
 gss.apply(saveVisualization=False)
