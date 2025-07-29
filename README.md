@@ -8,7 +8,7 @@ Does not work with older ViennaPS versions.
 ```bash
 # Clone the repository
 git clone https://github.com/ViennaTools/ViennaFit
-cd Fit
+cd ViennaFit
 
 # Install the package and dependencies
 pip install .
@@ -26,17 +26,8 @@ pip install .
 - Python 3.10+
 
 ## To do:
-- Add postprocessing 
-- Add further optimizers
 - Custom range + presets for localSensStudy
 - Objective function options
 - 3D implementation
 - Add custom objective function
 
-<!-- ## Building
-The project can be built using
-```bash
-cd Fit
-pyproject-build
-
-``` -->
