@@ -50,6 +50,13 @@ class CustomEvaluator:
                 "set the initial and target domains before using the evaluator."
             )
 
+    def getAvailableInitialDomains(self) -> List[str]:
+        """Get list of available initial domain names."""
+        domains = self.project.listInitialDomains()
+        if self.project.initialDomain is not None and "default" not in domains:
+            domains.append("single")  # Indicate single domain is available
+        return domains
+
     def loadOptimizationRun(self, runName: str) -> "CustomEvaluator":
         """
         Load optimization results and process sequence from a completed run.
@@ -209,7 +216,7 @@ class CustomEvaluator:
         return allParams
 
     def evaluateGrid(
-        self, evaluationName: str, saveVisualization: bool = True
+        self, evaluationName: str, saveVisualization: bool = True, initialDomainName: str = None
     ) -> List[Dict[str, Any]]:
         """
         Evaluate all combinations of variable values in a grid.
@@ -217,6 +224,7 @@ class CustomEvaluator:
         Args:
             evaluationName: Name for this custom evaluation run
             saveVisualization: Whether to save visualization files
+            initialDomainName: Name of the initial domain to use (default uses single domain)
 
         Returns:
             List of evaluation results for each parameter combination
@@ -275,7 +283,14 @@ class CustomEvaluator:
 
             try:
                 # Create a fresh copy of the initial domain for each evaluation
-                domainCopy = vps.Domain(self.project.initialDomain)
+                if initialDomainName is not None:
+                    # Use named initial domain
+                    if initialDomainName not in self.project.initialDomains:
+                        raise ValueError(f"Initial domain '{initialDomainName}' not found in project")
+                    domainCopy = vps.Domain(self.project.initialDomains[initialDomainName])
+                else:
+                    # Use default single initial domain for backward compatibility
+                    domainCopy = vps.Domain(self.project.initialDomain)
                 
                 # Run process sequence with current parameters on the copy
                 resultDomain = self.processSequence(domainCopy, evalParams)

@@ -11,21 +11,22 @@ class ObjectiveWrapper:
     """Factory class for creating objective function wrappers."""
 
     @staticmethod
-    def create(optimizer: str, optimization) -> Callable:
+    def create(optimizer: str, optimization, initialDomainName: str = None) -> Callable:
         """
         Create an objective function wrapper based on optimizer type.
 
         Args:
             optimizer: String identifying the optimizer ("dlib", etc)
             optimization: Reference to the Optimization instance
+            initialDomainName: Name of the initial domain to use (optional)
 
         Returns:
             Callable: Wrapped objective function compatible with chosen optimizer
         """
         if optimizer == "dlib":
-            wrapper = DlibObjectiveWrapper(optimization)
+            wrapper = DlibObjectiveWrapper(optimization, initialDomainName)
         elif optimizer == "nevergrad":
-            wrapper = NevergradObjectiveWrapper(optimization)
+            wrapper = NevergradObjectiveWrapper(optimization, initialDomainName)
         else:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
 
@@ -39,8 +40,9 @@ class ObjectiveWrapper:
 class BaseObjectiveWrapper:
     """Base class for objective function wrappers."""
 
-    def __init__(self, study):
+    def __init__(self, study, initialDomainName: str = None):
         self.study = study
+        self.initialDomainName = initialDomainName
         self.distanceMetric = DistanceMetric.create(study.distanceMetric)
         self.progressManager = getattr(study, 'progressManager', None)
 
@@ -79,7 +81,14 @@ class BaseObjectiveWrapper:
 
         # Create deep copy of initial domain
         domainCopy = Domain()
-        domainCopy.deepCopy(self.study.project.initialDomain)
+        if self.initialDomainName is not None:
+            # Use named initial domain
+            if self.initialDomainName not in self.study.project.initialDomains:
+                raise ValueError(f"Initial domain '{self.initialDomainName}' not found in project")
+            domainCopy.deepCopy(self.study.project.initialDomains[self.initialDomainName])
+        else:
+            # Use default single initial domain for backward compatibility
+            domainCopy.deepCopy(self.study.project.initialDomain)
 
         # Apply process sequence
         resultDomain = self.study.processSequence(domainCopy, paramDict)
