@@ -209,6 +209,10 @@ class Optimization(Study):
 
         return self
 
+    def getName(self) -> str:
+        """Get the name of the optimization run"""
+        return self.name
+
     def setNotes(self, notes: str):
         """Set notes for the optimization run"""
         self.notes = notes
