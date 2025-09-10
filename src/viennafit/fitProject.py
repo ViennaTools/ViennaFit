@@ -24,6 +24,10 @@ class Project:
         self.initialDomainPath = None
         self.targetLevelSet = None
         self.targetLevelSetPath = None
+        
+        # Multi-target support (dictionary-based)
+        self.targetLevelSets = {}  # {name: levelSet}
+        self.targetLevelSetPaths = {}  # {name: path}
 
         # Set paths if name is provided
         if name is not None:
@@ -101,7 +105,8 @@ class Project:
             "lastModifiedDate": str(datetime.datetime.now()),
             "mode": self.mode,
             "initialDomainPath": "",
-            "targetLevelSetPath": "",
+            "targetLevelSetPath": "",  # Keep for backward compatibility
+            "targetLevelSetPaths": {},  # New multi-target support
         }
 
         # Save project information to JSON file
@@ -134,6 +139,15 @@ class Project:
         self.mode = projectInfo["mode"]
         self.initialDomainPath = projectInfo["initialDomainPath"]
         self.targetLevelSetPath = projectInfo["targetLevelSetPath"]
+        
+        # Load multi-target paths (new format) with backward compatibility
+        if "targetLevelSetPaths" in projectInfo:
+            self.targetLevelSetPaths = projectInfo["targetLevelSetPaths"]
+        else:
+            # Old format: create multi-target structure from single target
+            self.targetLevelSetPaths = {}
+            if self.targetLevelSetPath != "":
+                self.targetLevelSetPaths["default"] = self.targetLevelSetPath
 
         # If initialDomainPath is None, skip loading the initial domain
         if self.initialDomainPath == "":
@@ -149,7 +163,7 @@ class Project:
                 )
             ).apply()
 
-        # If targetLevelSetPath is None, skip loading the target level set
+        # Load single target (backward compatibility)
         if self.targetLevelSetPath == "":
             self.targetLevelSet = None
         else:
@@ -165,6 +179,18 @@ class Project:
                 ),
             ).apply()
             self.targetLevelSet = targetDomain
+
+        # Load all named targets (new multi-target support)
+        self.targetLevelSets = {}
+        for targetName, targetPath in self.targetLevelSetPaths.items():
+            if targetPath != "" and os.path.exists(targetPath):
+                targetDomain = lsDomain()
+                lsReader(targetDomain, targetPath).apply()
+                self.targetLevelSets[targetName] = targetDomain
+                
+                # If this is the default target and we don't have a single target loaded, use it
+                if targetName == "default" and self.targetLevelSet is None:
+                    self.targetLevelSet = targetDomain
 
         # Print project information
         print(f"Project '{self.projectName}' loaded with the following information:")
@@ -252,14 +278,19 @@ class Project:
         return self
 
     def setTargetLevelSet(self, levelSet):
-        """Set the target level set for the project."""
+        """Set the target level set for the project (backward compatibility method)."""
+        # Maintain backward compatibility by using a default target name
+        defaultTargetName = "default"
+        
+        # Store in both old and new format for compatibility
         self.targetLevelSet = levelSet
+        self.targetLevelSets[defaultTargetName] = levelSet
 
         # Create directories if needed
         targetDomainDir = os.path.join(self.projectPath, "domains", "targetDomain")
         os.makedirs(targetDomainDir, exist_ok=True)
 
-        # Save the target level set
+        # Save the target level set (keep original filename for backward compatibility)
         domainPath = os.path.join(
             targetDomainDir, f"{self.projectName}-targetDomain.lvst"
         )
@@ -310,9 +341,13 @@ class Project:
         else:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
 
+        # Store in both old and new format for compatibility
         self.targetLevelSetPath = domainPath
-        # Update project info with the target level set path
+        self.targetLevelSetPaths[defaultTargetName] = domainPath
+        
+        # Update project info with both old and new format
         self.updateProjectInfo("targetLevelSetPath", domainPath)
+        self.updateProjectInfo("targetLevelSetPaths", self.targetLevelSetPaths)
         print(f"Target level set and visualization meshes saved to {targetDomainDir}")
         return self
 
@@ -321,8 +356,27 @@ class Project:
         if self.initialDomain is None:
             print("Initial domain is not set.")
             return False
-        if self.targetLevelSet is None:
-            print("Target level set is not set.")
+            
+        # Check for targets - support both single and multi-target scenarios
+        hasTargets = False
+        if self.targetLevelSet is not None:
+            hasTargets = True
+        elif len(self.targetLevelSets) > 0:
+            hasTargets = True
+            
+        if not hasTargets:
+            print("No target level sets are set.")
+            return False
+            
+        return True
+
+    def isReadyForMultiTarget(self):
+        """Check if the project is ready for multi-target optimization/sensitivity studies."""
+        if self.initialDomain is None:
+            print("Initial domain is not set.")
+            return False
+        if len(self.targetLevelSets) == 0:
+            print("No target level sets are set.")
             return False
         return True
 
@@ -410,4 +464,131 @@ class Project:
         # Use existing setTargetLevelSet method to save to project structure
         self.setTargetLevelSet(levelSet)
         print(f"Target domain set from '{filePath}' and saved to project")
+        return self
+
+    def addTargetLevelSet(self, name: str, levelSet):
+        """Add a named target level set to the project."""
+        if name in self.targetLevelSets:
+            print(f"Warning: Target '{name}' already exists. Overwriting.")
+        
+        self.targetLevelSets[name] = levelSet
+
+        # Create directories if needed
+        targetDomainDir = os.path.join(self.projectPath, "domains", "targetDomain")
+        os.makedirs(targetDomainDir, exist_ok=True)
+
+        # Save the target level set with name-specific filename
+        domainPath = os.path.join(
+            targetDomainDir, f"{self.projectName}-targetDomain-{name}.lvst"
+        )
+
+        if self.mode == "2D":
+            import viennals2d as vls
+
+            # Save the level set
+            vls.Writer(levelSet, domainPath).apply()
+
+            # Create mesh visualization
+            meshLS = vls.Mesh()
+            vls.ToMesh(levelSet, meshLS).apply()
+            meshPath = os.path.join(
+                targetDomainDir, f"{self.projectName}-targetDomain-{name}-ls.vtp"
+            )
+            vls.VTKWriter(meshLS, meshPath).apply()
+
+            # Create surface mesh visualization
+            meshSurface = vls.Mesh()
+            vls.ToSurfaceMesh(levelSet, meshSurface).apply()
+            surfacePath = os.path.join(
+                targetDomainDir, f"{self.projectName}-targetDomain-{name}-surface.vtp"
+            )
+            vls.VTKWriter(meshSurface, surfacePath).apply()
+
+        elif self.mode == "3D":
+            import viennals3d as vls
+
+            # Save the level set
+            vls.Writer(levelSet, domainPath).apply()
+
+            # Create mesh visualization
+            meshLS = vls.Mesh()
+            vls.ToMesh(levelSet, meshLS).apply()
+            meshPath = os.path.join(
+                targetDomainDir, f"{self.projectName}-targetDomain-{name}-ls.vtp"
+            )
+            vls.VTKWriter(meshLS, meshPath).apply()
+
+            # Create surface mesh visualization
+            meshSurface = vls.Mesh()
+            vls.ToSurfaceMesh(levelSet, meshSurface).apply()
+            surfacePath = os.path.join(
+                targetDomainDir, f"{self.projectName}-targetDomain-{name}-surface.vtp"
+            )
+            vls.VTKWriter(meshSurface, surfacePath).apply()
+        else:
+            raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
+
+        self.targetLevelSetPaths[name] = domainPath
+        
+        # Update project info with the multi-target paths
+        self.updateProjectInfo("targetLevelSetPaths", self.targetLevelSetPaths)
+        print(f"Target level set '{name}' and visualization meshes saved to {targetDomainDir}")
+        return self
+
+    def getTargetLevelSet(self, name: str):
+        """Get a named target level set from the project."""
+        if name not in self.targetLevelSets:
+            raise KeyError(f"Target level set '{name}' not found.")
+        return self.targetLevelSets[name]
+
+    def getTargetLevelSetPath(self, name: str):
+        """Get the file path for a named target level set."""
+        if name not in self.targetLevelSetPaths:
+            raise KeyError(f"Target level set path for '{name}' not found.")
+        return self.targetLevelSetPaths[name]
+
+    def removeTargetLevelSet(self, name: str):
+        """Remove a named target level set from the project."""
+        if name not in self.targetLevelSets:
+            raise KeyError(f"Target level set '{name}' not found.")
+        
+        # Remove from memory
+        del self.targetLevelSets[name]
+        
+        # Remove file path reference
+        if name in self.targetLevelSetPaths:
+            # Optionally remove the actual files
+            filePath = self.targetLevelSetPaths[name]
+            if os.path.exists(filePath):
+                os.remove(filePath)
+            del self.targetLevelSetPaths[name]
+        
+        # Update project info
+        self.updateProjectInfo("targetLevelSetPaths", self.targetLevelSetPaths)
+        print(f"Target level set '{name}' removed from project")
+        return self
+
+    def listTargetLevelSets(self):
+        """List all target level set names in the project."""
+        return list(self.targetLevelSets.keys())
+
+    def getTargetLevelSetCount(self):
+        """Get the number of target level sets in the project."""
+        return len(self.targetLevelSets)
+
+    def addTargetLevelSetFromFile(self, name: str, filePath: str):
+        """Add a named target level set from file."""
+        if not os.path.exists(filePath):
+            raise FileNotFoundError(f"Target domain file '{filePath}' does not exist.")
+
+        if not filePath.endswith(".lvst"):
+            raise ValueError("Target domain file must be in .lvst format.")
+
+        # Load the level set
+        levelSet = lsDomain()
+        lsReader(levelSet, filePath).apply()
+
+        # Use existing addTargetLevelSet method to save to project structure
+        self.addTargetLevelSet(name, levelSet)
+        print(f"Target domain '{name}' set from '{filePath}' and saved to project")
         return self
