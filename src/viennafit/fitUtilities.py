@@ -399,7 +399,9 @@ class CSVProgressStorage(ProgressDataManager):
             else:
                 filepath = filepath.replace('.txt', '.csv')
         super().__init__(filepath, metadata)
-        self.bestFilepath = filepath.replace('.csv', '_best.csv')
+        # Generate progressBest.csv instead of progressAll_best.csv for cleaner naming
+        base_dir = os.path.dirname(filepath)
+        self.bestFilepath = os.path.join(base_dir, 'progressBest.csv')
         self.metadataFilepath = filepath.replace('.csv', '_metadata.json')
     
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:
@@ -522,7 +524,9 @@ class NumpyProgressStorage(ProgressDataManager):
             else:
                 filepath = filepath.replace('.txt', '.npz')
         super().__init__(filepath, metadata)
-        self.bestFilepath = filepath.replace('.npz', '_best.npz')
+        # Generate progressBest.npz instead of progressAll_best.npz for cleaner naming
+        base_dir = os.path.dirname(filepath)
+        self.bestFilepath = os.path.join(base_dir, 'progressBest.npz')
         self.metadataFilepath = filepath.replace('.npz', '_metadata.json')
     
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:

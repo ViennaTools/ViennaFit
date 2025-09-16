@@ -5,7 +5,7 @@ import sys
 import os
 import json
 import inspect
-from typing import Dict, List, Callable
+from typing import Callable
 
 
 class Study:
@@ -82,12 +82,12 @@ class Study:
             f" and initialized in {self.runDir}"
         )
 
-    def setParameterNames(self, paramNames: List[str]):
+    def setParameterNames(self, paramNames: list[str]):
         """Specifies names of parameters that will be used in the study"""
         self.parameterNames = paramNames
         return self
 
-    def setFixedParameters(self, fixedParams: Dict[str, float]):
+    def setFixedParameters(self, fixedParams: dict[str, float]):
         """
         Set multiple parameters as fixed with specific values
 
@@ -136,11 +136,15 @@ class Study:
 
                     # Check function has exactly 2 parameters
                     if len(params) == 2:
-                        # Check parameter types
-                        if (
-                            params[0].annotation == vps.Domain
-                            or params[0].annotation == inspect.Parameter.empty
-                        ):
+                        # Check parameter types - support both single and multi-domain
+                        validDomainTypes = [
+                            vps.Domain,  # Single domain (backward compatibility)
+                            dict[str, vps.Domain],  # Multi-domain dict
+                            list[vps.Domain],  # Multi-domain list
+                            inspect.Parameter.empty  # No annotation
+                        ]
+                        
+                        if params[0].annotation in validDomainTypes:
                             if (
                                 params[1].annotation == dict[str, float]
                                 or params[1].annotation == inspect.Parameter.empty
@@ -162,10 +166,13 @@ class Study:
         Set the process sequence to be used in the study.
 
         Args:
-            processFunction: Function with signature:
-                (domain: viennaps2d.Domain, params: dict[str, float]) -> viennaps2d.Domain
-                The function should take an initial domain and parameter dictionary,
-                apply the process sequence, and return the resulting domain.
+            processFunction: Function with one of these signatures:
+                Single-domain (backward compatibility):
+                    (domain: viennaps2d.Domain, params: dict[str, float]) -> viennaps2d.Domain
+                Multi-domain:
+                    (domains: dict[str, viennaps2d.Domain], params: dict[str, float]) -> dict[str, viennaps2d.Domain]
+                The function should take initial domain(s) and parameter dictionary,
+                apply the process sequence, and return the resulting domain(s).
 
         Returns:
             self: For method chaining
@@ -179,14 +186,18 @@ class Study:
                 f"Process sequence must have exactly 2 parameters, got {len(functionParams)}"
             )
 
-        # Check first parameter (domain)
+        # Check first parameter (domain or domains)
         domainParam = functionParams[0]
-        if (
-            domainParam.annotation != vps.Domain
-            and domainParam.annotation != inspect.Parameter.empty
-        ):
+        validDomainTypes = [
+            vps.Domain,  # Single domain (backward compatibility)
+            dict[str, vps.Domain],  # Multi-domain dict
+            list[vps.Domain],  # Multi-domain list
+            inspect.Parameter.empty  # No annotation
+        ]
+        
+        if domainParam.annotation not in validDomainTypes:
             raise TypeError(
-                f"First parameter must be a viennaps2d.Domain, got {domainParam.annotation}"
+                f"First parameter must be viennaps2d.Domain, dict[str, viennaps2d.Domain], or list[viennaps2d.Domain], got {domainParam.annotation}"
             )
 
         # Check second parameter (params dict)
@@ -197,7 +208,7 @@ class Study:
             and paramsParam.annotation != inspect.Parameter.empty
         ):
             raise TypeError(
-                f"Second parameter must be Dict[str, float], got {paramsParam.annotation}"
+                f"Second parameter must be dict[str, float], got {paramsParam.annotation}"
             )
 
         self.processSequence = processFunction

@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+from typing import List, Dict, Tuple
 from viennaps2d import Reader
 from viennals2d import Reader as lsReader
 from viennals2d import Domain as lsDomain
@@ -795,3 +796,92 @@ class Project:
         self.addInitialDomain(name, domain)
         print(f"Initial domain '{name}' set from '{filePath}' and saved to project")
         return self
+
+    def isMultiDomainReady(self) -> bool:
+        """Check if project is ready for multi-domain optimization."""
+        # Must have at least one initial domain and one target domain
+        hasInitialDomains = len(self.initialDomains) > 0 or self.initialDomain is not None
+        hasTargetDomains = len(self.targetLevelSets) > 0 or self.targetLevelSet is not None
+        
+        if not hasInitialDomains:
+            return False
+        if not hasTargetDomains:
+            return False
+            
+        # For multi-domain, check that all initial domains have corresponding targets
+        if len(self.initialDomains) > 0 and len(self.targetLevelSets) > 0:
+            initialNames = set(self.initialDomains.keys())
+            targetNames = set(self.targetLevelSets.keys())
+            
+            # All initial domains must have corresponding targets
+            if not initialNames.issubset(targetNames):
+                missingTargets = initialNames - targetNames
+                print(f"Missing target domains for: {', '.join(missingTargets)}")
+                return False
+                
+        return True
+    
+    def validateMultiDomainSetup(self) -> List[str]:
+        """Validate multi-domain setup and return list of issues."""
+        issues = []
+        
+        # Check initial domains
+        if len(self.initialDomains) == 0 and self.initialDomain is None:
+            issues.append("No initial domains are set")
+        
+        # Check target domains
+        if len(self.targetLevelSets) == 0 and self.targetLevelSet is None:
+            issues.append("No target domains are set")
+        
+        # Check name matching for multi-domain case
+        if len(self.initialDomains) > 0 and len(self.targetLevelSets) > 0:
+            initialNames = set(self.initialDomains.keys())
+            targetNames = set(self.targetLevelSets.keys())
+            
+            # Check for missing targets
+            missingTargets = initialNames - targetNames
+            if missingTargets:
+                issues.append(f"Missing target domains for initial domains: {', '.join(missingTargets)}")
+            
+            # Check for extra targets (not necessarily an error, but worth noting)
+            extraTargets = targetNames - initialNames
+            if extraTargets:
+                issues.append(f"Extra target domains without corresponding initial domains: {', '.join(extraTargets)}")
+        
+        return issues
+    
+    def printMultiDomainStatus(self):
+        """Print status of multi-domain setup."""
+        print("Multi-Domain Setup Status:")
+        print(f"  Initial domains: {len(self.initialDomains)} ({', '.join(self.initialDomains.keys()) if self.initialDomains else 'none'})")
+        print(f"  Target domains: {len(self.targetLevelSets)} ({', '.join(self.targetLevelSets.keys()) if self.targetLevelSets else 'none'})")
+        print(f"  Backward compatibility - Single initial domain: {'Yes' if self.initialDomain is not None else 'No'}")
+        print(f"  Backward compatibility - Single target domain: {'Yes' if self.targetLevelSet is not None else 'No'}")
+        
+        issues = self.validateMultiDomainSetup()
+        if issues:
+            print("  Issues found:")
+            for issue in issues:
+                print(f"    - {issue}")
+        else:
+            print("  ✓ Multi-domain setup is valid")
+            
+        print(f"  Multi-domain ready: {'Yes' if self.isMultiDomainReady() else 'No'}")
+    
+    def getDomainPairings(self) -> Dict[str, Tuple[str, str]]:
+        """Get dictionary of domain name -> (initial_path, target_path) pairings."""
+        pairings = {}
+        
+        if len(self.initialDomains) > 0 and len(self.targetLevelSets) > 0:
+            # Multi-domain case
+            for domainName in self.initialDomains.keys():
+                if domainName in self.targetLevelSets:
+                    initialPath = self.initialDomainPaths.get(domainName, "")
+                    targetPath = self.targetLevelSetPaths.get(domainName, "")
+                    pairings[domainName] = (initialPath, targetPath)
+        else:
+            # Single domain case (backward compatibility)
+            if self.initialDomain is not None and self.targetLevelSet is not None:
+                pairings["default"] = (self.initialDomainPath, self.targetLevelSetPath)
+                
+        return pairings

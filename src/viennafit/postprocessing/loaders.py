@@ -95,17 +95,23 @@ class ResultsLoader:
         
         # Try CSV format first (new format)
         csvPaths = [
-            ('all', os.path.join(self.runDir, 'progressAll.csv')),
-            ('best', os.path.join(self.runDir, 'progressAll_best.csv'))
+            ('all', [os.path.join(self.runDir, 'progressAll.csv')]),
+            ('best', [
+                os.path.join(self.runDir, 'progressBest.csv'),      # New preferred name
+                os.path.join(self.runDir, 'progressAll_best.csv')   # Old name for backward compatibility
+            ])
         ]
         
-        for dataType, path in csvPaths:
-            if os.path.exists(path):
-                try:
-                    df = pd.read_csv(path)
-                    progressData[dataType] = df
-                except Exception as e:
-                    print(f"Warning: Could not load CSV progress data from {path}: {e}")
+        for dataType, pathCandidates in csvPaths:
+            for path in pathCandidates:
+                if os.path.exists(path):
+                    try:
+                        df = pd.read_csv(path)
+                        progressData[dataType] = df
+                        break  # Stop after first successful load
+                    except Exception as e:
+                        print(f"Warning: Could not load CSV progress data from {path}: {e}")
+                        continue  # Try next candidate
                     
         # Try legacy TXT format if CSV not available
         if not progressData:

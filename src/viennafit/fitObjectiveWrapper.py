@@ -1,10 +1,15 @@
-from typing import Dict, Tuple, Callable, List
+from typing import Tuple, Callable
 from viennaps2d import Domain
-from .fitUtilities import saveEvalToProgressFile, saveEvalToProgressManager, ProgressDataManager
+from .fitUtilities import (
+    saveEvalToProgressFile,
+    saveEvalToProgressManager,
+    ProgressDataManager,
+)
 from .fitDistanceMetrics import DistanceMetric
 import viennals2d as vls
 import time
 import os
+import inspect
 
 
 class ObjectiveWrapper:
@@ -43,12 +48,19 @@ class BaseObjectiveWrapper:
     def __init__(self, study, initialDomainName: str = None):
         self.study = study
         self.initialDomainName = initialDomainName
-        self.distanceMetric = DistanceMetric.create(study.distanceMetric)
-        self.progressManager = getattr(study, 'progressManager', None)
+
+        # Detect if process sequence supports multi-domain processing
+        self.isMultiDomainProcess = self._detectMultiDomainProcess()
+
+        # Create appropriate distance metric
+        self.distanceMetric = DistanceMetric.create(
+            study.distanceMetric, multiDomain=self.isMultiDomainProcess
+        )
+        self.progressManager = getattr(study, "progressManager", None)
 
     def _saveEvaluationData(
         self,
-        paramValues: List[float],
+        paramValues: list[float],
         elapsedTime: float,
         objectiveValue: float,
         filename: str,
@@ -64,7 +76,7 @@ class BaseObjectiveWrapper:
                 elapsedTime=elapsedTime,
                 objectiveValue=objectiveValue,
                 isBest=isBest,
-                saveAll=True
+                saveAll=True,
             )
         else:
             # Fallback to legacy system
@@ -74,49 +86,121 @@ class BaseObjectiveWrapper:
             )
 
     def _evaluateObjective(
-        self, paramDict: Dict[str, float], saveVisualization: bool = False, saveAll: bool = False
+        self,
+        paramDict: dict[str, float],
+        saveVisualization: bool = False,
+        saveAll: bool = False,
     ) -> Tuple[float, float]:
         """Run process sequence and evaluate result."""
         startTime = time.time()
 
-        # Create deep copy of initial domain
-        domainCopy = Domain()
-        if self.initialDomainName is not None:
-            # Use named initial domain
-            if self.initialDomainName not in self.study.project.initialDomains:
-                raise ValueError(f"Initial domain '{self.initialDomainName}' not found in project")
-            domainCopy.deepCopy(self.study.project.initialDomains[self.initialDomainName])
-        else:
-            # Use default single initial domain for backward compatibility
-            domainCopy.deepCopy(self.study.project.initialDomain)
+        if self.isMultiDomainProcess:
+            # Multi-domain processing
+            initialDomains = {}
+            processedDomains = {}  # Keep references to vps.Domains that get processed
 
-        # Apply process sequence
-        resultDomain = self.study.processSequence(domainCopy, paramDict)
+            if len(self.study.project.initialDomains) > 0:
+                # Use multiple named initial domains
+                for name, domain in self.study.project.initialDomains.items():
+                    domainCopy = Domain()
+                    domainCopy.deepCopy(domain)
+                    initialDomains[name] = domainCopy
+                    processedDomains[name] = domainCopy  # Same object, will be modified by process
+            elif self.study.project.initialDomain is not None:
+                # Fall back to single domain as "default"
+                domainCopy = Domain()
+                domainCopy.deepCopy(self.study.project.initialDomain)
+                initialDomains["default"] = domainCopy
+                processedDomains["default"] = domainCopy  # Same object, will be modified by process
+            else:
+                raise ValueError(
+                    "No initial domains available for multi-domain processing"
+                )
+
+            # Apply process sequence to all domains (modifies vps.Domains in-place)
+            resultDomains = self.study.processSequence(initialDomains, paramDict)
+
+            if not isinstance(resultDomains, dict):
+                raise ValueError(
+                    "Multi-domain process sequence must return dict[str, Domain]"
+                )
+        else:
+            # Single-domain processing (backward compatibility)
+            domainCopy = Domain()
+            if self.initialDomainName is not None:
+                # Use named initial domain
+                if self.initialDomainName not in self.study.project.initialDomains:
+                    raise ValueError(
+                        f"Initial domain '{self.initialDomainName}' not found in project"
+                    )
+                domainCopy.deepCopy(
+                    self.study.project.initialDomains[self.initialDomainName]
+                )
+            else:
+                # Use default single initial domain for backward compatibility
+                domainCopy.deepCopy(self.study.project.initialDomain)
+
+            # Apply process sequence
+            resultDomain = self.study.processSequence(domainCopy, paramDict)
 
         self.study.evalCounter += 1
 
-        # Calculate objective value using distance metric first
-        objectiveValue = self.distanceMetric(
-            resultDomain,
-            self.study.project.targetLevelSet,
-            False,  # Don't save visualization yet
-            os.path.join(
-                self.study.progressDir,
-                f"{self.study.name}-{self.study.evalCounter}",
-            ),
-        )
-        
-        # Only save visualization if saveAll is True or if current evaluation is better than current best
-        if saveVisualization and (saveAll or objectiveValue <= self.study.bestScore):
-            self.distanceMetric(
-                resultDomain,
-                self.study.project.targetLevelSet,
-                True,  # Save visualization
+        if self.isMultiDomainProcess:
+            # Multi-domain distance calculation
+            if len(self.study.project.targetLevelSets) == 0:
+                raise ValueError(
+                    "No target level sets available for multi-domain comparison"
+                )
+
+            # Calculate objective value using multi-domain distance metric
+            objectiveValue = self.distanceMetric(
+                resultDomains,
+                self.study.project.targetLevelSets,
+                False,  # Don't save visualization yet
                 os.path.join(
                     self.study.progressDir,
                     f"{self.study.name}-{self.study.evalCounter}",
                 ),
             )
+
+            # Only save visualization if saveAll is True or if current evaluation is better than current best
+            if saveVisualization and (
+                saveAll or objectiveValue <= self.study.bestScore
+            ):
+                self.distanceMetric(
+                    resultDomains,
+                    self.study.project.targetLevelSets,
+                    True,  # Save visualization
+                    os.path.join(
+                        self.study.progressDir,
+                        f"{self.study.name}-{self.study.evalCounter}",
+                    ),
+                )
+        else:
+            # Single-domain distance calculation (backward compatibility)
+            objectiveValue = self.distanceMetric(
+                resultDomain,
+                self.study.project.targetLevelSet,
+                False,  # Don't save visualization yet
+                os.path.join(
+                    self.study.progressDir,
+                    f"{self.study.name}-{self.study.evalCounter}",
+                ),
+            )
+
+            # Only save visualization if saveAll is True or if current evaluation is better than current best
+            if saveVisualization and (
+                saveAll or objectiveValue <= self.study.bestScore
+            ):
+                self.distanceMetric(
+                    resultDomain,
+                    self.study.project.targetLevelSet,
+                    True,  # Save visualization
+                    os.path.join(
+                        self.study.progressDir,
+                        f"{self.study.name}-{self.study.evalCounter}",
+                    ),
+                )
 
         elapsedTime = time.time() - startTime
 
@@ -130,13 +214,18 @@ class BaseObjectiveWrapper:
         # Save ALL evaluations to progress manager (both best and regular)
         if self.progressManager:
             # Order parameters according to metadata parameterNames
-            if (self.progressManager.metadata and 
-                hasattr(self.progressManager.metadata, 'parameterNames') and
-                self.progressManager.metadata.parameterNames):
-                orderedParams = [paramDict.get(name, 0.0) for name in self.progressManager.metadata.parameterNames]
+            if (
+                self.progressManager.metadata
+                and hasattr(self.progressManager.metadata, "parameterNames")
+                and self.progressManager.metadata.parameterNames
+            ):
+                orderedParams = [
+                    paramDict.get(name, 0.0)
+                    for name in self.progressManager.metadata.parameterNames
+                ]
             else:
                 orderedParams = list(paramDict.values())
-            
+
             self._saveEvaluationData(
                 orderedParams,
                 elapsedTime,
@@ -156,22 +245,60 @@ class BaseObjectiveWrapper:
                 )
 
         if newBest or self.study.saveAllEvaluations:
-            domainCopy.saveSurfaceMesh(
-                os.path.join(
+            if self.isMultiDomainProcess:
+                # Save all processed vps.Domains with corresponding names
+                for domainName, processedDomain in processedDomains.items():
+                    filePath = os.path.join(
+                        self.study.progressDir,
+                        f"{self.study.name}-{self.study.evalCounter}-{domainName}.vtp",
+                    )
+                    # Save the processed vps.Domain (not the returned level set)
+                    processedDomain.saveSurfaceMesh(filePath, True)
+            else:
+                # Single domain save (backward compatibility)
+                filePath = os.path.join(
                     self.study.progressDir,
                     f"{self.study.name}-{self.study.evalCounter}.vtp",
-                ),
-                True,
-            )
+                )
+                # Save the processed vps.Domain (not the returned level set)
+                domainCopy.saveSurfaceMesh(filePath, True)
 
         return objectiveValue, elapsedTime
 
+    def _detectMultiDomainProcess(self) -> bool:
+        """Detect if the process sequence function supports multi-domain processing."""
+        if (
+            not hasattr(self.study, "processSequence")
+            or self.study.processSequence is None
+        ):
+            return False
+
+        try:
+            sig = inspect.signature(self.study.processSequence)
+            params = list(sig.parameters.values())
+
+            if len(params) >= 1:
+                firstParam = params[0]
+                # Check if first parameter is annotated as dict[str, Domain] or list[Domain]
+                if firstParam.annotation in [dict[str, Domain], list[Domain]]:
+                    return True
+                # Also check if project has multiple domains/targets
+                elif (
+                    len(getattr(self.study.project, "initialDomains", {})) > 0
+                    and len(getattr(self.study.project, "targetLevelSets", {})) > 0
+                ):
+                    return True
+
+            return False
+        except Exception:
+            return False
+
     def evaluateParameterSpace(
         self,
-        baseParams: Dict[str, float],
-        varParams: Dict[str, Tuple[float, float, float]],
+        baseParams: dict[str, float],
+        varParams: dict[str, Tuple[float, float, float]],
         nEvals: Tuple[int],
-    ) -> Dict:
+    ) -> dict:
         """
         Evaluate objective function across parameter space for sensitivity analysis.
 
@@ -193,7 +320,9 @@ class BaseObjectiveWrapper:
         # First evaluate at POI
         print("\nEvaluating at Point of Interest...")
         poiValue, poiTime = self._evaluateObjective(
-            evalParams, self.study.saveVisualization, saveAll=self.study.saveAllEvaluations
+            evalParams,
+            self.study.saveVisualization,
+            saveAll=self.study.saveAllEvaluations,
         )
         print(f"POI objective value: {poiValue:.6f}")
 
@@ -226,25 +355,36 @@ class BaseObjectiveWrapper:
                 currentParams[paramName] = value  # Only modify current parameter
 
                 objValue, evalTime = self._evaluateObjective(
-                    currentParams, self.study.saveVisualization, saveAll=self.study.saveAllEvaluations
+                    currentParams,
+                    self.study.saveVisualization,
+                    saveAll=self.study.saveAllEvaluations,
                 )
                 # Save evaluation data
                 if self.progressManager:
                     # Order parameters according to metadata parameterNames
-                    if (self.progressManager.metadata and 
-                        hasattr(self.progressManager.metadata, 'parameterNames') and
-                        self.progressManager.metadata.parameterNames):
-                        orderedParams = [currentParams.get(name, 0.0) for name in self.progressManager.metadata.parameterNames]
+                    if (
+                        self.progressManager.metadata
+                        and hasattr(self.progressManager.metadata, "parameterNames")
+                        and self.progressManager.metadata.parameterNames
+                    ):
+                        orderedParams = [
+                            currentParams.get(name, 0.0)
+                            for name in self.progressManager.metadata.parameterNames
+                        ]
                     else:
                         orderedParams = list(currentParams.values())
-                    
+
                     self._saveEvaluationData(
                         orderedParams, evalTime, objValue, "progressAll", isBest=False
                     )
                 else:
                     # Fallback to legacy system
                     self._saveEvaluationData(
-                        list(currentParams.values()), evalTime, objValue, "progressAll", isBest=False
+                        list(currentParams.values()),
+                        evalTime,
+                        objValue,
+                        "progressAll",
+                        isBest=False,
                     )
                 paramResults.append(
                     {"value": value, "objective": objValue, "time": evalTime}
@@ -273,13 +413,21 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
 
         # Evaluate process
         objectiveValue, elapsedTime = self._evaluateObjective(
-            paramDict, self.study.saveVisualization, saveAll=self.study.saveAllEvaluations
+            paramDict,
+            self.study.saveVisualization,
+            saveAll=self.study.saveAllEvaluations,
         )
 
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
         if not self.progressManager:
             # Only use legacy system if no progress manager
-            self._saveEvaluationData(list(paramDict.values()), elapsedTime, objectiveValue, "progressAll", isBest=False)
+            self._saveEvaluationData(
+                list(paramDict.values()),
+                elapsedTime,
+                objectiveValue,
+                "progressAll",
+                isBest=False,
+            )
 
         return objectiveValue
 
@@ -310,14 +458,20 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
 
         # Evaluate process
         objectiveValue, elapsedTime = self._evaluateObjective(
-            paramDict, self.study.saveVisualization, saveAll=self.study.saveAllEvaluations
+            paramDict,
+            self.study.saveVisualization,
+            saveAll=self.study.saveAllEvaluations,
         )
 
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
         if not self.progressManager:
             # Only use legacy system if no progress manager
             self._saveEvaluationData(
-                list(paramDict.values()), elapsedTime, objectiveValue, "progressAll", isBest=False
+                list(paramDict.values()),
+                elapsedTime,
+                objectiveValue,
+                "progressAll",
+                isBest=False,
             )
 
         return objectiveValue
