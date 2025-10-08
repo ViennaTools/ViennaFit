@@ -6,12 +6,13 @@ import os
 class DistanceMetric:
     """Factory class for distance metrics used in optimization."""
 
-    AVAILABLE_METRICS = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB"]
+    AVAILABLE_METRICS = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD"]
 
     @staticmethod
     def create(
         metricName: str,
         multiDomain: bool = False,
+        criticalDimensionRanges: list[dict] = None,
     ) -> Callable:
         """
         Create a distance metric function based on metric name.
@@ -19,6 +20,12 @@ class DistanceMetric:
         Args:
             metricName: Name of the distance metric to use
             multiDomain: If True, returns function for comparing multiple domain pairs
+            criticalDimensionRanges: List of range configurations for CCD metric. Each dict should have:
+                - 'axis': 'x' or 'y' (the axis to scan along)
+                - 'min': minimum value of the range
+                - 'max': maximum value of the range
+                - 'findMaximum': True to find maximum, False to find minimum
+                Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
 
         Returns:
             For single domain: Callable[[vls.Domain, vls.Domain, bool, str], float]
@@ -45,6 +52,15 @@ class DistanceMetric:
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
                     domains1, domains2, saveVis, path, DistanceMetric._compareAreaAndNarrowBand
                 )
+            elif metricName == "CCD":
+                if criticalDimensionRanges is None:
+                    raise ValueError("criticalDimensionRanges must be provided for CCD metric")
+                return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
+                    domains1, domains2, saveVis, path,
+                    lambda d1, d2, sv, wp: DistanceMetric._compareCriticalDimensions(
+                        d1, d2, sv, wp, criticalDimensionRanges
+                    )
+                )
             else:
                 raise ValueError(
                     f"Invalid distance metric: {metricName}. "
@@ -61,6 +77,12 @@ class DistanceMetric:
                 return DistanceMetric._compareNarrowBand
             elif metricName == "CA+CNB":
                 return DistanceMetric._compareAreaAndNarrowBand
+            elif metricName == "CCD":
+                if criticalDimensionRanges is None:
+                    raise ValueError("criticalDimensionRanges must be provided for CCD metric")
+                return lambda d1, d2, sv, wp: DistanceMetric._compareCriticalDimensions(
+                    d1, d2, sv, wp, criticalDimensionRanges
+                )
             else:
                 raise ValueError(
                     f"Invalid distance metric: {metricName}. "
@@ -197,6 +219,66 @@ class DistanceMetric:
         return ca.getAreaMismatch() + cnb.getSumSquaredDifferences()
 
     @staticmethod
+    def _compareCriticalDimensions(
+        domain1: vls.Domain,
+        domain2: vls.Domain,
+        saveVisualization: bool = False,
+        writePath: str = None,
+        ranges: list[dict] = None,
+    ) -> float:
+        """
+        Compare domains using critical dimensions at user-specified measurement points.
+
+        Args:
+            domain1: First domain to compare
+            domain2: Second domain to compare
+            saveVisualization: Whether to save visualization files
+            writePath: Path for saving visualization files
+            ranges: List of range configurations. Each dict should have:
+                - 'axis': 'x' or 'y' (the axis to scan along)
+                - 'min': minimum value of the range
+                - 'max': maximum value of the range
+                - 'findMaximum': True to find maximum, False to find minimum
+
+        Returns:
+            RMSE of the critical dimension differences
+        """
+        if ranges is None or len(ranges) == 0:
+            raise ValueError("At least one range must be specified for critical dimensions comparison")
+
+        ccd = vls.CompareCriticalDimensions(domain1, domain2)
+
+        # Add user-specified measurement ranges
+        for rangeConfig in ranges:
+            axis = rangeConfig.get('axis', '').lower()
+            minVal = rangeConfig.get('min')
+            maxVal = rangeConfig.get('max')
+            findMaximum = rangeConfig.get('findMaximum', True)
+
+            if axis not in ['x', 'y']:
+                raise ValueError(f"Invalid axis '{axis}'. Must be 'x' or 'y'")
+            if minVal is None or maxVal is None:
+                raise ValueError("Range must specify 'min' and 'max' values")
+
+            if axis == 'x':
+                ccd.addXRange(float(minVal), float(maxVal), bool(findMaximum))
+            else:  # axis == 'y'
+                ccd.addYRange(float(minVal), float(maxVal), bool(findMaximum))
+
+        if saveVisualization:
+            mesh = vls.Mesh()
+            ccd.setOutputMesh(mesh)
+
+        ccd.apply()
+
+        if saveVisualization:
+            # Save mesh to progress directory with evaluation counter
+            ccdPath = f"{writePath}-CCD.vtp"
+            vls.VTKWriter(mesh, ccdPath).apply()
+
+        return ccd.getRMSE()
+
+    @staticmethod
     def _compareMultipleDomains(
         resultDomains: dict[str, vls.Domain],
         targetDomains: dict[str, vls.Domain],
@@ -206,42 +288,42 @@ class DistanceMetric:
     ) -> float:
         """
         Compare multiple domain pairs using specified single domain metric.
-        
+
         Args:
             resultDomains: Dictionary of result domains keyed by domain name
             targetDomains: Dictionary of target domains keyed by domain name
             saveVisualization: Whether to save visualization files
             writePath: Base path for saving visualization files
             singleDomainMetric: Single domain comparison function to use
-            
+
         Returns:
             Sum of all individual domain pair comparisons
         """
         if singleDomainMetric is None:
             raise ValueError("Single domain metric function must be provided")
-            
+
         totalDistance = 0.0
-        
+
         # Ensure all result domains have corresponding target domains
         for domainName in resultDomains.keys():
             if domainName not in targetDomains:
                 raise ValueError(f"No target domain found for result domain '{domainName}'")
-                
+
         # Compare each domain pair
         for domainName in resultDomains.keys():
             resultDomain = resultDomains[domainName]
             targetDomain = targetDomains[domainName]
-            
+
             # Create domain-specific write path if visualization is enabled
             domainWritePath = None
             if saveVisualization and writePath:
                 domainWritePath = f"{writePath}-{domainName}"
-            
+
             # Calculate distance for this domain pair
             distance = singleDomainMetric(
                 resultDomain, targetDomain, saveVisualization, domainWritePath
             )
-            
+
             totalDistance += distance
-            
+
         return totalDistance

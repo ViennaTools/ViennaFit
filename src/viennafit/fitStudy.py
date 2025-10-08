@@ -65,6 +65,7 @@ class Study:
         self.applied = False
         self.processSequence = None
         self.distanceMetric = None
+        self.criticalDimensionRanges = None
         self.evalCounter = 0
         self.saveVisualization = True
         self.saveAllEvaluations = False
@@ -246,7 +247,7 @@ class Study:
 
         return True
 
-    def setDistanceMetric(self, metric: str):
+    def setDistanceMetric(self, metric: str, criticalDimensionRanges: list[dict] = None):
         """
         Set the distance metric for comparing level sets.
 
@@ -257,15 +258,29 @@ class Study:
                         - 'CSF' (Compare sparse field),
                         - 'CNB' (Compare narrow band),
                         - 'CA+CSF' (Sum of CA and CSF),
-                        - 'CA+CNB' (Sum of CA and CNB).
+                        - 'CA+CNB' (Sum of CA and CNB),
+                        - 'CCD' (Compare critical dimensions).
+            criticalDimensionRanges: Required only for 'CCD' metric. List of range configurations.
+                    Each dict should have:
+                        - 'axis': 'x' or 'y' (the axis to scan along)
+                        - 'min': minimum value of the range
+                        - 'max': maximum value of the range
+                        - 'findMaximum': True to find maximum, False to find minimum
+                    Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
         """
-        if metric not in ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB"]:
+        if metric not in ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD"]:
             raise ValueError(
                 f"Invalid distance metric: {metric}. "
-                "Options are 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB'."
+                "Options are 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB', 'CCD'."
+            )
+
+        if metric == "CCD" and criticalDimensionRanges is None:
+            raise ValueError(
+                "criticalDimensionRanges must be provided when using 'CCD' metric"
             )
 
         self.distanceMetric = metric
+        self.criticalDimensionRanges = criticalDimensionRanges
         return self
 
     def apply(self, *args, **kwargs):

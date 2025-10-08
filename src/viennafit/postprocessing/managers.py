@@ -5,7 +5,7 @@ Postprocessing manager classes for optimization and GSS studies.
 from typing import List, Optional
 from .base import BasePostprocessor, PlotConfig, StudyData
 from .loaders import ResultsLoader
-from .plotters import ConvergencePlotter, ParameterPlotter, SensitivityPlotter
+from .plotters import ConvergencePlotter, ParameterPlotter, ParameterProgressionPlotter, SensitivityPlotter
 
 
 class OptimizationPostprocessor(BasePostprocessor):
@@ -21,6 +21,7 @@ class OptimizationPostprocessor(BasePostprocessor):
         plotters = [
             ConvergencePlotter(self.config),
             ParameterPlotter(self.config),
+            ParameterProgressionPlotter(self.config),
         ]
         return plotters
         

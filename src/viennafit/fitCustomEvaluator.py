@@ -40,6 +40,8 @@ class CustomEvaluator:
             {}
         )  # Dict[str, List[float]] - parameter name to list of values
         self.distanceMetric = None
+        self.distanceMetricFunction = None
+        self.isMultiDomainProcess = False
         self.gridResults = []  # List of evaluation results
         self.evaluationName = None
 
@@ -56,6 +58,47 @@ class CustomEvaluator:
         if self.project.initialDomain is not None and "default" not in domains:
             domains.append("single")  # Indicate single domain is available
         return domains
+
+    def getAvailableTargetDomains(self) -> List[str]:
+        """Get list of available target domain names."""
+        return self.project.listTargetLevelSets()
+
+    def validateMultiDomainSetup(self) -> List[str]:
+        """Validate multi-domain setup and return list of issues."""
+        issues = []
+
+        if self.isMultiDomainProcess:
+            # Check for multi-domain requirements
+            if len(self.project.initialDomains) == 0:
+                issues.append("Multi-domain process requires multiple initial domains")
+
+            if len(self.project.targetLevelSets) == 0:
+                issues.append("Multi-domain process requires multiple target domains")
+
+            # Check domain name matching
+            initialNames = set(self.project.initialDomains.keys())
+            targetNames = set(self.project.targetLevelSets.keys())
+
+            missingTargets = initialNames - targetNames
+            if missingTargets:
+                issues.append(f"Missing target domains for initial domains: {', '.join(missingTargets)}")
+        else:
+            # Check for single-domain requirements
+            if self.project.initialDomain is None and len(self.project.initialDomains) == 0:
+                issues.append("No initial domain available")
+
+            if self.project.targetLevelSet is None and len(self.project.targetLevelSets) == 0:
+                issues.append("No target domain available")
+
+        return issues
+
+    def isReadyForEvaluation(self) -> bool:
+        """Check if evaluator is ready for grid evaluation."""
+        if not self.processSequence:
+            return False
+
+        issues = self.validateMultiDomainSetup()
+        return len(issues) == 0
 
     def loadOptimizationRun(self, runName: str) -> "CustomEvaluator":
         """
@@ -98,12 +141,16 @@ class CustomEvaluator:
         self.processSequencePath = processSequenceFile
         self._loadProcessSequence(processSequenceFile)
 
+        # Detect if process sequence supports multi-domain processing
+        self.isMultiDomainProcess = self._detectMultiDomainProcess()
+
         print(f"Loaded optimization run '{runName}':")
         print(f"  Best score: {results.get('bestScore', 'Unknown')}")
         print(
             f"  Parameters: {len(self.optimalParameters)} variable, {len(self.fixedParameters)} fixed"
         )
         print(f"  Process sequence: {self.processSequence.__name__}")
+        print(f"  Multi-domain support: {'Yes' if self.isMultiDomainProcess else 'No'}")
 
         return self
 
@@ -146,13 +193,47 @@ class CustomEvaluator:
             f"No suitable process sequence function found in file: {absPath}"
         )
 
-    def setDistanceMetric(self, metric: str) -> "CustomEvaluator":
+    def _detectMultiDomainProcess(self) -> bool:
+        """Detect if the process sequence function supports multi-domain processing."""
+        if self.processSequence is None:
+            return False
+
+        try:
+            sig = inspect.signature(self.processSequence)
+            params = list(sig.parameters.values())
+
+            if len(params) >= 1:
+                firstParam = params[0]
+                # Check if first parameter is annotated as dict[str, Domain] or list[Domain]
+                if firstParam.annotation in [dict[str, vps.Domain], list[vps.Domain]]:
+                    return True
+                # Also check if project has multiple domains/targets
+                elif (
+                    len(getattr(self.project, "initialDomains", {})) > 0
+                    and len(getattr(self.project, "targetLevelSets", {})) > 0
+                ):
+                    return True
+
+            return False
+        except Exception:
+            return False
+
+    def setDistanceMetric(
+        self, metric: str, criticalDimensionRanges: list[dict] = None
+    ) -> "CustomEvaluator":
         """
         Set the distance metric for comparing level sets.
 
         Args:
             metric: Distance metric to be used.
-                   Options: 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB'
+                   Options: 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB', 'CCD'
+            criticalDimensionRanges: Required only for 'CCD' metric. List of range configurations.
+                    Each dict should have:
+                        - 'axis': 'x' or 'y' (the axis to scan along)
+                        - 'min': minimum value of the range
+                        - 'max': maximum value of the range
+                        - 'findMaximum': True to find maximum, False to find minimum
+                    Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
 
         Returns:
             self: For method chaining
@@ -163,7 +244,19 @@ class CustomEvaluator:
                 f"Options are {', '.join(DistanceMetric.AVAILABLE_METRICS)}."
             )
 
+        if metric == "CCD" and criticalDimensionRanges is None:
+            raise ValueError(
+                "criticalDimensionRanges must be provided when using 'CCD' metric"
+            )
+
         self.distanceMetric = metric
+        self.criticalDimensionRanges = criticalDimensionRanges
+        # Create the distance metric function with appropriate multi-domain support
+        self.distanceMetricFunction = DistanceMetric.create(
+            metric,
+            multiDomain=self.isMultiDomainProcess,
+            criticalDimensionRanges=criticalDimensionRanges,
+        )
         return self
 
     def setVariableValues(
@@ -240,8 +333,22 @@ class CustomEvaluator:
             )
             self.setDistanceMetric("CA")
 
+        # Ensure distance metric function is created if not already done
+        if not self.distanceMetricFunction:
+            criticalDimensionRanges = getattr(self, "criticalDimensionRanges", None)
+            self.distanceMetricFunction = DistanceMetric.create(
+                self.distanceMetric,
+                multiDomain=self.isMultiDomainProcess,
+                criticalDimensionRanges=criticalDimensionRanges,
+            )
+
         if not self.variableValues:
             raise ValueError("No variable values set. Call setVariableValues() first.")
+
+        # Validate multi-domain setup
+        validationIssues = self.validateMultiDomainSetup()
+        if validationIssues:
+            raise ValueError(f"Multi-domain setup validation failed: {'; '.join(validationIssues)}")
 
         self.evaluationName = evaluationName
         self.gridResults = []
@@ -261,7 +368,12 @@ class CustomEvaluator:
             f"Starting grid evaluation '{evaluationName}' with {len(combinations)} combinations..."
         )
 
-        distanceFunction = DistanceMetric.create(self.distanceMetric)
+        print(f"Multi-domain mode: {'Enabled' if self.isMultiDomainProcess else 'Disabled'}")
+        if self.isMultiDomainProcess:
+            print(f"Available initial domains: {list(self.project.initialDomains.keys())}")
+            print(f"Available target domains: {list(self.project.targetLevelSets.keys())}")
+
+        distanceFunction = self.distanceMetricFunction
 
         for i, combination in enumerate(combinations, 1):
             # Create parameter set for this combination
@@ -282,41 +394,92 @@ class CustomEvaluator:
             startTime = time.time()
 
             try:
-                # Create a fresh copy of the initial domain for each evaluation
-                if initialDomainName is not None:
-                    # Use named initial domain
-                    if initialDomainName not in self.project.initialDomains:
-                        raise ValueError(f"Initial domain '{initialDomainName}' not found in project")
-                    domainCopy = vps.Domain(self.project.initialDomains[initialDomainName])
-                else:
-                    # Use default single initial domain for backward compatibility
-                    domainCopy = vps.Domain(self.project.initialDomain)
-                
-                # Run process sequence with current parameters on the copy
-                resultDomain = self.processSequence(domainCopy, evalParams)
-
                 # Generate output name for this evaluation
                 outputName = f"eval_{i:04d}"
-
-                # Save visualization if requested
                 writePath = None
-                resultPath = None
                 if saveVisualization:
                     writePath = os.path.join(outputDir, outputName)
 
-                    # Save result domain
-                    resultPath = f"{writePath}-result.vtp"
-                    resultMesh = vls.Mesh()
-                    vls.ToSurfaceMesh(resultDomain, resultMesh).apply()
-                    vls.VTKWriter(resultMesh, resultPath).apply()
+                if self.isMultiDomainProcess:
+                    # Multi-domain processing
+                    initialDomains = {}
 
-                # Calculate objective value
-                objectiveValue = distanceFunction(
-                    resultDomain,
-                    self.project.targetLevelSet,
-                    saveVisualization,
-                    writePath,
-                )
+                    if initialDomainName is not None:
+                        # Use specific named domain only
+                        if initialDomainName not in self.project.initialDomains:
+                            raise ValueError(f"Initial domain '{initialDomainName}' not found in project")
+                        domainCopy = vps.Domain(self.project.initialDomains[initialDomainName])
+                        initialDomains[initialDomainName] = domainCopy
+                    else:
+                        # Use all available initial domains
+                        for name, domain in self.project.initialDomains.items():
+                            domainCopy = vps.Domain(domain)
+                            initialDomains[name] = domainCopy
+
+                    # Run process sequence with all domains
+                    resultDomains = self.processSequence(initialDomains, evalParams)
+
+                    if not isinstance(resultDomains, dict):
+                        raise ValueError("Multi-domain process sequence must return dict[str, Domain]")
+
+                    # Convert result domains to level sets for comparison
+                    resultLevelSets = {}
+                    for name, domain in resultDomains.items():
+                        if domain.getLevelSets():
+                            resultLevelSets[name] = domain.getLevelSets()[-1]  # Use last level set
+                        else:
+                            raise ValueError(f"Result domain '{name}' has no level sets")
+
+                    # Save visualization if requested
+                    resultPaths = {}
+                    resultPath = None
+                    if saveVisualization:
+                        for name, levelSet in resultLevelSets.items():
+                            resultPath = f"{writePath}-result-{name}.vtp"
+                            resultMesh = vls.Mesh()
+                            vls.ToSurfaceMesh(levelSet, resultMesh).apply()
+                            vls.VTKWriter(resultMesh, resultPath).apply()
+                            resultPaths[name] = resultPath
+
+                    # Calculate objective value using multi-domain distance metric
+                    objectiveValue = distanceFunction(
+                        resultLevelSets,
+                        self.project.targetLevelSets,
+                        saveVisualization,
+                        writePath,
+                    )
+
+                else:
+                    # Single-domain processing (backward compatibility)
+                    if initialDomainName is not None:
+                        # Use named initial domain
+                        if initialDomainName not in self.project.initialDomains:
+                            raise ValueError(f"Initial domain '{initialDomainName}' not found in project")
+                        domainCopy = vps.Domain(self.project.initialDomains[initialDomainName])
+                    else:
+                        # Use default single initial domain for backward compatibility
+                        domainCopy = vps.Domain(self.project.initialDomain)
+
+                    # Run process sequence with current parameters on the copy
+                    resultDomain = self.processSequence(domainCopy, evalParams)
+
+                    # Save visualization if requested
+                    resultPath = None
+                    resultPaths = None
+                    if saveVisualization:
+                        # Save result domain
+                        resultPath = f"{writePath}-result.vtp"
+                        resultMesh = vls.Mesh()
+                        vls.ToSurfaceMesh(resultDomain, resultMesh).apply()
+                        vls.VTKWriter(resultMesh, resultPath).apply()
+
+                    # Calculate objective value using single-domain distance metric
+                    objectiveValue = distanceFunction(
+                        resultDomain,
+                        self.project.targetLevelSet,
+                        saveVisualization,
+                        writePath,
+                    )
 
                 executionTime = time.time() - startTime
 
@@ -327,7 +490,8 @@ class CustomEvaluator:
                     "allParameters": evalParams,
                     "objectiveValue": objectiveValue,
                     "executionTime": executionTime,
-                    "resultPath": resultPath,
+                    "resultPath": resultPaths if self.isMultiDomainProcess else resultPath,
+                    "multiDomain": self.isMultiDomainProcess,
                 }
 
                 self.gridResults.append(result)
@@ -346,6 +510,7 @@ class CustomEvaluator:
                     "executionTime": time.time() - startTime,
                     "error": str(e),
                     "resultPath": None,
+                    "multiDomain": self.isMultiDomainProcess,
                 }
                 self.gridResults.append(result)
 
@@ -434,6 +599,9 @@ class CustomEvaluator:
                 "optimalParameters": self.optimalParameters,
                 "fixedParameters": self.fixedParameters,
                 "variableValues": self.variableValues,
+                "isMultiDomainProcess": self.isMultiDomainProcess,
+                "availableInitialDomains": self.getAvailableInitialDomains(),
+                "availableTargetDomains": self.getAvailableTargetDomains(),
             },
             "summary": {
                 "bestObjectiveValue": (

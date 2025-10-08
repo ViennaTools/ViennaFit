@@ -688,3 +688,540 @@ def migrateLegacyProgressFile(
         manager.saveEvaluation(record, saveAll=True)
     
     print(f"Migrated {len(records)} records from {legacyFilepath} to {newFilepath}")
+
+
+def plotParameterProgression(
+    fileName,
+    plotTitle="",
+    logscale=None,
+    logscaleObjective=False,
+    logscaleParameters=False,
+    numberOfEvaluations=0,
+    fontSize=1.0,
+    dpi=300,
+    allXTicks=False,
+    skipJumps=False,
+    skipParameters=None,
+):
+    """
+    Plot parameter progression showing how parameters evolve during optimization.
+    Similar to plotProgressFileH1 but focuses on parameter values vs evaluation number.
+
+    Args:
+        fileName: Path to progress file (CSV or legacy TXT format)
+        plotTitle: Title for the plot
+        logscale: Legacy parameter - applies log scale to both objective and parameters (deprecated, use logscaleObjective/logscaleParameters)
+        logscaleObjective: Whether to use logarithmic scale for objective function y-axis
+        logscaleParameters: Whether to use logarithmic scale for parameter y-axes
+        numberOfEvaluations: Limit number of evaluations to plot (0 = all)
+        fontSize: Font size multiplier
+        dpi: Plot DPI
+        allXTicks: Whether to show all x-tick values
+        skipJumps: Whether to skip evaluations that don't improve objective
+        skipParameters: List of parameter names to exclude from plotting (e.g., ['param1', 'param2'])
+
+    Returns:
+        Path to created plot file
+    """
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import ast
+
+    # Handle backward compatibility for legacy logscale parameter
+    if logscale is not None:
+        logscaleObjective = logscale
+        logscaleParameters = logscale
+
+    # Initialize skipParameters as empty list if None
+    if skipParameters is None:
+        skipParameters = []
+
+    # Set font to Times and apply font size multiplier
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams["font.serif"] = ["Times New Roman"] + plt.rcParams["font.serif"]
+    originalFontSize = plt.rcParams["font.size"]
+    plt.rcParams["font.size"] = originalFontSize * fontSize
+
+    try:
+        # Read and parse the progress file
+        progressData, paramNames = _readProgressFile(fileName)
+        if progressData is None or len(paramNames) == 0:
+            raise ValueError(f"Could not read progress data from {fileName}")
+
+        # Filter out skipped parameters
+        if skipParameters:
+            # Find indices of parameters to keep
+            keepIndices = []
+            filteredParamNames = []
+            for i, paramName in enumerate(paramNames):
+                if paramName not in skipParameters:
+                    keepIndices.append(i)
+                    filteredParamNames.append(paramName)
+
+            # Update parameter names
+            paramNames = filteredParamNames
+
+            # Filter the progress data to keep only non-skipped parameters
+            if keepIndices:
+                # Keep selected parameter columns + objective (last column)
+                filteredProgressData = progressData[:, keepIndices + [-1]]
+                progressData = filteredProgressData
+            else:
+                # If all parameters are skipped, only keep objective
+                progressData = progressData[:, [-1]]
+                paramNames = []
+
+        # Apply evaluation limit
+        if numberOfEvaluations > 0:
+            progressData = progressData[:numberOfEvaluations]
+        else:
+            numberOfEvaluations = len(progressData)
+
+        # Filter data if skipJumps is enabled
+        if skipJumps:
+            filteredData = []
+            filteredIndices = []
+            lastValue = float("inf")
+
+            for i, row in enumerate(progressData):
+                currentValue = row[-1]  # Objective value is last column
+                if currentValue < lastValue:
+                    filteredData.append(row)
+                    filteredIndices.append(i + 1)  # +1 because plot indices start from 1
+                    lastValue = currentValue
+
+            progressData = np.array(filteredData) if filteredData else progressData
+            indexToUse = filteredIndices
+        else:
+            indexToUse = list(range(1, len(progressData) + 1))
+
+        # Find minimum objective for reporting
+        minIndex = np.argmin(progressData[:, -1])
+        minRow = progressData[minIndex]
+        print("minIndex: ", minIndex)
+        print("minRow: ", minRow)
+
+        # Create subplots for each parameter + objective function
+        numParams = len(paramNames)
+        numSubplots = numParams + 1  # +1 for objective function
+
+        fig, axs = plt.subplots(
+            numSubplots, 1,
+            figsize=(3.5, max(7.5, numSubplots * 1.2)),
+            dpi=dpi
+        )
+
+        # Ensure axs is always a list
+        if numSubplots == 1:
+            axs = [axs]
+
+        # Plot objective function (last column)
+        objValues = [float(row[-1]) for row in progressData]
+        axs[0].plot(indexToUse, objValues, linewidth=1.5)
+        axs[0].scatter(indexToUse, objValues, color="red", s=15)
+        axs[0].set_ylabel("Objective func.", fontsize=plt.rcParams["font.size"])
+
+        # Apply log scale to objective function if requested
+        if logscaleObjective:
+            axs[0].set_yscale("log")
+
+        # Plot each parameter
+        colors = ['blue', 'green', 'orange', 'cyan', 'brown', 'purple', 'pink', 'gray']
+        for i, paramName in enumerate(paramNames):
+            paramValues = [float(row[i]) for row in progressData]
+            ax = axs[i + 1]
+            color = colors[i % len(colors)]
+
+            ax.plot(indexToUse, paramValues, linewidth=1.5, color=color)
+            ax.scatter(indexToUse, paramValues, color=color, s=15)
+            ax.set_ylabel(paramName, fontsize=plt.rcParams["font.size"])
+
+            # Apply log scale to parameter if requested
+            if logscaleParameters:
+                ax.set_yscale("log")
+
+        # Set x-label on bottom subplot
+        axs[-1].set_xlabel("Evaluation number", fontsize=plt.rcParams["font.size"])
+
+        # Configure all axes
+        for i, ax in enumerate(axs):
+            ax.tick_params(axis="both", labelsize=plt.rcParams["font.size"] * 0.8)
+            ax.locator_params(axis="x", nbins=5)
+
+            # Only set nbins for y-axis if not using log scale
+            # Check log scale setting for each subplot individually
+            if i == 0:  # Objective function
+                if not logscaleObjective:
+                    ax.locator_params(axis="y", nbins=4)
+            else:  # Parameter plots
+                if not logscaleParameters:
+                    ax.locator_params(axis="y", nbins=4)
+
+            ax.grid(True, alpha=0.3)
+
+        # Handle x-ticks
+        if allXTicks:
+            for ax in axs:
+                ax.set_xticks(range(1, numberOfEvaluations + 1))
+
+        # Adjust layout with compact spacing for IEEE column format
+        plt.tight_layout(pad=0.8, h_pad=0.5)
+
+        # Set title
+        if plotTitle:
+            fig.suptitle(plotTitle, fontsize=plt.rcParams["font.size"])
+
+        # Generate output path with appropriate suffix
+        basename = os.path.basename(fileName)
+
+        # Create suffix based on log scale settings
+        if logscaleObjective and logscaleParameters:
+            suffix = "_log"  # Both (backward compatible)
+        elif logscaleObjective:
+            suffix = "_obj_log"  # Objective only
+        elif logscaleParameters:
+            suffix = "_params_log"  # Parameters only
+        else:
+            suffix = ""  # Neither
+
+        writePath = fileName.split(".")[0] + f"_parameter_progression{suffix}.png"
+
+        # Save plot
+        plt.savefig(writePath, bbox_inches="tight", dpi=dpi)
+        plt.close()
+
+        print(f"Parameter progression plot saved to: {writePath}")
+        return writePath
+
+    finally:
+        # Restore original font size
+        plt.rcParams["font.size"] = originalFontSize
+
+
+def _readProgressFile(fileName):
+    """
+    Read progress file in either CSV or legacy TXT format.
+
+    Returns:
+        tuple: (progressData as numpy array, parameterNames as list)
+    """
+    import pandas as pd
+    import ast
+
+    if not os.path.exists(fileName):
+        raise FileNotFoundError(f"Progress file not found: {fileName}")
+
+    # Try CSV format first
+    if fileName.endswith('.csv'):
+        try:
+            df = pd.read_csv(fileName)
+            # Extract parameter names (exclude non-parameter columns)
+            excludeCols = ['evaluationNumber', 'elapsedTime', 'objectiveValue']
+            paramNames = [col for col in df.columns if col not in excludeCols]
+
+            # Construct data array: [param1, param2, ..., objectiveValue]
+            paramData = df[paramNames].values if paramNames else np.array([])
+            if 'objectiveValue' in df.columns:
+                objData = df['objectiveValue'].values.reshape(-1, 1)
+                if paramData.size > 0:
+                    progressData = np.column_stack([paramData, objData])
+                else:
+                    progressData = objData
+                    paramNames = []
+            else:
+                progressData = paramData
+
+            return progressData, paramNames
+        except Exception as e:
+            print(f"Failed to read CSV format: {e}")
+
+    # Try legacy TXT format
+    try:
+        with open(fileName, 'r') as f:
+            lines = f.readlines()
+
+        dataRows = []
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                try:
+                    dataList = ast.literal_eval(line)
+                    if isinstance(dataList, list):
+                        dataRow = [float(x) for x in dataList]
+                        dataRows.append(dataRow)
+                except (ValueError, SyntaxError):
+                    continue
+
+        if not dataRows:
+            raise ValueError("No valid data found in file")
+
+        # Convert to numpy array
+        maxCols = max(len(row) for row in dataRows)
+        paddedRows = []
+        for row in dataRows:
+            if len(row) < maxCols:
+                row.extend([np.nan] * (maxCols - len(row)))
+            paddedRows.append(row)
+
+        progressData = np.array(paddedRows)
+
+        # Assume format: [param1, param2, ..., elapsedTime, objectiveValue]
+        # Create generic parameter names
+        numParams = progressData.shape[1] - 2  # -2 for elapsedTime and objectiveValue
+        paramNames = [f"param{i+1}" for i in range(max(0, numParams))]
+
+        return progressData, paramNames
+
+    except Exception as e:
+        print(f"Failed to read TXT format: {e}")
+        raise ValueError(f"Could not parse progress file {fileName}")
+
+
+def plotParameterPositions(
+    resultsFile=None,
+    bestParameters=None,
+    parameterBounds=None,
+    plotTitle="Parameter Positions",
+    skipParameters=None,
+    fontSize=1.0,
+    dpi=300,
+    outputPath=None,
+):
+    """
+    Plot optimal parameter positions within their bounds using a compact horizontal bar chart.
+
+    Args:
+        resultsFile: Path to results JSON file (alternative to providing bestParameters/bounds directly)
+        bestParameters: Dictionary of parameter names to optimal values
+        parameterBounds: Dictionary of parameter names to [min, max] bounds
+        plotTitle: Title for the plot
+        skipParameters: List of parameter names to exclude from plotting
+        fontSize: Font size multiplier
+        dpi: Plot DPI
+        outputPath: Custom output path (if None, auto-generated from input)
+
+    Returns:
+        Path to created plot file
+
+    Example:
+        # From results file
+        plotParameterPositions("optimization_results.json")
+
+        # Direct input
+        plotParameterPositions(
+            bestParameters={'param1': 1.5, 'param2': 2.3},
+            parameterBounds={'param1': [1.0, 2.0], 'param2': [2.0, 3.0]}
+        )
+    """
+    import matplotlib.pyplot as plt
+    import json
+
+    # Initialize skipParameters as empty list if None
+    if skipParameters is None:
+        skipParameters = []
+
+    # Load data from results file if provided
+    if resultsFile is not None:
+        if not os.path.exists(resultsFile):
+            raise FileNotFoundError(f"Results file not found: {resultsFile}")
+
+        with open(resultsFile, 'r') as f:
+            results = json.load(f)
+
+        if bestParameters is None:
+            bestParameters = results.get('bestParameters', {})
+        if parameterBounds is None:
+            parameterBounds = results.get('variableParameters', results.get('parameterBounds', {}))
+
+    # Validate inputs
+    if not bestParameters:
+        raise ValueError("No best parameters provided. Either specify resultsFile or bestParameters.")
+    if not parameterBounds:
+        raise ValueError("No parameter bounds provided. Either specify resultsFile or parameterBounds.")
+
+    # Filter parameters based on skipParameters
+    filteredParams = {
+        name: value for name, value in bestParameters.items()
+        if name not in skipParameters and name in parameterBounds
+    }
+
+    if not filteredParams:
+        raise ValueError("No parameters to plot after filtering.")
+
+    # Set font styling
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams["font.serif"] = ["Times New Roman"] + plt.rcParams["font.serif"]
+    originalFontSize = plt.rcParams["font.size"]
+    plt.rcParams["font.size"] = originalFontSize * fontSize
+
+    try:
+        # Prepare data for plotting
+        paramNames = list(filteredParams.keys())
+        paramValues = list(filteredParams.values())
+        bounds = [parameterBounds[name] for name in paramNames]
+
+        # Calculate positions and percentages
+        positions = []
+        percentages = []
+        rangeWidths = []
+
+        for i, (name, value) in enumerate(filteredParams.items()):
+            minBound, maxBound = parameterBounds[name]
+            rangeWidth = maxBound - minBound
+            rangeWidths.append(rangeWidth)
+
+            # Calculate position as percentage of range
+            if rangeWidth > 0:
+                percentage = ((value - minBound) / rangeWidth) * 100
+            else:
+                percentage = 50  # Default to middle if no range
+            percentages.append(percentage)
+            positions.append(value)
+
+        # Create horizontal bar chart with normalized x-axis
+        numParams = len(paramNames)
+        figHeight = max(3.5, numParams * 0.8 + 1.5)  # Slightly more space for annotations
+        fig, ax = plt.subplots(figsize=(10, figHeight), dpi=dpi)  # Wider for bounds annotations
+
+        # Create normalized horizontal bars (all parameters from 0 to 1)
+        for i, (name, value) in enumerate(filteredParams.items()):
+            minBound, maxBound = parameterBounds[name]
+            y_pos = numParams - 1 - i  # Reverse order for top-to-bottom display
+
+            # Calculate normalized position (0 to 1)
+            if maxBound != minBound:
+                normalizedValue = (value - minBound) / (maxBound - minBound)
+            else:
+                normalizedValue = 0.5  # Middle if no range
+
+            # Draw full-width normalized range bar (0 to 1)
+            ax.barh(
+                y_pos,
+                1.0,  # Full width = 100% of range
+                left=0.0,
+                height=0.6,
+                color='lightblue',
+                alpha=0.7,
+                edgecolor='navy',
+                linewidth=1
+            )
+
+            # Add optimal value marker at normalized position
+            ax.scatter(
+                normalizedValue, y_pos,
+                color='red',
+                s=80,
+                zorder=5,
+                marker='o',
+                edgecolor='darkred',
+                linewidth=1.5
+            )
+
+            # Add bounds annotations at bar edges
+            # Left bound (minimum)
+            ax.annotate(
+                f'{minBound:.3g}',
+                xy=(0.0, y_pos),
+                xytext=(-5, 0),
+                textcoords='offset points',
+                va='center',
+                ha='right',
+                fontsize=plt.rcParams["font.size"] * 0.8,
+                color='navy',
+                fontweight='bold'
+            )
+
+            # Right bound (maximum)
+            ax.annotate(
+                f'{maxBound:.3g}',
+                xy=(1.0, y_pos),
+                xytext=(5, 0),
+                textcoords='offset points',
+                va='center',
+                ha='left',
+                fontsize=plt.rcParams["font.size"] * 0.8,
+                color='navy',
+                fontweight='bold'
+            )
+
+            # Add optimal value and percentage annotation above the marker
+            percentage = normalizedValue * 100
+            ax.annotate(
+                f'{value:.3g} ({percentage:.1f}%)',
+                xy=(normalizedValue, y_pos),
+                xytext=(0, 15),
+                textcoords='offset points',
+                va='bottom',
+                ha='center',
+                fontsize=plt.rcParams["font.size"] * 0.85,
+                fontweight='bold',
+                bbox=dict(
+                    boxstyle='round,pad=0.3',
+                    facecolor='white',
+                    alpha=0.9,
+                    edgecolor='gray'
+                )
+            )
+
+        # Format axes with normalized scale
+        ax.set_xlim(-0.1, 1.1)  # Slight padding for bounds annotations
+        ax.set_yticks(range(numParams))
+        ax.set_yticklabels([paramNames[numParams - 1 - i] for i in range(numParams)])
+
+        # Set up normalized x-axis
+        ax.set_xlabel('Normalized Position within Parameter Bounds', fontsize=plt.rcParams["font.size"])
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
+        ax.set_xticklabels(['0%', '25%', '50%', '75%', '100%'])
+        ax.set_title(plotTitle, fontsize=plt.rcParams["font.size"] * 1.1, pad=20)
+
+        # Add grid for easier reading
+        ax.grid(True, alpha=0.3, axis='x')
+        ax.set_axisbelow(True)
+
+        # Add vertical reference lines at quartiles
+        for pos in [0.25, 0.5, 0.75]:
+            ax.axvline(x=pos, color='gray', linestyle='--', alpha=0.3, zorder=1)
+
+        # Adjust layout to accommodate external legend
+        plt.tight_layout()
+        plt.subplots_adjust(right=0.85)  # Make room for external legend
+
+        # Add legend
+        from matplotlib.patches import Patch
+        from matplotlib.lines import Line2D
+
+        legendElements = [
+            Patch(facecolor='lightblue', alpha=0.7, edgecolor='navy', label='Normalized Parameter Range (0-100%)'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='red',
+                   markersize=8, markeredgecolor='darkred', label='Optimal Value Position'),
+            Line2D([0], [0], color='gray', linestyle='--', alpha=0.5, label='Reference Lines (25%, 50%, 75%)')
+        ]
+
+        ax.legend(
+            handles=legendElements,
+            bbox_to_anchor=(1.05, 1),  # Outside plot area, top-right
+            loc='upper left',           # Anchor point on legend
+            frameon=True,
+            fancybox=True,
+            shadow=True,
+            fontsize=plt.rcParams["font.size"] * 0.8
+        )
+
+        # Generate output path
+        if outputPath is None:
+            if resultsFile:
+                baseName = os.path.splitext(resultsFile)[0]
+                outputPath = f"{baseName}_parameter_positions.png"
+            else:
+                outputPath = "parameter_positions.png"
+
+        # Save plot
+        plt.savefig(outputPath, bbox_inches='tight', dpi=dpi)
+        plt.close()
+
+        print(f"Parameter positions plot saved to: {outputPath}")
+        return outputPath
+
+    finally:
+        # Restore original font size
+        plt.rcParams["font.size"] = originalFontSize
