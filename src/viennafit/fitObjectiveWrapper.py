@@ -66,6 +66,8 @@ class BaseObjectiveWrapper:
         objectiveValue: float,
         filename: str,
         isBest: bool = False,
+        simulationTime: float = 0.0,
+        distanceMetricTime: float = 0.0,
     ):
         """Save evaluation data to progress file."""
         # Use new progress manager if available
@@ -78,6 +80,8 @@ class BaseObjectiveWrapper:
                 objectiveValue=objectiveValue,
                 isBest=isBest,
                 saveAll=True,
+                simulationTime=simulationTime,
+                distanceMetricTime=distanceMetricTime,
             )
         else:
             # Fallback to legacy system
@@ -92,9 +96,14 @@ class BaseObjectiveWrapper:
         saveVisualization: bool = False,
         saveAll: bool = False,
         variableParamNames: set[str] = None,
-    ) -> Tuple[float, float]:
-        """Run process sequence and evaluate result."""
+    ) -> Tuple[float, float, float, float]:
+        """Run process sequence and evaluate result.
+
+        Returns:
+            Tuple[float, float, float, float]: (objectiveValue, elapsedTime, simulationTime, distanceMetricTime)
+        """
         startTime = time.time()
+        simulationStartTime = startTime
 
         if self.isMultiDomainProcess:
             # Multi-domain processing
@@ -120,11 +129,19 @@ class BaseObjectiveWrapper:
                 )
 
             # Apply process sequence to all domains (modifies vps.Domains in-place)
-            resultDomains = self.study.processSequence(initialDomains, paramDict)
+            processResult = self.study.processSequence(initialDomains, paramDict)
+
+            # Handle optional timing dict return
+            postProcessingTime = 0.0
+            if isinstance(processResult, tuple) and len(processResult) == 2:
+                resultDomains, timingDict = processResult
+                postProcessingTime = timingDict.get("postProcessingTime", 0.0)
+            else:
+                resultDomains = processResult
 
             if not isinstance(resultDomains, dict):
                 raise ValueError(
-                    "Multi-domain process sequence must return dict[str, Domain]"
+                    "Multi-domain process sequence must return dict[str, Domain] or (dict[str, Domain], dict)"
                 )
         else:
             # Single-domain processing (backward compatibility)
@@ -143,7 +160,19 @@ class BaseObjectiveWrapper:
                 domainCopy.deepCopy(self.study.project.initialDomain)
 
             # Apply process sequence
-            resultDomain = self.study.processSequence(domainCopy, paramDict)
+            processResult = self.study.processSequence(domainCopy, paramDict)
+
+            # Handle optional timing dict return
+            postProcessingTime = 0.0
+            if isinstance(processResult, tuple) and len(processResult) == 2:
+                resultDomain, timingDict = processResult
+                postProcessingTime = timingDict.get("postProcessingTime", 0.0)
+            else:
+                resultDomain = processResult
+
+        # Track simulation time (subtract post-processing if provided)
+        simulationTime = time.time() - simulationStartTime - postProcessingTime
+        distanceMetricStartTime = time.time()
 
         self.study.evalCounter += 1
 
@@ -204,6 +233,8 @@ class BaseObjectiveWrapper:
                     ),
                 )
 
+        # Track distance metric time (include post-processing time from process sequence)
+        distanceMetricTime = time.time() - distanceMetricStartTime + postProcessingTime
         elapsedTime = time.time() - startTime
 
         newBest = objectiveValue <= self.study.bestScore
@@ -234,6 +265,8 @@ class BaseObjectiveWrapper:
                 objectiveValue,
                 "progress",
                 isBest=newBest,
+                simulationTime=simulationTime,
+                distanceMetricTime=distanceMetricTime,
             )
         else:
             # Fallback to legacy system - only save best to progress.txt
@@ -244,6 +277,8 @@ class BaseObjectiveWrapper:
                     objectiveValue,
                     "progress",
                     isBest=True,
+                    simulationTime=simulationTime,
+                    distanceMetricTime=distanceMetricTime,
                 )
 
         if newBest or self.study.saveAllEvaluations:
@@ -269,7 +304,7 @@ class BaseObjectiveWrapper:
                 # Save the processed vps.Domain (not the returned level set)
                 domainCopy.saveSurfaceMesh(filePath, True)
 
-        return objectiveValue, elapsedTime
+        return objectiveValue, elapsedTime, simulationTime, distanceMetricTime
 
     def _generateParameterString(self, paramDict: dict[str, float], variableParamNames: set[str] = None) -> str:
         """Generate a compact string representation of variable parameters for filenames."""
@@ -328,7 +363,7 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
             paramDict[name] = value
 
         # Evaluate process
-        objectiveValue, elapsedTime = self._evaluateObjective(
+        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
             paramDict,
             self.study.saveVisualization,
             saveAll=self.study.saveAllEvaluations,
@@ -343,6 +378,8 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
                 objectiveValue,
                 "progressAll",
                 isBest=False,
+                simulationTime=simulationTime,
+                distanceMetricTime=distanceMetricTime,
             )
 
         return objectiveValue
@@ -373,7 +410,7 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
             paramDict[name] = value
 
         # Evaluate process
-        objectiveValue, elapsedTime = self._evaluateObjective(
+        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
             paramDict,
             self.study.saveVisualization,
             saveAll=self.study.saveAllEvaluations,
@@ -388,6 +425,8 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
                 objectiveValue,
                 "progressAll",
                 isBest=False,
+                simulationTime=simulationTime,
+                distanceMetricTime=distanceMetricTime,
             )
 
         return objectiveValue

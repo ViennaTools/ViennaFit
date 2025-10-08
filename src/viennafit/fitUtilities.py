@@ -160,7 +160,9 @@ def saveEvalToProgressManager(
     elapsedTime: float,
     objectiveValue: float,
     isBest: bool = False,
-    saveAll: bool = True
+    saveAll: bool = True,
+    simulationTime: float = 0.0,
+    distanceMetricTime: float = 0.0
 ) -> None:
     """Save evaluation using the new progress manager system"""
     record = EvaluationRecord(
@@ -168,9 +170,11 @@ def saveEvalToProgressManager(
         parameterValues=parameterValues,
         elapsedTime=elapsedTime,
         objectiveValue=objectiveValue,
-        isBest=isBest
+        isBest=isBest,
+        simulationTime=simulationTime,
+        distanceMetricTime=distanceMetricTime
     )
-    
+
     progressManager.saveEvaluation(record, saveAll=saveAll)
 
 
@@ -311,14 +315,18 @@ class EvaluationRecord:
     elapsedTime: float
     objectiveValue: float
     isBest: bool = False
-    
+    simulationTime: float = 0.0
+    distanceMetricTime: float = 0.0
+
     def toDict(self) -> Dict[str, Any]:
         return {
             "evaluationNumber": self.evaluationNumber,
             "parameterValues": self.parameterValues,
             "elapsedTime": self.elapsedTime,
             "objectiveValue": self.objectiveValue,
-            "isBest": self.isBest
+            "isBest": self.isBest,
+            "simulationTime": self.simulationTime,
+            "distanceMetricTime": self.distanceMetricTime
         }
 
 
@@ -419,33 +427,35 @@ class CSVProgressStorage(ProgressDataManager):
     def _saveRecordToCsv(self, record: EvaluationRecord, filepath: str) -> None:
         """Save a single record to CSV file"""
         fileExists = os.path.exists(filepath)
-        
+
         with open(filepath, 'a', newline='') as csvfile:
             # Use actual parameter count instead of metadata names to avoid index errors
             actualParamCount = len(record.parameterValues)
-            
+
             if self.metadata and len(self.metadata.parameterNames) == actualParamCount:
-                fieldnames = ['evaluationNumber'] + self.metadata.parameterNames + ['elapsedTime', 'objectiveValue']
+                fieldnames = ['evaluationNumber'] + self.metadata.parameterNames + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']
             else:
-                fieldnames = ['evaluationNumber'] + [f'param_{i}' for i in range(actualParamCount)] + ['elapsedTime', 'objectiveValue']
-            
+                fieldnames = ['evaluationNumber'] + [f'param_{i}' for i in range(actualParamCount)] + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']
+
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            
+
             # Write header if file is new
             if not fileExists:
                 writer.writeheader()
-            
+
             # Write data row
             row = {'evaluationNumber': record.evaluationNumber}
-            paramFieldnames = fieldnames[1:-2]  # Skip evalNumber and last two columns
+            paramFieldnames = fieldnames[1:-4]  # Skip evalNumber and last four columns
             for i, paramName in enumerate(paramFieldnames):
                 if i < len(record.parameterValues):
                     row[paramName] = record.parameterValues[i]
                 else:
                     row[paramName] = 0.0  # Default value if not enough parameters
             row['elapsedTime'] = record.elapsedTime
+            row['simulationTime'] = record.simulationTime
+            row['distanceMetricTime'] = record.distanceMetricTime
             row['objectiveValue'] = record.objectiveValue
-            
+
             writer.writerow(row)
     
     def loadData(self) -> Tuple[List[EvaluationRecord], List[EvaluationRecord], ProgressMetadata]:
@@ -472,30 +482,36 @@ class CSVProgressStorage(ProgressDataManager):
     def _loadRecordsFromCsv(self, filepath: str) -> List[EvaluationRecord]:
         """Load records from a CSV file"""
         records = []
-        
+
         with open(filepath, 'r') as csvfile:
             reader = csv.DictReader(csvfile)
-            
+
             for row in reader:
                 evalNum = int(row['evaluationNumber'])
                 elapsedTime = float(row['elapsedTime'])
                 objectiveValue = float(row['objectiveValue'])
-                
+
+                # Read new timing fields if available (backward compatibility)
+                simulationTime = float(row.get('simulationTime', 0.0))
+                distanceMetricTime = float(row.get('distanceMetricTime', 0.0))
+
                 # Extract parameter values
                 paramValues = []
                 for key, value in row.items():
-                    if key not in ['evaluationNumber', 'elapsedTime', 'objectiveValue']:
+                    if key not in ['evaluationNumber', 'elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']:
                         paramValues.append(float(value))
-                
+
                 record = EvaluationRecord(
                     evaluationNumber=evalNum,
                     parameterValues=paramValues,
                     elapsedTime=elapsedTime,
                     objectiveValue=objectiveValue,
-                    isBest=(filepath == self.bestFilepath)
+                    isBest=(filepath == self.bestFilepath),
+                    simulationTime=simulationTime,
+                    distanceMetricTime=distanceMetricTime
                 )
                 records.append(record)
-        
+
         return records
     
     def saveMetadata(self) -> None:
@@ -543,17 +559,21 @@ class NumpyProgressStorage(ProgressDataManager):
         """Save records to NumPy compressed archive"""
         if not records:
             return
-        
+
         evalNumbers = np.array([r.evaluationNumber for r in records])
         paramValues = np.array([r.parameterValues for r in records])
         elapsedTimes = np.array([r.elapsedTime for r in records])
+        simulationTimes = np.array([r.simulationTime for r in records])
+        distanceMetricTimes = np.array([r.distanceMetricTime for r in records])
         objectiveValues = np.array([r.objectiveValue for r in records])
-        
+
         np.savez_compressed(
             filepath,
             evaluationNumbers=evalNumbers,
             parameterValues=paramValues,
             elapsedTimes=elapsedTimes,
+            simulationTimes=simulationTimes,
+            distanceMetricTimes=distanceMetricTimes,
             objectiveValues=objectiveValues
         )
     
@@ -581,23 +601,29 @@ class NumpyProgressStorage(ProgressDataManager):
     def _loadRecordsFromNpz(self, filepath: str, isBest: bool = False) -> List[EvaluationRecord]:
         """Load records from NumPy compressed archive"""
         records = []
-        
+
         with np.load(filepath) as data:
             evalNumbers = data['evaluationNumbers']
             paramValues = data['parameterValues']
             elapsedTimes = data['elapsedTimes']
             objectiveValues = data['objectiveValues']
-            
+
+            # Load new timing fields if available (backward compatibility)
+            simulationTimes = data.get('simulationTimes', np.zeros(len(evalNumbers)))
+            distanceMetricTimes = data.get('distanceMetricTimes', np.zeros(len(evalNumbers)))
+
             for i in range(len(evalNumbers)):
                 record = EvaluationRecord(
                     evaluationNumber=int(evalNumbers[i]),
                     parameterValues=paramValues[i].tolist(),
                     elapsedTime=float(elapsedTimes[i]),
                     objectiveValue=float(objectiveValues[i]),
-                    isBest=isBest
+                    isBest=isBest,
+                    simulationTime=float(simulationTimes[i]),
+                    distanceMetricTime=float(distanceMetricTimes[i])
                 )
                 records.append(record)
-        
+
         return records
     
     def saveMetadata(self) -> None:
