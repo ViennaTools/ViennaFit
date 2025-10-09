@@ -13,6 +13,7 @@ class DistanceMetric:
         metricName: str,
         multiDomain: bool = False,
         criticalDimensionRanges: list[dict] = None,
+        sparseFieldExpansionWidth: int = 200,
     ) -> Callable:
         """
         Create a distance metric function based on metric name.
@@ -26,6 +27,8 @@ class DistanceMetric:
                 - 'max': maximum value of the range
                 - 'findMaximum': True to find maximum, False to find minimum
                 Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
+            sparseFieldExpansionWidth: Expansion width for CSF metric (default: 200).
+                Applied to target level set before comparison to ensure sufficient overlap.
 
         Returns:
             For single domain: Callable[[vls.Domain, vls.Domain, bool, str], float]
@@ -34,7 +37,10 @@ class DistanceMetric:
         if multiDomain:
             if metricName == "CA+CSF":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
-                    domains1, domains2, saveVis, path, DistanceMetric._compareAreaAndSparseField
+                    domains1, domains2, saveVis, path,
+                    lambda d1, d2, sv, wp: DistanceMetric._compareAreaAndSparseField(
+                        d1, d2, sv, wp, sparseFieldExpansionWidth
+                    )
                 )
             elif metricName == "CA":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
@@ -42,7 +48,10 @@ class DistanceMetric:
                 )
             elif metricName == "CSF":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
-                    domains1, domains2, saveVis, path, DistanceMetric._compareSparseField
+                    domains1, domains2, saveVis, path,
+                    lambda d1, d2, sv, wp: DistanceMetric._compareSparseField(
+                        d1, d2, sv, wp, sparseFieldExpansionWidth
+                    )
                 )
             elif metricName == "CNB":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
@@ -68,11 +77,15 @@ class DistanceMetric:
                 )
         else:
             if metricName == "CA+CSF":
-                return DistanceMetric._compareAreaAndSparseField
+                return lambda d1, d2, sv, wp: DistanceMetric._compareAreaAndSparseField(
+                    d1, d2, sv, wp, sparseFieldExpansionWidth
+                )
             elif metricName == "CA":
                 return DistanceMetric._compareArea
             elif metricName == "CSF":
-                return DistanceMetric._compareSparseField
+                return lambda d1, d2, sv, wp: DistanceMetric._compareSparseField(
+                    d1, d2, sv, wp, sparseFieldExpansionWidth
+                )
             elif metricName == "CNB":
                 return DistanceMetric._compareNarrowBand
             elif metricName == "CA+CNB":
@@ -118,9 +131,11 @@ class DistanceMetric:
         domain2: vls.Domain,
         saveVisualization: bool = False,
         writePath: str = None,
+        expansionWidth: int = 200,
     ) -> float:
         """Compare domains using sparse field difference."""
         csf = vls.CompareSparseField(domain1, domain2)
+        csf.setExpandedLevelSetWidth(expansionWidth)
         if saveVisualization:
             mesh = vls.Mesh()
             csf.setOutputMesh(mesh)
@@ -141,10 +156,12 @@ class DistanceMetric:
         domain2: vls.Domain,
         saveVisualization: bool = False,
         writePath: str = None,
+        expansionWidth: int = 200,
     ) -> float:
         """Compare domains using both area and sparse field metrics."""
         ca = vls.CompareArea(domain1, domain2)
         csf = vls.CompareSparseField(domain1, domain2)
+        csf.setExpandedLevelSetWidth(expansionWidth)
 
         if saveVisualization:
             caMesh = vls.Mesh()

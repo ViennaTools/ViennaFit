@@ -50,13 +50,30 @@ class BaseObjectiveWrapper:
         # Detect if process sequence supports multi-domain processing
         self.isMultiDomainProcess = self._detectMultiDomainProcess()
 
-        # Create appropriate distance metric
+        # Create appropriate distance metric(s)
         criticalDimensionRanges = getattr(study, "criticalDimensionRanges", None)
+        sparseFieldExpansionWidth = getattr(study, "sparseFieldExpansionWidth", 200)
+
+        # Primary metric (for optimization)
+        primaryMetric = getattr(study, "primaryDistanceMetric", None) or study.distanceMetric
         self.distanceMetric = DistanceMetric.create(
-            study.distanceMetric,
+            primaryMetric,
             multiDomain=self.isMultiDomainProcess,
             criticalDimensionRanges=criticalDimensionRanges,
+            sparseFieldExpansionWidth=sparseFieldExpansionWidth,
         )
+
+        # Additional metrics (for tracking)
+        self.additionalDistanceMetrics = {}
+        additionalMetrics = getattr(study, "additionalDistanceMetrics", [])
+        for metricName in additionalMetrics:
+            self.additionalDistanceMetrics[metricName] = DistanceMetric.create(
+                metricName,
+                multiDomain=self.isMultiDomainProcess,
+                criticalDimensionRanges=criticalDimensionRanges,
+                sparseFieldExpansionWidth=sparseFieldExpansionWidth,
+            )
+
         self.progressManager = getattr(study, "progressManager", None)
 
     def _saveEvaluationData(
@@ -68,6 +85,8 @@ class BaseObjectiveWrapper:
         isBest: bool = False,
         simulationTime: float = 0.0,
         distanceMetricTime: float = 0.0,
+        additionalMetricValues: dict[str, float] = None,
+        additionalMetricTimes: dict[str, float] = None,
     ):
         """Save evaluation data to progress file."""
         # Use new progress manager if available
@@ -82,6 +101,8 @@ class BaseObjectiveWrapper:
                 saveAll=True,
                 simulationTime=simulationTime,
                 distanceMetricTime=distanceMetricTime,
+                additionalMetricValues=additionalMetricValues,
+                additionalMetricTimes=additionalMetricTimes,
             )
         else:
             # Fallback to legacy system
@@ -176,6 +197,10 @@ class BaseObjectiveWrapper:
 
         self.study.evalCounter += 1
 
+        # Evaluate primary metric and additional metrics with individual timing
+        additionalMetricValues = {}
+        additionalMetricTimes = {}
+
         if self.isMultiDomainProcess:
             # Multi-domain distance calculation
             if len(self.study.project.targetLevelSets) == 0:
@@ -183,7 +208,8 @@ class BaseObjectiveWrapper:
                     "No target level sets available for multi-domain comparison"
                 )
 
-            # Calculate objective value using multi-domain distance metric
+            # Calculate primary objective value
+            primaryMetricStartTime = time.time()
             objectiveValue = self.distanceMetric(
                 resultDomains,
                 self.study.project.targetLevelSets,
@@ -193,6 +219,26 @@ class BaseObjectiveWrapper:
                     f"{self.study.name}-{self.study.evalCounter}",
                 ),
             )
+            primaryMetricTime = time.time() - primaryMetricStartTime
+
+            # Store primary metric value and time for tracking
+            primaryMetricName = getattr(self.study, "primaryDistanceMetric", None) or self.study.distanceMetric
+            additionalMetricValues[primaryMetricName] = objectiveValue
+            additionalMetricTimes[primaryMetricName] = primaryMetricTime
+
+            # Calculate additional metrics with individual timing
+            for metricName, metricFunc in self.additionalDistanceMetrics.items():
+                additionalMetricStartTime = time.time()
+                additionalMetricValues[metricName] = metricFunc(
+                    resultDomains,
+                    self.study.project.targetLevelSets,
+                    False,  # Don't save visualization
+                    os.path.join(
+                        self.study.progressDir,
+                        f"{self.study.name}-{self.study.evalCounter}",
+                    ),
+                )
+                additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
 
             # Only save visualization if saveAll is True or if current evaluation is better than current best
             if saveVisualization and (
@@ -209,6 +255,7 @@ class BaseObjectiveWrapper:
                 )
         else:
             # Single-domain distance calculation (backward compatibility)
+            primaryMetricStartTime = time.time()
             objectiveValue = self.distanceMetric(
                 resultDomain,
                 self.study.project.targetLevelSet,
@@ -218,6 +265,26 @@ class BaseObjectiveWrapper:
                     f"{self.study.name}-{self.study.evalCounter}",
                 ),
             )
+            primaryMetricTime = time.time() - primaryMetricStartTime
+
+            # Store primary metric value and time for tracking
+            primaryMetricName = getattr(self.study, "primaryDistanceMetric", None) or self.study.distanceMetric
+            additionalMetricValues[primaryMetricName] = objectiveValue
+            additionalMetricTimes[primaryMetricName] = primaryMetricTime
+
+            # Calculate additional metrics with individual timing
+            for metricName, metricFunc in self.additionalDistanceMetrics.items():
+                additionalMetricStartTime = time.time()
+                additionalMetricValues[metricName] = metricFunc(
+                    resultDomain,
+                    self.study.project.targetLevelSet,
+                    False,  # Don't save visualization
+                    os.path.join(
+                        self.study.progressDir,
+                        f"{self.study.name}-{self.study.evalCounter}",
+                    ),
+                )
+                additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
 
             # Only save visualization if saveAll is True or if current evaluation is better than current best
             if saveVisualization and (
@@ -233,8 +300,8 @@ class BaseObjectiveWrapper:
                     ),
                 )
 
-        # Track distance metric time (include post-processing time from process sequence)
-        distanceMetricTime = time.time() - distanceMetricStartTime + postProcessingTime
+        # Track distance metric time (primary + all additional + post-processing)
+        distanceMetricTime = primaryMetricTime + sum(additionalMetricTimes.values()) + postProcessingTime
         elapsedTime = time.time() - startTime
 
         newBest = objectiveValue <= self.study.bestScore
@@ -267,6 +334,8 @@ class BaseObjectiveWrapper:
                 isBest=newBest,
                 simulationTime=simulationTime,
                 distanceMetricTime=distanceMetricTime,
+                additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
+                additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None,
             )
         else:
             # Fallback to legacy system - only save best to progress.txt
@@ -279,6 +348,8 @@ class BaseObjectiveWrapper:
                     isBest=True,
                     simulationTime=simulationTime,
                     distanceMetricTime=distanceMetricTime,
+                    additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
+                    additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None,
                 )
 
         if newBest or self.study.saveAllEvaluations:

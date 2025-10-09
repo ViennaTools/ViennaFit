@@ -162,7 +162,9 @@ def saveEvalToProgressManager(
     isBest: bool = False,
     saveAll: bool = True,
     simulationTime: float = 0.0,
-    distanceMetricTime: float = 0.0
+    distanceMetricTime: float = 0.0,
+    additionalMetricValues: Optional[Dict[str, float]] = None,
+    additionalMetricTimes: Optional[Dict[str, float]] = None
 ) -> None:
     """Save evaluation using the new progress manager system"""
     record = EvaluationRecord(
@@ -172,7 +174,9 @@ def saveEvalToProgressManager(
         objectiveValue=objectiveValue,
         isBest=isBest,
         simulationTime=simulationTime,
-        distanceMetricTime=distanceMetricTime
+        distanceMetricTime=distanceMetricTime,
+        additionalMetricValues=additionalMetricValues,
+        additionalMetricTimes=additionalMetricTimes
     )
 
     progressManager.saveEvaluation(record, saveAll=saveAll)
@@ -317,9 +321,11 @@ class EvaluationRecord:
     isBest: bool = False
     simulationTime: float = 0.0
     distanceMetricTime: float = 0.0
+    additionalMetricValues: Optional[Dict[str, float]] = None
+    additionalMetricTimes: Optional[Dict[str, float]] = None
 
     def toDict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "evaluationNumber": self.evaluationNumber,
             "parameterValues": self.parameterValues,
             "elapsedTime": self.elapsedTime,
@@ -328,6 +334,11 @@ class EvaluationRecord:
             "simulationTime": self.simulationTime,
             "distanceMetricTime": self.distanceMetricTime
         }
+        if self.additionalMetricValues:
+            result["additionalMetricValues"] = self.additionalMetricValues
+        if self.additionalMetricTimes:
+            result["additionalMetricTimes"] = self.additionalMetricTimes
+        return result
 
 
 class ProgressDataManager(ABC):
@@ -437,6 +448,13 @@ class CSVProgressStorage(ProgressDataManager):
             else:
                 fieldnames = ['evaluationNumber'] + [f'param_{i}' for i in range(actualParamCount)] + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']
 
+            # Add additional metric columns if present
+            if record.additionalMetricValues:
+                for metricName in sorted(record.additionalMetricValues.keys()):
+                    fieldnames.append(f'{metricName}_value')
+                    if record.additionalMetricTimes and metricName in record.additionalMetricTimes:
+                        fieldnames.append(f'{metricName}_time')
+
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
             # Write header if file is new
@@ -445,7 +463,7 @@ class CSVProgressStorage(ProgressDataManager):
 
             # Write data row
             row = {'evaluationNumber': record.evaluationNumber}
-            paramFieldnames = fieldnames[1:-4]  # Skip evalNumber and last four columns
+            paramFieldnames = fieldnames[1:1+actualParamCount]  # Parameter columns
             for i, paramName in enumerate(paramFieldnames):
                 if i < len(record.parameterValues):
                     row[paramName] = record.parameterValues[i]
@@ -455,6 +473,13 @@ class CSVProgressStorage(ProgressDataManager):
             row['simulationTime'] = record.simulationTime
             row['distanceMetricTime'] = record.distanceMetricTime
             row['objectiveValue'] = record.objectiveValue
+
+            # Add additional metric values and times
+            if record.additionalMetricValues:
+                for metricName in sorted(record.additionalMetricValues.keys()):
+                    row[f'{metricName}_value'] = record.additionalMetricValues[metricName]
+                    if record.additionalMetricTimes and metricName in record.additionalMetricTimes:
+                        row[f'{metricName}_time'] = record.additionalMetricTimes[metricName]
 
             writer.writerow(row)
     
@@ -495,11 +520,26 @@ class CSVProgressStorage(ProgressDataManager):
                 simulationTime = float(row.get('simulationTime', 0.0))
                 distanceMetricTime = float(row.get('distanceMetricTime', 0.0))
 
-                # Extract parameter values
+                # Extract parameter values and additional metrics
                 paramValues = []
+                additionalMetricValues = {}
+                additionalMetricTimes = {}
+
+                excludeKeys = ['evaluationNumber', 'elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']
+
                 for key, value in row.items():
-                    if key not in ['evaluationNumber', 'elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']:
-                        paramValues.append(float(value))
+                    if key not in excludeKeys:
+                        if key.endswith('_value'):
+                            # Additional metric value
+                            metricName = key[:-6]  # Remove '_value' suffix
+                            additionalMetricValues[metricName] = float(value)
+                        elif key.endswith('_time'):
+                            # Additional metric timing
+                            metricName = key[:-5]  # Remove '_time' suffix
+                            additionalMetricTimes[metricName] = float(value)
+                        else:
+                            # Regular parameter value
+                            paramValues.append(float(value))
 
                 record = EvaluationRecord(
                     evaluationNumber=evalNum,
@@ -508,7 +548,9 @@ class CSVProgressStorage(ProgressDataManager):
                     objectiveValue=objectiveValue,
                     isBest=(filepath == self.bestFilepath),
                     simulationTime=simulationTime,
-                    distanceMetricTime=distanceMetricTime
+                    distanceMetricTime=distanceMetricTime,
+                    additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
+                    additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None
                 )
                 records.append(record)
 

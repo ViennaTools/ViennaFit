@@ -65,7 +65,10 @@ class Study:
         self.applied = False
         self.processSequence = None
         self.distanceMetric = None
+        self.primaryDistanceMetric = None
+        self.additionalDistanceMetrics = []
         self.criticalDimensionRanges = None
+        self.sparseFieldExpansionWidth = 200
         self.evalCounter = 0
         self.saveVisualization = True
         self.saveAllEvaluations = False
@@ -247,9 +250,14 @@ class Study:
 
         return True
 
-    def setDistanceMetric(self, metric: str, criticalDimensionRanges: list[dict] = None):
+    def setDistanceMetric(
+        self,
+        metric: str,
+        criticalDimensionRanges: list[dict] = None,
+        sparseFieldExpansionWidth: int = 200
+    ):
         """
-        Set the distance metric for comparing level sets.
+        Set the distance metric for comparing level sets (single metric mode).
 
         Args:
             metric: Distance metric to be used.
@@ -267,6 +275,8 @@ class Study:
                         - 'max': maximum value of the range
                         - 'findMaximum': True to find maximum, False to find minimum
                     Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
+            sparseFieldExpansionWidth: Expansion width for CSF metric (default: 200).
+                    Applied to target level set before comparison to ensure sufficient overlap.
         """
         if metric not in ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD"]:
             raise ValueError(
@@ -280,7 +290,68 @@ class Study:
             )
 
         self.distanceMetric = metric
+        self.primaryDistanceMetric = metric
+        self.additionalDistanceMetrics = []
         self.criticalDimensionRanges = criticalDimensionRanges
+        self.sparseFieldExpansionWidth = sparseFieldExpansionWidth
+        return self
+
+    def setDistanceMetrics(
+        self,
+        primaryMetric: str,
+        additionalMetrics: list[str] = None,
+        criticalDimensionRanges: list[dict] = None,
+        sparseFieldExpansionWidth: int = 200
+    ):
+        """
+        Set multiple distance metrics for comparing level sets.
+        The primary metric is used for optimization, while additional metrics are tracked for analysis.
+
+        Args:
+            primaryMetric: Primary distance metric used for optimization.
+                    Options: 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB', 'CCD'
+            additionalMetrics: List of additional metrics to track (with individual timing).
+                    These are evaluated but not used for optimization.
+            criticalDimensionRanges: Required only if 'CCD' is used. List of range configurations.
+                    Each dict should have:
+                        - 'axis': 'x' or 'y' (the axis to scan along)
+                        - 'min': minimum value of the range
+                        - 'max': maximum value of the range
+                        - 'findMaximum': True to find maximum, False to find minimum
+                    Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
+            sparseFieldExpansionWidth: Expansion width for CSF metric (default: 200).
+                    Applied to all CSF-based metrics to ensure sufficient overlap.
+        """
+        availableMetrics = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD"]
+
+        if primaryMetric not in availableMetrics:
+            raise ValueError(
+                f"Invalid primary distance metric: {primaryMetric}. "
+                f"Options are {', '.join(availableMetrics)}."
+            )
+
+        if additionalMetrics is None:
+            additionalMetrics = []
+
+        for metric in additionalMetrics:
+            if metric not in availableMetrics:
+                raise ValueError(
+                    f"Invalid additional distance metric: {metric}. "
+                    f"Options are {', '.join(availableMetrics)}."
+                )
+
+        # Check if CCD is used anywhere
+        allMetrics = [primaryMetric] + additionalMetrics
+        if "CCD" in allMetrics and criticalDimensionRanges is None:
+            raise ValueError(
+                "criticalDimensionRanges must be provided when using 'CCD' metric"
+            )
+
+        self.distanceMetric = primaryMetric  # For backward compatibility
+        self.primaryDistanceMetric = primaryMetric
+        self.additionalDistanceMetrics = additionalMetrics
+        self.criticalDimensionRanges = criticalDimensionRanges
+        self.sparseFieldExpansionWidth = sparseFieldExpansionWidth
         return self
 
     def apply(self, *args, **kwargs):
