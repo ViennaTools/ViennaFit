@@ -1,7 +1,7 @@
 import os
 import json
 import datetime
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from viennaps2d import Reader
 from viennals2d import Reader as lsReader
 from viennals2d import Domain as lsDomain
@@ -871,7 +871,7 @@ class Project:
     def getDomainPairings(self) -> Dict[str, Tuple[str, str]]:
         """Get dictionary of domain name -> (initial_path, target_path) pairings."""
         pairings = {}
-        
+
         if len(self.initialDomains) > 0 and len(self.targetLevelSets) > 0:
             # Multi-domain case
             for domainName in self.initialDomains.keys():
@@ -883,5 +883,71 @@ class Project:
             # Single domain case (backward compatibility)
             if self.initialDomain is not None and self.targetLevelSet is not None:
                 pairings["default"] = (self.initialDomainPath, self.targetLevelSetPath)
-                
+
         return pairings
+
+    def getOptimizationSummary(self, forceRescan: bool = False):
+        """
+        Get optimization runs summary for this project.
+
+        Args:
+            forceRescan: If True, re-scan all runs instead of loading from cached summary
+
+        Returns:
+            RunsSummary object with aggregated optimization results
+        """
+        from .fitRunsSummary import RunsSummary
+
+        summary = RunsSummary(self.projectAbsPath)
+
+        if forceRescan:
+            summary.scanRuns()
+        else:
+            # Try to load existing summary, fall back to scanning if not found
+            if not summary.loadSummary():
+                summary.scanRuns()
+
+        return summary
+
+    def printOptimizationOverview(self):
+        """Print a formatted overview of all optimization runs in this project."""
+        summary = self.getOptimizationSummary()
+        summary.printSummary()
+
+    def getBestOptimizationRun(self) -> Optional[Dict]:
+        """
+        Get information about the best optimization run in this project.
+
+        Returns:
+            Dictionary with best run information, or None if no runs found
+        """
+        summary = self.getOptimizationSummary()
+        return summary.getBestRun()
+
+    def updateOptimizationSummary(self):
+        """
+        Update the optimization summary file by re-scanning all runs.
+        This should be called after new optimization runs complete.
+        """
+        summary = self.getOptimizationSummary(forceRescan=True)
+        summary.saveSummary()
+        print(f"Optimization summary updated for project {self.projectName}")
+
+    def generateOptimizationReport(self, outputPath: Optional[str] = None) -> str:
+        """
+        Generate a markdown report of all optimization runs.
+
+        Args:
+            outputPath: Optional path to save the report. If None, saves to project directory.
+
+        Returns:
+            Path to the generated report file
+        """
+        summary = self.getOptimizationSummary(forceRescan=True)
+
+        if outputPath is None:
+            outputPath = os.path.join(
+                self.projectAbsPath, f"{self.projectName}-optimization-report.md"
+            )
+
+        return summary.generateMarkdownReport(outputPath)

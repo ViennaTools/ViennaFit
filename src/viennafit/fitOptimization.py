@@ -118,6 +118,12 @@ class Optimization(Study):
 
         print(f"Results saved to {filepath}")
 
+        # Update project optimization summary
+        try:
+            self.project.updateOptimizationSummary()
+        except Exception as e:
+            print(f"Warning: Could not update optimization summary: {e}")
+
     def _parseProgressFile(self, file_path: str):
         """Parse progress file containing Python list strings into numpy array"""
         try:
