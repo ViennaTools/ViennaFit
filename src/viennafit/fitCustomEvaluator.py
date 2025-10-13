@@ -10,6 +10,7 @@ import json
 import inspect
 import time
 import itertools
+import shutil
 from typing import Dict, List, Optional, Tuple, Any
 from copy import deepcopy
 
@@ -44,6 +45,7 @@ class CustomEvaluator:
         self.isMultiDomainProcess = False
         self.gridResults = []  # List of evaluation results
         self.evaluationName = None
+        self.savedProcessSequencePath = None  # Path to saved process sequence in customEvaluations
 
         # Check project readiness
         if not project.isReady:
@@ -81,13 +83,21 @@ class CustomEvaluator:
 
             missingTargets = initialNames - targetNames
             if missingTargets:
-                issues.append(f"Missing target domains for initial domains: {', '.join(missingTargets)}")
+                issues.append(
+                    f"Missing target domains for initial domains: {', '.join(missingTargets)}"
+                )
         else:
             # Check for single-domain requirements
-            if self.project.initialDomain is None and len(self.project.initialDomains) == 0:
+            if (
+                self.project.initialDomain is None
+                and len(self.project.initialDomains) == 0
+            ):
                 issues.append("No initial domain available")
 
-            if self.project.targetLevelSet is None and len(self.project.targetLevelSets) == 0:
+            if (
+                self.project.targetLevelSet is None
+                and len(self.project.targetLevelSets) == 0
+            ):
                 issues.append("No target domain available")
 
         return issues
@@ -100,12 +110,16 @@ class CustomEvaluator:
         issues = self.validateMultiDomainSetup()
         return len(issues) == 0
 
-    def loadOptimizationRun(self, runName: str) -> "CustomEvaluator":
+    def loadOptimizationRun(
+        self, runName: str, skipProcessSequence: bool = False
+    ) -> "CustomEvaluator":
         """
         Load optimization results and process sequence from a completed run.
 
         Args:
             runName: Name of the optimization run to load
+            skipProcessSequence: If True, skip loading the process sequence from the run
+                               (useful when you want to use a custom sequence)
 
         Returns:
             self: For method chaining
@@ -131,25 +145,141 @@ class CustomEvaluator:
         if "fixedParameters" in results:
             self.fixedParameters = deepcopy(results["fixedParameters"])
 
-        # Load process sequence file
-        processSequenceFile = os.path.join(runDir, f"{runName}-processSequence.py")
-        if not os.path.exists(processSequenceFile):
-            raise FileNotFoundError(
-                f"Process sequence file not found: {processSequenceFile}"
-            )
+        # Load process sequence file unless skipped
+        if not skipProcessSequence:
+            processSequenceFile = os.path.join(runDir, f"{runName}-processSequence.py")
+            if not os.path.exists(processSequenceFile):
+                raise FileNotFoundError(
+                    f"Process sequence file not found: {processSequenceFile}"
+                )
 
-        self.processSequencePath = processSequenceFile
-        self._loadProcessSequence(processSequenceFile)
+            self.processSequencePath = processSequenceFile
+            self._loadProcessSequence(processSequenceFile)
 
-        # Detect if process sequence supports multi-domain processing
-        self.isMultiDomainProcess = self._detectMultiDomainProcess()
+            # Detect if process sequence supports multi-domain processing
+            self.isMultiDomainProcess = self._detectMultiDomainProcess()
 
         print(f"Loaded optimization run '{runName}':")
         print(f"  Best score: {results.get('bestScore', 'Unknown')}")
         print(
             f"  Parameters: {len(self.optimalParameters)} variable, {len(self.fixedParameters)} fixed"
         )
-        print(f"  Process sequence: {self.processSequence.__name__}")
+        if not skipProcessSequence:
+            print(f"  Process sequence: {self.processSequence.__name__}")
+            print(
+                f"  Multi-domain support: {'Yes' if self.isMultiDomainProcess else 'No'}"
+            )
+        else:
+            print(
+                "  Process sequence: Skipped (use setProcessSequence() to set a custom one)"
+            )
+
+        return self
+
+    def loadProcessSequenceFromFile(self, filePath: str) -> "CustomEvaluator":
+        """
+        Load a process sequence from a Python file.
+
+        This allows you to override the process sequence loaded from an optimization run,
+        or to set a process sequence without loading an optimization run.
+
+        Args:
+            filePath: Path to the Python file containing the process sequence function
+
+        Returns:
+            self: For method chaining
+        """
+        if not os.path.exists(filePath):
+            raise FileNotFoundError(f"Process sequence file not found: {filePath}")
+
+        self.processSequencePath = filePath
+        self._loadProcessSequence(filePath)
+
+        # Detect if process sequence supports multi-domain processing
+        self.isMultiDomainProcess = self._detectMultiDomainProcess()
+
+        print(f"Loaded process sequence from: {os.path.basename(filePath)}")
+        print(f"  Function: {self.processSequence.__name__}")
+        print(f"  Multi-domain support: {'Yes' if self.isMultiDomainProcess else 'No'}")
+
+        return self
+
+    def setProcessSequence(self, processSequence) -> "CustomEvaluator":
+        """
+        Set a custom process sequence function directly.
+
+        This allows you to override the process sequence loaded from an optimization run,
+        or to set a process sequence programmatically.
+
+        Args:
+            processSequence: Either a callable function with signature (Domain, dict[str, float])
+                           or (dict[str, Domain], dict[str, float]) for multi-domain,
+                           or a string file path to load the sequence from
+
+        Returns:
+            self: For method chaining
+
+        Raises:
+            ValueError: If the process sequence doesn't have the expected signature
+        """
+        # If it's a string, treat it as a file path
+        if isinstance(processSequence, str):
+            return self.loadProcessSequenceFromFile(processSequence)
+
+        # Validate that it's callable
+        if not callable(processSequence):
+            raise ValueError(
+                "Process sequence must be a callable function or a file path"
+            )
+
+        # Validate function signature
+        try:
+            sig = inspect.signature(processSequence)
+            params = list(sig.parameters.values())
+
+            if len(params) != 2:
+                raise ValueError(
+                    f"Process sequence must have exactly 2 parameters, got {len(params)}"
+                )
+
+            # Check parameter types (allow empty annotations for flexibility)
+            firstParam = params[0]
+            secondParam = params[1]
+
+            # Valid first parameter types
+            validFirstTypes = [
+                vps.Domain,
+                dict[str, vps.Domain],
+                list[vps.Domain],
+                inspect.Parameter.empty,
+            ]
+
+            # Valid second parameter types
+            validSecondTypes = [dict[str, float], inspect.Parameter.empty]
+
+            if firstParam.annotation not in validFirstTypes:
+                print(
+                    f"Warning: First parameter type annotation is {firstParam.annotation}, "
+                    f"expected one of: Domain, dict[str, Domain], list[Domain]"
+                )
+
+            if secondParam.annotation not in validSecondTypes:
+                print(
+                    f"Warning: Second parameter type annotation is {secondParam.annotation}, "
+                    f"expected: dict[str, float]"
+                )
+
+        except ValueError as e:
+            raise ValueError(f"Invalid process sequence signature: {str(e)}")
+
+        # Set the process sequence
+        self.processSequence = processSequence
+        self.processSequencePath = None  # Mark as not loaded from file
+
+        # Detect if process sequence supports multi-domain processing
+        self.isMultiDomainProcess = self._detectMultiDomainProcess()
+
+        print(f"Set process sequence: {processSequence.__name__}")
         print(f"  Multi-domain support: {'Yes' if self.isMultiDomainProcess else 'No'}")
 
         return self
@@ -309,7 +439,10 @@ class CustomEvaluator:
         return allParams
 
     def evaluateGrid(
-        self, evaluationName: str, saveVisualization: bool = True, initialDomainName: str = None
+        self,
+        evaluationName: str,
+        saveVisualization: bool = True,
+        initialDomainName: str = None,
     ) -> List[Dict[str, Any]]:
         """
         Evaluate all combinations of variable values in a grid.
@@ -348,7 +481,9 @@ class CustomEvaluator:
         # Validate multi-domain setup
         validationIssues = self.validateMultiDomainSetup()
         if validationIssues:
-            raise ValueError(f"Multi-domain setup validation failed: {'; '.join(validationIssues)}")
+            raise ValueError(
+                f"Multi-domain setup validation failed: {'; '.join(validationIssues)}"
+            )
 
         self.evaluationName = evaluationName
         self.gridResults = []
@@ -359,6 +494,53 @@ class CustomEvaluator:
         )
         os.makedirs(outputDir, exist_ok=True)
 
+        # Save the process sequence to the output directory
+        self.savedProcessSequencePath = None
+        processSequenceDestPath = os.path.join(
+            outputDir, f"{evaluationName}-processSequence.py"
+        )
+
+        try:
+            if self.processSequencePath and os.path.exists(self.processSequencePath):
+                # Copy process sequence file from original location
+                shutil.copy2(self.processSequencePath, processSequenceDestPath)
+                self.savedProcessSequencePath = processSequenceDestPath
+                print(
+                    f"Saved process sequence to: {os.path.basename(processSequenceDestPath)}"
+                )
+            elif self.processSequence:
+                # Process sequence was set directly as a callable, extract source
+                try:
+                    processSequenceSource = inspect.getsource(self.processSequence)
+                    with open(processSequenceDestPath, "w") as f:
+                        f.write(processSequenceSource)
+                    self.savedProcessSequencePath = processSequenceDestPath
+                    print(
+                        f"Saved process sequence source to: {os.path.basename(processSequenceDestPath)}"
+                    )
+                except (OSError, TypeError) as e:
+                    # Could not extract source (e.g., built-in function, lambda in REPL)
+                    warningPath = os.path.join(
+                        outputDir, f"{evaluationName}-processSequence-WARNING.txt"
+                    )
+                    with open(warningPath, "w") as f:
+                        f.write(
+                            f"Warning: Could not extract process sequence source code.\n"
+                        )
+                        f.write(f"Function name: {self.processSequence.__name__}\n")
+                        f.write(f"Error: {str(e)}\n\n")
+                        f.write(
+                            "The process sequence was set programmatically and its source "
+                            "code could not be retrieved.\n"
+                        )
+                    print(
+                        f"Warning: Could not extract process sequence source. See {os.path.basename(warningPath)}"
+                    )
+        except Exception as e:
+            print(
+                f"Warning: Failed to save process sequence: {str(e)}. Continuing with evaluation..."
+            )
+
         # Generate all parameter combinations
         paramNames = list(self.variableValues.keys())
         paramValueLists = [self.variableValues[name] for name in paramNames]
@@ -368,10 +550,16 @@ class CustomEvaluator:
             f"Starting grid evaluation '{evaluationName}' with {len(combinations)} combinations..."
         )
 
-        print(f"Multi-domain mode: {'Enabled' if self.isMultiDomainProcess else 'Disabled'}")
+        print(
+            f"Multi-domain mode: {'Enabled' if self.isMultiDomainProcess else 'Disabled'}"
+        )
         if self.isMultiDomainProcess:
-            print(f"Available initial domains: {list(self.project.initialDomains.keys())}")
-            print(f"Available target domains: {list(self.project.targetLevelSets.keys())}")
+            print(
+                f"Available initial domains: {list(self.project.initialDomains.keys())}"
+            )
+            print(
+                f"Available target domains: {list(self.project.targetLevelSets.keys())}"
+            )
 
         distanceFunction = self.distanceMetricFunction
 
@@ -407,8 +595,12 @@ class CustomEvaluator:
                     if initialDomainName is not None:
                         # Use specific named domain only
                         if initialDomainName not in self.project.initialDomains:
-                            raise ValueError(f"Initial domain '{initialDomainName}' not found in project")
-                        domainCopy = vps.Domain(self.project.initialDomains[initialDomainName])
+                            raise ValueError(
+                                f"Initial domain '{initialDomainName}' not found in project"
+                            )
+                        domainCopy = vps.Domain(
+                            self.project.initialDomains[initialDomainName]
+                        )
                         initialDomains[initialDomainName] = domainCopy
                     else:
                         # Use all available initial domains
@@ -420,15 +612,21 @@ class CustomEvaluator:
                     resultDomains = self.processSequence(initialDomains, evalParams)
 
                     if not isinstance(resultDomains, dict):
-                        raise ValueError("Multi-domain process sequence must return dict[str, Domain]")
+                        raise ValueError(
+                            "Multi-domain process sequence must return dict[str, Domain]"
+                        )
 
                     # Convert result domains to level sets for comparison
                     resultLevelSets = {}
                     for name, domain in resultDomains.items():
                         if domain.getLevelSets():
-                            resultLevelSets[name] = domain.getLevelSets()[-1]  # Use last level set
+                            resultLevelSets[name] = domain.getLevelSets()[
+                                -1
+                            ]  # Use last level set
                         else:
-                            raise ValueError(f"Result domain '{name}' has no level sets")
+                            raise ValueError(
+                                f"Result domain '{name}' has no level sets"
+                            )
 
                     # Save visualization if requested
                     resultPaths = {}
@@ -454,8 +652,12 @@ class CustomEvaluator:
                     if initialDomainName is not None:
                         # Use named initial domain
                         if initialDomainName not in self.project.initialDomains:
-                            raise ValueError(f"Initial domain '{initialDomainName}' not found in project")
-                        domainCopy = vps.Domain(self.project.initialDomains[initialDomainName])
+                            raise ValueError(
+                                f"Initial domain '{initialDomainName}' not found in project"
+                            )
+                        domainCopy = vps.Domain(
+                            self.project.initialDomains[initialDomainName]
+                        )
                     else:
                         # Use default single initial domain for backward compatibility
                         domainCopy = vps.Domain(self.project.initialDomain)
@@ -490,7 +692,9 @@ class CustomEvaluator:
                     "allParameters": evalParams,
                     "objectiveValue": objectiveValue,
                     "executionTime": executionTime,
-                    "resultPath": resultPaths if self.isMultiDomainProcess else resultPath,
+                    "resultPath": (
+                        resultPaths if self.isMultiDomainProcess else resultPath
+                    ),
                     "multiDomain": self.isMultiDomainProcess,
                 }
 
@@ -590,6 +794,12 @@ class CustomEvaluator:
                     if self.processSequencePath
                     else None
                 ),
+                "processSequenceSaved": (
+                    os.path.basename(self.savedProcessSequencePath)
+                    if self.savedProcessSequencePath
+                    else None
+                ),
+                "processSequenceSavedSuccessfully": self.savedProcessSequencePath is not None,
                 "distanceMetric": self.distanceMetric,
                 "totalEvaluations": len(self.gridResults),
                 "successfulEvaluations": len(validResults),
