@@ -15,7 +15,7 @@ class Study:
         """Generate run directory with conflict resolution"""
         runDir = os.path.join(self.project.projectPath, studyType, baseName)
         name = baseName
-        
+
         if os.path.exists(runDir):
             # Find the highest existing index
             studyDir = os.path.join(self.project.projectPath, studyType)
@@ -38,7 +38,7 @@ class Study:
                 f"Run directory already exists. Renaming study to '{name}' "
                 f"and using directory: {runDir}"
             )
-        
+
         return name, runDir
 
     def __init__(self, name: str, project: Project, studyType: str):
@@ -72,6 +72,7 @@ class Study:
         self.evalCounter = 0
         self.saveVisualization = True
         self.saveAllEvaluations = False
+        self.saveAdditionalMetricVisualizations = False
 
         # Parameter handling
         self.parameterNames = []
@@ -145,9 +146,9 @@ class Study:
                             vps.Domain,  # Single domain (backward compatibility)
                             dict[str, vps.Domain],  # Multi-domain dict
                             list[vps.Domain],  # Multi-domain list
-                            inspect.Parameter.empty  # No annotation
+                            inspect.Parameter.empty,  # No annotation
                         ]
-                        
+
                         if params[0].annotation in validDomainTypes:
                             if (
                                 params[1].annotation == dict[str, float]
@@ -196,9 +197,9 @@ class Study:
             vps.Domain,  # Single domain (backward compatibility)
             dict[str, vps.Domain],  # Multi-domain dict
             list[vps.Domain],  # Multi-domain list
-            inspect.Parameter.empty  # No annotation
+            inspect.Parameter.empty,  # No annotation
         ]
-        
+
         if domainParam.annotation not in validDomainTypes:
             raise TypeError(
                 f"First parameter must be viennaps2d.Domain, dict[str, viennaps2d.Domain], or list[viennaps2d.Domain], got {domainParam.annotation}"
@@ -222,7 +223,9 @@ class Study:
     def _saveProcessSequence(self):
         """Save the process sequence to a file (called by subclasses in apply method)"""
         if self.processSequence is not None:
-            processFilePath = os.path.join(self.runDir, f"{self.name}-processSequence.py")
+            processFilePath = os.path.join(
+                self.runDir, f"{self.name}-processSequence.py"
+            )
             source = inspect.getsource(self.processSequence)
             with open(processFilePath, "w") as f:
                 f.write("import viennaps2d as vps\n")
@@ -254,7 +257,7 @@ class Study:
         self,
         metric: str,
         criticalDimensionRanges: list[dict] = None,
-        sparseFieldExpansionWidth: int = 200
+        sparseFieldExpansionWidth: int = 200,
     ):
         """
         Set the distance metric for comparing level sets (single metric mode).
@@ -301,7 +304,8 @@ class Study:
         primaryMetric: str,
         additionalMetrics: list[str] = None,
         criticalDimensionRanges: list[dict] = None,
-        sparseFieldExpansionWidth: int = 200
+        sparseFieldExpansionWidth: int = 200,
+        saveAdditionalMetricVisualizations: bool = False,
     ):
         """
         Set multiple distance metrics for comparing level sets.
@@ -321,8 +325,11 @@ class Study:
                     Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
             sparseFieldExpansionWidth: Expansion width for CSF metric (default: 200).
                     Applied to all CSF-based metrics to ensure sufficient overlap.
+            saveAdditionalMetricVisualizations: Whether to save visualization meshes for additional metrics.
+                    Only applies when saveVisualization=True in apply() and for best/all evaluations.
+                    Default: False (only primary metric visualizations are saved).
         """
-        availableMetrics = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD"]
+        availableMetrics = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD", "CCH"]
 
         if primaryMetric not in availableMetrics:
             raise ValueError(
@@ -352,6 +359,7 @@ class Study:
         self.additionalDistanceMetrics = additionalMetrics
         self.criticalDimensionRanges = criticalDimensionRanges
         self.sparseFieldExpansionWidth = sparseFieldExpansionWidth
+        self.saveAdditionalMetricVisualizations = saveAdditionalMetricVisualizations
         return self
 
     def apply(self, *args, **kwargs):

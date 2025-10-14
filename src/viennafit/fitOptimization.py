@@ -279,12 +279,24 @@ class Optimization(Study):
         numEvaluations: int = 100,
         saveAllEvaluations: bool = False,
         saveVisualization: bool = True,
+        saveAdditionalMetricVisualizations: bool = False,
     ):
-        """Apply the optimization."""
+        """
+        Apply the optimization.
+
+        Args:
+            numEvaluations: Number of evaluations to run
+            saveAllEvaluations: Whether to save all evaluations (not just best)
+            saveVisualization: Whether to save visualization meshes for the primary metric
+            saveAdditionalMetricVisualizations: Whether to save visualization meshes for additional metrics.
+                Only applies when saveVisualization=True and for best/all evaluations.
+                Default: False (only primary metric visualizations are saved).
+        """
         if not self.applied:
             self.validate()
             self.saveVisualization = saveVisualization
             self.saveAllEvaluations = saveAllEvaluations
+            self.saveAdditionalMetricVisualizations = saveAdditionalMetricVisualizations
 
             # Create directories
             os.makedirs(self.runDir, exist_ok=False)

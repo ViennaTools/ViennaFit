@@ -244,6 +244,7 @@ class BaseObjectiveWrapper:
             if saveVisualization and (
                 saveAll or objectiveValue <= self.study.bestScore
             ):
+                # Save primary metric visualization
                 self.distanceMetric(
                     resultDomains,
                     self.study.project.targetLevelSets,
@@ -253,6 +254,19 @@ class BaseObjectiveWrapper:
                         f"{self.study.name}-{self.study.evalCounter}",
                     ),
                 )
+
+                # Save additional metric visualizations if requested
+                if getattr(self.study, "saveAdditionalMetricVisualizations", False):
+                    for metricName, metricFunc in self.additionalDistanceMetrics.items():
+                        metricFunc(
+                            resultDomains,
+                            self.study.project.targetLevelSets,
+                            True,  # Save visualization
+                            os.path.join(
+                                self.study.progressDir,
+                                f"{self.study.name}-{self.study.evalCounter}",
+                            ),
+                        )
         else:
             # Single-domain distance calculation (backward compatibility)
             primaryMetricStartTime = time.time()
@@ -290,6 +304,7 @@ class BaseObjectiveWrapper:
             if saveVisualization and (
                 saveAll or objectiveValue <= self.study.bestScore
             ):
+                # Save primary metric visualization
                 self.distanceMetric(
                     resultDomain,
                     self.study.project.targetLevelSet,
@@ -299,6 +314,19 @@ class BaseObjectiveWrapper:
                         f"{self.study.name}-{self.study.evalCounter}",
                     ),
                 )
+
+                # Save additional metric visualizations if requested
+                if getattr(self.study, "saveAdditionalMetricVisualizations", False):
+                    for metricName, metricFunc in self.additionalDistanceMetrics.items():
+                        metricFunc(
+                            resultDomain,
+                            self.study.project.targetLevelSet,
+                            True,  # Save visualization
+                            os.path.join(
+                                self.study.progressDir,
+                                f"{self.study.name}-{self.study.evalCounter}",
+                            ),
+                        )
 
         # Track distance metric time (primary + all additional + post-processing)
         distanceMetricTime = primaryMetricTime + sum(additionalMetricTimes.values()) + postProcessingTime

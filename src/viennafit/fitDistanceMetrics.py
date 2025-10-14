@@ -6,7 +6,7 @@ import os
 class DistanceMetric:
     """Factory class for distance metrics used in optimization."""
 
-    AVAILABLE_METRICS = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD"]
+    AVAILABLE_METRICS = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD", "CCH"]
 
     @staticmethod
     def create(
@@ -70,6 +70,10 @@ class DistanceMetric:
                         d1, d2, sv, wp, criticalDimensionRanges
                     )
                 )
+            elif metricName == "CCH":
+                return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
+                    domains1, domains2, saveVis, path, DistanceMetric._compareChamfer
+                )
             else:
                 raise ValueError(
                     f"Invalid distance metric: {metricName}. "
@@ -96,6 +100,8 @@ class DistanceMetric:
                 return lambda d1, d2, sv, wp: DistanceMetric._compareCriticalDimensions(
                     d1, d2, sv, wp, criticalDimensionRanges
                 )
+            elif metricName == "CCH":
+                return DistanceMetric._compareChamfer
             else:
                 raise ValueError(
                     f"Invalid distance metric: {metricName}. "
@@ -294,6 +300,48 @@ class DistanceMetric:
             vls.VTKWriter(mesh, ccdPath).apply()
 
         return ccd.getRMSE()
+
+    @staticmethod
+    def _compareChamfer(
+        domain1: vls.Domain,
+        domain2: vls.Domain,
+        saveVisualization: bool = False,
+        writePath: str = None,
+    ) -> float:
+        """
+        Compare domains using Chamfer distance between surfaces.
+
+        The Chamfer distance is a bidirectional metric that measures the average
+        nearest-neighbor distance between two point sets (surfaces). It returns
+        the RMS Chamfer distance which provides a robust measure of shape similarity.
+
+        Args:
+            domain1: Target domain (reference)
+            domain2: Sample domain (to compare)
+            saveVisualization: Whether to save visualization files
+            writePath: Path for saving visualization files
+
+        Returns:
+            RMS Chamfer distance between the two surfaces
+        """
+        cch = vls.CompareChamfer(domain1, domain2)
+
+        if saveVisualization:
+            targetMesh = vls.Mesh()
+            sampleMesh = vls.Mesh()
+            cch.setOutputMeshTarget(targetMesh)
+            cch.setOutputMeshSample(sampleMesh)
+
+        cch.apply()
+
+        if saveVisualization:
+            # Save meshes to show distance distributions on both surfaces
+            targetPath = f"{writePath}-CCH-target.vtp"
+            samplePath = f"{writePath}-CCH-sample.vtp"
+            vls.VTKWriter(targetMesh, targetPath).apply()
+            vls.VTKWriter(sampleMesh, samplePath).apply()
+
+        return cch.getRMSChamferDistance()
 
     @staticmethod
     def _compareMultipleDomains(
