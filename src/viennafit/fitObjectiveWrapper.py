@@ -19,17 +19,22 @@ class ObjectiveWrapper:
         Create an objective function wrapper based on optimizer type.
 
         Args:
-            optimizer: String identifying the optimizer ("dlib", etc)
+            optimizer: String identifying the optimizer ("dlib", "nevergrad", "ax", "botorch")
             optimization: Reference to the Optimization instance
             initialDomainName: Name of the initial domain to use (optional)
 
         Returns:
             Callable: Wrapped objective function compatible with chosen optimizer
+            Note: For Ax/BoTorch, returns the wrapper object itself (not a function)
         """
         if optimizer == "dlib":
             wrapper = DlibObjectiveWrapper(optimization, initialDomainName)
         elif optimizer == "nevergrad":
             wrapper = NevergradObjectiveWrapper(optimization, initialDomainName)
+        elif optimizer in ["ax", "botorch"]:
+            # Return wrapper object directly for Ax - it has evaluateTrial and evaluateBatch methods
+            wrapper = AxObjectiveWrapper(optimization, initialDomainName)
+            return wrapper
         else:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
 
@@ -87,6 +92,7 @@ class BaseObjectiveWrapper:
         distanceMetricTime: float = 0.0,
         additionalMetricValues: dict[str, float] = None,
         additionalMetricTimes: dict[str, float] = None,
+        totalElapsedTime: float = 0.0,
     ):
         """Save evaluation data to progress file."""
         # Use new progress manager if available
@@ -103,6 +109,7 @@ class BaseObjectiveWrapper:
                 distanceMetricTime=distanceMetricTime,
                 additionalMetricValues=additionalMetricValues,
                 additionalMetricTimes=additionalMetricTimes,
+                totalElapsedTime=totalElapsedTime,
             )
         else:
             # Fallback to legacy system
@@ -332,6 +339,11 @@ class BaseObjectiveWrapper:
         distanceMetricTime = primaryMetricTime + sum(additionalMetricTimes.values()) + postProcessingTime
         elapsedTime = time.time() - startTime
 
+        # Calculate total elapsed time since optimization started
+        totalElapsedTime = 0.0
+        if hasattr(self.study, 'optimizationStartTime') and self.study.optimizationStartTime is not None:
+            totalElapsedTime = time.time() - self.study.optimizationStartTime
+
         newBest = objectiveValue <= self.study.bestScore
 
         if newBest:
@@ -364,6 +376,7 @@ class BaseObjectiveWrapper:
                 distanceMetricTime=distanceMetricTime,
                 additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
                 additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None,
+                totalElapsedTime=totalElapsedTime,
             )
         else:
             # Fallback to legacy system - only save best to progress.txt
@@ -378,6 +391,7 @@ class BaseObjectiveWrapper:
                     distanceMetricTime=distanceMetricTime,
                     additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
                     additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None,
+                    totalElapsedTime=totalElapsedTime,
                 )
 
         if newBest or self.study.saveAllEvaluations:
@@ -425,6 +439,35 @@ class BaseObjectiveWrapper:
                 paramStrings.append(f"{abbrevName}{valueStr}")
 
         return "_".join(paramStrings)
+
+    def _evaluateObjectiveBatch(
+        self,
+        paramDictList: list[dict[str, float]],
+        saveVisualization: bool = False,
+        saveAll: bool = False,
+    ) -> list[Tuple[float, float, float, float]]:
+        """Run process sequence for multiple parameter sets and evaluate results.
+
+        This method evaluates multiple parameter configurations sequentially.
+        For parallel evaluation, implement async processing in the optimizer wrapper.
+
+        Args:
+            paramDictList: List of parameter dictionaries to evaluate
+            saveVisualization: Whether to save visualizations for each evaluation
+            saveAll: Whether to save all evaluations or only best
+
+        Returns:
+            List of tuples, each containing (objectiveValue, elapsedTime, simulationTime, distanceMetricTime)
+        """
+        results = []
+        for paramDict in paramDictList:
+            result = self._evaluateObjective(
+                paramDict,
+                saveVisualization=saveVisualization,
+                saveAll=saveAll,
+            )
+            results.append(result)
+        return results
 
     def _detectMultiDomainProcess(self) -> bool:
         """Detect if the process sequence function supports multi-domain processing."""
@@ -529,3 +572,56 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
             )
 
         return objectiveValue
+
+
+class AxObjectiveWrapper(BaseObjectiveWrapper):
+    """Objective function wrapper for Ax/BoTorch optimizer."""
+
+    def __init__(self, study, initialDomainName: str = None):
+        super().__init__(study, initialDomainName)
+        # Track trial index for Ax integration
+        self.currentTrialIndex = None
+
+    def evaluateTrial(self, parameterization: dict[str, float]) -> dict[str, tuple[float, float]]:
+        """
+        Evaluate a single trial for Ax optimizer.
+
+        Args:
+            parameterization: Dict of parameter names to values from Ax
+
+        Returns:
+            Dict with metric name as key and (mean, sem) tuple as value
+            For deterministic simulations, sem is always 0.0
+        """
+        # Create parameter dictionary with fixed parameters
+        paramDict = self.study.fixedParameters.copy()
+        paramDict.update(parameterization)
+
+        # Evaluate process
+        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
+            paramDict,
+            self.study.saveVisualization,
+            saveAll=self.study.saveAllEvaluations,
+        )
+
+        # Ax expects metrics as dict[metric_name, (mean, sem)]
+        # For deterministic simulations, SEM is 0
+        # Return metric with its plain name (Ax handles minimization via objective config)
+        primaryMetricName = getattr(self.study, "primaryDistanceMetric", None) or self.study.distanceMetric
+        return {primaryMetricName: (objectiveValue, 0.0)}
+
+    def evaluateBatch(self, parameterizationList: list[dict[str, float]]) -> list[dict[str, tuple[float, float]]]:
+        """
+        Evaluate a batch of trials for Ax optimizer.
+
+        Args:
+            parameterizationList: List of parameter dictionaries from Ax
+
+        Returns:
+            List of dicts, each with metric name as key and (mean, sem) tuple as value
+        """
+        results = []
+        for parameterization in parameterizationList:
+            result = self.evaluateTrial(parameterization)
+            results.append(result)
+        return results

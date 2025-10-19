@@ -15,6 +15,7 @@ import shutil
 import matplotlib.pyplot as plt
 import numpy as np
 import ast
+import time
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
@@ -26,6 +27,10 @@ class Optimization(Study):
         self.progressManager = None  # Will be initialized in apply()
         self.storageFormat = "csv"  # Default storage format
         self.notes = None  # Optional notes for the optimization run
+        # Ax/BoTorch specific configuration
+        self.batchSize = 4  # Default batch size for Ax/BoTorch
+        self.numBatches = None  # Number of batches for Ax/BoTorch (alternative to numEvaluations)
+        self.initialSamples = None  # Will default to 2*numParams if not set
 
     def setParameterNames(self, paramNames: List[str]):
         """Specifies names of parameters that will be used in optimization"""
@@ -224,6 +229,65 @@ class Optimization(Study):
         self.notes = notes
         return self
 
+    def setBatchSize(self, batchSize: int):
+        """
+        Set batch size for Ax/BoTorch optimizer (number of parallel candidates per iteration).
+
+        Args:
+            batchSize: Number of parameter configurations to evaluate in parallel per iteration.
+                      Default is 4. Higher values explore more points per iteration but may
+                      require more function evaluations to converge.
+
+        Returns:
+            self for method chaining
+        """
+        if batchSize < 1:
+            raise ValueError("Batch size must be at least 1")
+        self.batchSize = batchSize
+        return self
+
+    def setInitialSamples(self, initialSamples: int):
+        """
+        Set number of initial Sobol samples for Ax/BoTorch optimizer.
+
+        Args:
+            initialSamples: Number of initial quasi-random (Sobol) samples to collect
+                           before starting Bayesian optimization with qEI.
+                           Default is max(5, 2*numParameters).
+
+        Returns:
+            self for method chaining
+        """
+        if initialSamples < 1:
+            raise ValueError("Initial samples must be at least 1")
+        self.initialSamples = initialSamples
+        return self
+
+    def setNumBatches(self, numBatches: int):
+        """
+        Set number of BO batches for Ax/BoTorch optimizer (alternative to numEvaluations).
+
+        This provides a clearer way to configure Ax/BoTorch optimization:
+        - Total evaluations = initialSamples + (numBatches * batchSize)
+
+        Args:
+            numBatches: Number of Bayesian optimization batches to run after initialization.
+                       Each batch generates batchSize candidates using qEI.
+
+        Returns:
+            self for method chaining
+
+        Example:
+            opt.setInitialSamples(10)  # 10 Sobol samples
+            opt.setBatchSize(4)        # 4 candidates per batch
+            opt.setNumBatches(10)      # 10 BO batches
+            # Total evaluations = 10 + (10 * 4) = 50
+        """
+        if numBatches < 1:
+            raise ValueError("Number of batches must be at least 1")
+        self.numBatches = numBatches
+        return self
+
     def migrateLegacyProgressFiles(self):
         """Migrate existing progress.txt and progressAll.txt files to new format"""
         if not self.applied:
@@ -276,7 +340,7 @@ class Optimization(Study):
 
     def apply(
         self,
-        numEvaluations: int = 100,
+        numEvaluations: int = None,
         saveAllEvaluations: bool = False,
         saveVisualization: bool = True,
         saveAdditionalMetricVisualizations: bool = False,
@@ -285,7 +349,8 @@ class Optimization(Study):
         Apply the optimization.
 
         Args:
-            numEvaluations: Number of evaluations to run
+            numEvaluations: Number of evaluations to run (required for dlib/nevergrad, ignored for ax/botorch).
+                           For Ax/BoTorch, use setNumBatches() instead.
             saveAllEvaluations: Whether to save all evaluations (not just best)
             saveVisualization: Whether to save visualization meshes for the primary metric
             saveAdditionalMetricVisualizations: Whether to save visualization meshes for additional metrics.
@@ -294,6 +359,30 @@ class Optimization(Study):
         """
         if not self.applied:
             self.validate()
+
+            # Validate numEvaluations based on optimizer
+            if self.optimizer in ["ax", "botorch"]:
+                # For Ax/BoTorch, numBatches must be set
+                if self.numBatches is None:
+                    raise ValueError(
+                        "For Ax/BoTorch optimizer, you must call setNumBatches() before apply().\n"
+                        "Example:\n"
+                        "  opt.setNumBatches(10)  # Required for Ax/BoTorch\n"
+                        "  opt.apply()            # No numEvaluations needed"
+                    )
+                # Calculate actual evaluations for saving in config
+                initialSamples = self.initialSamples if self.initialSamples else max(5, 2 * len(self.variableParameters))
+                self.numEvaluations = initialSamples + (self.numBatches * self.batchSize)
+            else:
+                # For dlib/nevergrad, numEvaluations must be provided
+                if numEvaluations is None:
+                    raise ValueError(
+                        f"For {self.optimizer} optimizer, you must provide numEvaluations in apply().\n"
+                        "Example:\n"
+                        "  opt.apply(numEvaluations=100)"
+                    )
+                self.numEvaluations = numEvaluations
+
             self.saveVisualization = saveVisualization
             self.saveAllEvaluations = saveAllEvaluations
             self.saveAdditionalMetricVisualizations = saveAdditionalMetricVisualizations
@@ -307,7 +396,6 @@ class Optimization(Study):
 
             self.applied = True
             self.evalCounter = 0
-            self.numEvaluations = numEvaluations
             self.saveStartingConfiguration()
 
             # Save notes to file if provided
@@ -337,6 +425,9 @@ class Optimization(Study):
         else:
             print("Optimization has already been applied.")
             return
+
+        # Set optimization start time for total elapsed time tracking
+        self.optimizationStartTime = time.time()
 
         # Create optimizer wrapper
         optimizer = OptimizerWrapper.create(self.optimizer, self)

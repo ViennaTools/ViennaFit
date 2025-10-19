@@ -81,6 +81,7 @@ class Study:
         self.bestParameters = None
         self.bestScore = float("inf")
         self.bestEvaluationNumber = None
+        self.optimizationStartTime = None  # Will be set when optimization starts
 
         print(
             f"{studyType.capitalize()} '{self.name}' assigned to project '{self.project.projectName}'"

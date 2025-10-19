@@ -163,6 +163,7 @@ def saveEvalToProgressManager(
     saveAll: bool = True,
     simulationTime: float = 0.0,
     distanceMetricTime: float = 0.0,
+    totalElapsedTime: float = 0.0,
     additionalMetricValues: Optional[Dict[str, float]] = None,
     additionalMetricTimes: Optional[Dict[str, float]] = None
 ) -> None:
@@ -175,6 +176,7 @@ def saveEvalToProgressManager(
         isBest=isBest,
         simulationTime=simulationTime,
         distanceMetricTime=distanceMetricTime,
+        totalElapsedTime=totalElapsedTime,
         additionalMetricValues=additionalMetricValues,
         additionalMetricTimes=additionalMetricTimes
     )
@@ -321,6 +323,7 @@ class EvaluationRecord:
     isBest: bool = False
     simulationTime: float = 0.0
     distanceMetricTime: float = 0.0
+    totalElapsedTime: float = 0.0  # Cumulative time since optimization started
     additionalMetricValues: Optional[Dict[str, float]] = None
     additionalMetricTimes: Optional[Dict[str, float]] = None
 
@@ -332,7 +335,8 @@ class EvaluationRecord:
             "objectiveValue": self.objectiveValue,
             "isBest": self.isBest,
             "simulationTime": self.simulationTime,
-            "distanceMetricTime": self.distanceMetricTime
+            "distanceMetricTime": self.distanceMetricTime,
+            "totalElapsedTime": self.totalElapsedTime
         }
         if self.additionalMetricValues:
             result["additionalMetricValues"] = self.additionalMetricValues
@@ -444,9 +448,9 @@ class CSVProgressStorage(ProgressDataManager):
             actualParamCount = len(record.parameterValues)
 
             if self.metadata and len(self.metadata.parameterNames) == actualParamCount:
-                fieldnames = ['evaluationNumber'] + self.metadata.parameterNames + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']
+                fieldnames = ['evaluationNumber'] + self.metadata.parameterNames + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'totalElapsedTime', 'objectiveValue']
             else:
-                fieldnames = ['evaluationNumber'] + [f'param_{i}' for i in range(actualParamCount)] + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']
+                fieldnames = ['evaluationNumber'] + [f'param_{i}' for i in range(actualParamCount)] + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'totalElapsedTime', 'objectiveValue']
 
             # Add additional metric columns if present
             if record.additionalMetricValues:
@@ -472,6 +476,7 @@ class CSVProgressStorage(ProgressDataManager):
             row['elapsedTime'] = record.elapsedTime
             row['simulationTime'] = record.simulationTime
             row['distanceMetricTime'] = record.distanceMetricTime
+            row['totalElapsedTime'] = record.totalElapsedTime
             row['objectiveValue'] = record.objectiveValue
 
             # Add additional metric values and times
@@ -519,13 +524,14 @@ class CSVProgressStorage(ProgressDataManager):
                 # Read new timing fields if available (backward compatibility)
                 simulationTime = float(row.get('simulationTime', 0.0))
                 distanceMetricTime = float(row.get('distanceMetricTime', 0.0))
+                totalElapsedTime = float(row.get('totalElapsedTime', 0.0))
 
                 # Extract parameter values and additional metrics
                 paramValues = []
                 additionalMetricValues = {}
                 additionalMetricTimes = {}
 
-                excludeKeys = ['evaluationNumber', 'elapsedTime', 'simulationTime', 'distanceMetricTime', 'objectiveValue']
+                excludeKeys = ['evaluationNumber', 'elapsedTime', 'simulationTime', 'distanceMetricTime', 'totalElapsedTime', 'objectiveValue']
 
                 for key, value in row.items():
                     if key not in excludeKeys:
@@ -549,6 +555,7 @@ class CSVProgressStorage(ProgressDataManager):
                     isBest=(filepath == self.bestFilepath),
                     simulationTime=simulationTime,
                     distanceMetricTime=distanceMetricTime,
+                    totalElapsedTime=totalElapsedTime,
                     additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
                     additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None
                 )
