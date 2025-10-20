@@ -40,8 +40,11 @@ class CustomEvaluator:
         self.variableValues = (
             {}
         )  # Dict[str, List[float]] - parameter name to list of values
+        self.pairedVariableValues = None  # List[Dict[str, float]] - specific parameter combinations (not grid)
         self.distanceMetric = None
         self.distanceMetricFunction = None
+        self.additionalDistanceMetrics = []  # List of additional metric names
+        self.additionalDistanceMetricFunctions = {}  # Dict of metric name -> callable
         self.isMultiDomainProcess = False
         self.gridResults = []  # List of evaluation results
         self.evaluationName = None
@@ -389,6 +392,56 @@ class CustomEvaluator:
         )
         return self
 
+    def setAdditionalMetrics(
+        self,
+        metrics: List[str],
+        criticalDimensionRanges: list[dict] = None,
+        sparseFieldExpansionWidth: int = 200,
+    ) -> "CustomEvaluator":
+        """
+        Set additional distance metrics to evaluate alongside the primary metric.
+
+        Args:
+            metrics: List of distance metric names to evaluate
+                    Options: 'CA', 'CSF', 'CSF-IS', 'CNB', 'CA+CSF', 'CA+CNB', 'CCD', 'CCH'
+            criticalDimensionRanges: Required only for 'CCD' metric. List of range configurations.
+            sparseFieldExpansionWidth: Expansion width for CSF and CSF-IS metrics (default: 200)
+
+        Returns:
+            self: For method chaining
+        """
+        if not isinstance(metrics, list):
+            raise ValueError("metrics must be a list of metric names")
+
+        self.additionalDistanceMetrics = []
+        self.additionalDistanceMetricFunctions = {}
+
+        for metric in metrics:
+            if metric not in DistanceMetric.AVAILABLE_METRICS:
+                raise ValueError(
+                    f"Invalid distance metric: {metric}. "
+                    f"Options are {', '.join(DistanceMetric.AVAILABLE_METRICS)}."
+                )
+
+            if metric == "CCD" and criticalDimensionRanges is None:
+                raise ValueError(
+                    "criticalDimensionRanges must be provided when using 'CCD' metric"
+                )
+
+            # Store metric name
+            self.additionalDistanceMetrics.append(metric)
+
+            # Create metric function
+            self.additionalDistanceMetricFunctions[metric] = DistanceMetric.create(
+                metric,
+                multiDomain=self.isMultiDomainProcess,
+                criticalDimensionRanges=criticalDimensionRanges,
+                sparseFieldExpansionWidth=sparseFieldExpansionWidth,
+            )
+
+        print(f"Set {len(self.additionalDistanceMetrics)} additional metrics: {', '.join(self.additionalDistanceMetrics)}")
+        return self
+
     def setVariableValues(
         self, variableValues: Dict[str, List[float]]
     ) -> "CustomEvaluator":
@@ -427,6 +480,58 @@ class CustomEvaluator:
         print(f"Grid will evaluate {totalCombinations} parameter combinations")
         return self
 
+    def setVariableValuesPaired(
+        self, pairedValues: List[Dict[str, float]]
+    ) -> "CustomEvaluator":
+        """
+        Set specific parameter combinations to evaluate (not a full grid).
+
+        This method allows you to specify exact parameter combinations to evaluate,
+        rather than generating all combinations from lists (Cartesian product).
+
+        Args:
+            pairedValues: List of parameter dictionaries, each representing one evaluation.
+                         All dictionaries must have the same keys.
+                         Example: [
+                             {"etchantFlux": 182.4, "ionFlux": 25.7, "ptDepth": 1.02},
+                             {"etchantFlux": 364.8, "ionFlux": 51.5, "ptDepth": 2.04},
+                             ...
+                         ]
+
+        Returns:
+            self: For method chaining
+
+        Raises:
+            ValueError: If pairedValues is empty or dictionaries have inconsistent keys
+        """
+        if not pairedValues or len(pairedValues) == 0:
+            raise ValueError("pairedValues must be a non-empty list")
+
+        # Validate that all dictionaries have the same keys
+        firstKeys = set(pairedValues[0].keys())
+        for i, combo in enumerate(pairedValues[1:], start=1):
+            if set(combo.keys()) != firstKeys:
+                raise ValueError(
+                    f"Inconsistent parameter keys in pairedValues[{i}]. "
+                    f"Expected {firstKeys}, got {set(combo.keys())}"
+                )
+
+        # Validate that all parameters exist in optimal or fixed parameters
+        allParams = {**self.fixedParameters, **self.optimalParameters}
+        for paramName in firstKeys:
+            if paramName not in allParams:
+                print(
+                    f"Warning: Parameter '{paramName}' not found in optimization results"
+                )
+
+        self.pairedVariableValues = pairedValues
+        # Clear regular variable values to avoid confusion
+        self.variableValues = {}
+
+        print(f"Set {len(pairedValues)} specific parameter combinations (not a grid)")
+        print(f"Parameters: {', '.join(sorted(firstKeys))}")
+        return self
+
     def getOptimalParameters(self) -> Dict[str, float]:
         """
         Get optimal parameter values from the optimization run.
@@ -443,14 +548,16 @@ class CustomEvaluator:
         evaluationName: str,
         saveVisualization: bool = True,
         initialDomainName: str = None,
+        saveAllMetricVisualizations: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Evaluate all combinations of variable values in a grid.
 
         Args:
             evaluationName: Name for this custom evaluation run
-            saveVisualization: Whether to save visualization files
+            saveVisualization: Whether to save visualization files for primary metric
             initialDomainName: Name of the initial domain to use (default uses single domain)
+            saveAllMetricVisualizations: Whether to save visualization files for all additional metrics
 
         Returns:
             List of evaluation results for each parameter combination
@@ -475,8 +582,8 @@ class CustomEvaluator:
                 criticalDimensionRanges=criticalDimensionRanges,
             )
 
-        if not self.variableValues:
-            raise ValueError("No variable values set. Call setVariableValues() first.")
+        if not self.variableValues and not self.pairedVariableValues:
+            raise ValueError("No variable values set. Call setVariableValues() or setVariableValuesPaired() first.")
 
         # Validate multi-domain setup
         validationIssues = self.validateMultiDomainSetup()
@@ -541,14 +648,25 @@ class CustomEvaluator:
                 f"Warning: Failed to save process sequence: {str(e)}. Continuing with evaluation..."
             )
 
-        # Generate all parameter combinations
-        paramNames = list(self.variableValues.keys())
-        paramValueLists = [self.variableValues[name] for name in paramNames]
-        combinations = list(itertools.product(*paramValueLists))
-
-        print(
-            f"Starting grid evaluation '{evaluationName}' with {len(combinations)} combinations..."
-        )
+        # Generate parameter combinations
+        if self.pairedVariableValues is not None:
+            # Use paired values (specific combinations, not grid)
+            paramNames = list(self.pairedVariableValues[0].keys())
+            combinations = []
+            for combo in self.pairedVariableValues:
+                # Convert dict to tuple in same order as paramNames
+                combinations.append(tuple(combo[name] for name in paramNames))
+            print(
+                f"Starting paired evaluation '{evaluationName}' with {len(combinations)} specific combinations..."
+            )
+        else:
+            # Use grid (Cartesian product)
+            paramNames = list(self.variableValues.keys())
+            paramValueLists = [self.variableValues[name] for name in paramNames]
+            combinations = list(itertools.product(*paramValueLists))
+            print(
+                f"Starting grid evaluation '{evaluationName}' with {len(combinations)} combinations..."
+            )
 
         print(
             f"Multi-domain mode: {'Enabled' if self.isMultiDomainProcess else 'Disabled'}"
@@ -640,12 +758,27 @@ class CustomEvaluator:
                             resultPaths[name] = resultPath
 
                     # Calculate objective value using multi-domain distance metric
+                    primaryMetricStartTime = time.time()
                     objectiveValue = distanceFunction(
                         resultLevelSets,
                         self.project.targetLevelSets,
                         saveVisualization,
                         writePath,
                     )
+                    primaryMetricTime = time.time() - primaryMetricStartTime
+
+                    # Calculate additional metrics
+                    additionalMetricValues = {}
+                    additionalMetricTimes = {}
+                    for metricName, metricFunc in self.additionalDistanceMetricFunctions.items():
+                        additionalMetricStartTime = time.time()
+                        additionalMetricValues[metricName] = metricFunc(
+                            resultLevelSets,
+                            self.project.targetLevelSets,
+                            saveAllMetricVisualizations,  # Save visualization if requested
+                            writePath,
+                        )
+                        additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
 
                 else:
                     # Single-domain processing (backward compatibility)
@@ -676,12 +809,27 @@ class CustomEvaluator:
                         vls.VTKWriter(resultMesh, resultPath).apply()
 
                     # Calculate objective value using single-domain distance metric
+                    primaryMetricStartTime = time.time()
                     objectiveValue = distanceFunction(
                         resultDomain,
                         self.project.targetLevelSet,
                         saveVisualization,
                         writePath,
                     )
+                    primaryMetricTime = time.time() - primaryMetricStartTime
+
+                    # Calculate additional metrics
+                    additionalMetricValues = {}
+                    additionalMetricTimes = {}
+                    for metricName, metricFunc in self.additionalDistanceMetricFunctions.items():
+                        additionalMetricStartTime = time.time()
+                        additionalMetricValues[metricName] = metricFunc(
+                            resultDomain,
+                            self.project.targetLevelSet,
+                            saveAllMetricVisualizations,  # Save visualization if requested
+                            writePath,
+                        )
+                        additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
 
                 executionTime = time.time() - startTime
 
@@ -692,6 +840,9 @@ class CustomEvaluator:
                     "allParameters": evalParams,
                     "objectiveValue": objectiveValue,
                     "executionTime": executionTime,
+                    "primaryMetricTime": primaryMetricTime,
+                    "additionalMetricValues": additionalMetricValues,
+                    "additionalMetricTimes": additionalMetricTimes,
                     "resultPath": (
                         resultPaths if self.isMultiDomainProcess else resultPath
                     ),
@@ -712,6 +863,9 @@ class CustomEvaluator:
                     "allParameters": evalParams,
                     "objectiveValue": float("inf"),
                     "executionTime": time.time() - startTime,
+                    "primaryMetricTime": 0.0,
+                    "additionalMetricValues": {},
+                    "additionalMetricTimes": {},
                     "error": str(e),
                     "resultPath": None,
                     "multiDomain": self.isMultiDomainProcess,
@@ -801,6 +955,7 @@ class CustomEvaluator:
                 ),
                 "processSequenceSavedSuccessfully": self.savedProcessSequencePath is not None,
                 "distanceMetric": self.distanceMetric,
+                "additionalDistanceMetrics": self.additionalDistanceMetrics,
                 "totalEvaluations": len(self.gridResults),
                 "successfulEvaluations": len(validResults),
                 "failedEvaluations": len(self.gridResults) - len(validResults),
@@ -854,11 +1009,21 @@ class CustomEvaluator:
             if self.gridResults:
                 # Write header
                 paramNames = list(self.variableValues.keys())
-                headers = (
-                    ["evaluationNumber"]
-                    + paramNames
-                    + ["objectiveValue", "executionTime"]
-                )
+                headers = ["evaluationNumber"] + paramNames
+
+                # Add primary metric columns
+                if self.distanceMetric:
+                    headers.extend([f"{self.distanceMetric}_value", f"{self.distanceMetric}_time"])
+                else:
+                    headers.extend(["objectiveValue", "primaryMetricTime"])
+
+                # Add additional metric columns
+                for metricName in self.additionalDistanceMetrics:
+                    headers.extend([f"{metricName}_value", f"{metricName}_time"])
+
+                # Add execution time at the end
+                headers.append("executionTime")
+
                 f.write(",".join(headers) + "\n")
 
                 # Write data rows
@@ -866,7 +1031,19 @@ class CustomEvaluator:
                     row = [str(result["evaluationNumber"])]
                     for paramName in paramNames:
                         row.append(str(result["parameters"].get(paramName, "")))
-                    row.append(str(result["objectiveValue"]))
+
+                    # Add primary metric value and time
+                    row.append(str(result.get("objectiveValue", "")))
+                    row.append(str(result.get("primaryMetricTime", "")))
+
+                    # Add additional metric values and times
+                    additionalMetricValues = result.get("additionalMetricValues", {})
+                    additionalMetricTimes = result.get("additionalMetricTimes", {})
+                    for metricName in self.additionalDistanceMetrics:
+                        row.append(str(additionalMetricValues.get(metricName, "")))
+                        row.append(str(additionalMetricTimes.get(metricName, "")))
+
+                    # Add execution time
                     row.append(str(result["executionTime"]))
                     f.write(",".join(row) + "\n")
 
