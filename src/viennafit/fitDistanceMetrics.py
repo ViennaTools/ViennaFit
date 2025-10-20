@@ -6,7 +6,7 @@ import os
 class DistanceMetric:
     """Factory class for distance metrics used in optimization."""
 
-    AVAILABLE_METRICS = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD", "CCH"]
+    AVAILABLE_METRICS = ["CA", "CSF", "CSF-IS", "CNB", "CA+CSF", "CA+CNB", "CCD", "CCH"]
 
     @staticmethod
     def create(
@@ -53,6 +53,32 @@ class DistanceMetric:
                         d1, d2, sv, wp, sparseFieldExpansionWidth
                     )
                 )
+            elif metricName == "CSF-IS":
+                # Create caching wrapper for CSF-IS to expand target only once per domain
+                expandedTargetCache = {}
+
+                def cached_csf_is_single(d1, d2, sv, wp):
+                    """Cached CSF-IS for single domain comparison."""
+                    import time as time_module
+                    cacheKey = id(d2)
+
+                    if cacheKey not in expandedTargetCache:
+                        # First call: expand target and cache it (exclude from timing)
+                        expandStartTime = time_module.time()
+                        expandedTarget = vls.Domain(d2)
+                        vls.Expand(expandedTarget, sparseFieldExpansionWidth).apply()
+                        expandTime = time_module.time() - expandStartTime
+                        expandedTargetCache[cacheKey] = expandedTarget
+                        # print(f"CSF-IS: Expanded target domain (took {expandTime:.3f}s, excluded from metric time)")
+
+                    # Use cached expanded target
+                    return DistanceMetric._compareSparseFieldIterateSample(
+                        d1, expandedTargetCache[cacheKey], sv, wp, sparseFieldExpansionWidth
+                    )
+
+                return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
+                    domains1, domains2, saveVis, path, cached_csf_is_single
+                )
             elif metricName == "CNB":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
                     domains1, domains2, saveVis, path, DistanceMetric._compareNarrowBand
@@ -90,6 +116,31 @@ class DistanceMetric:
                 return lambda d1, d2, sv, wp: DistanceMetric._compareSparseField(
                     d1, d2, sv, wp, sparseFieldExpansionWidth
                 )
+            elif metricName == "CSF-IS":
+                # Create caching wrapper for CSF-IS to expand target only once
+                expandedTargetCache = {}
+
+                def cached_csf_is(d1, d2, sv, wp):
+                    """Cached CSF-IS that expands target (d2) only once."""
+                    import time as time_module
+                    cacheKey = id(d2)
+
+                    if cacheKey not in expandedTargetCache:
+                        # First call: expand target and cache it (exclude from timing)
+                        expandStartTime = time_module.time()
+                        expandedTarget = vls.Domain(d2)
+                        vls.Expand(expandedTarget, sparseFieldExpansionWidth).apply()
+                        expandTime = time_module.time() - expandStartTime
+                        expandedTargetCache[cacheKey] = expandedTarget
+                        # print(f"CSF-IS: Expanded target domain (took {expandTime:.3f}s, excluded from metric time)")
+
+                    # Use cached expanded target
+                    # Note: d1 is sample (will be iterated), cached target is expanded
+                    return DistanceMetric._compareSparseFieldIterateSample(
+                        d1, expandedTargetCache[cacheKey], sv, wp, sparseFieldExpansionWidth
+                    )
+
+                return cached_csf_is
             elif metricName == "CNB":
                 return DistanceMetric._compareNarrowBand
             elif metricName == "CA+CNB":
@@ -151,6 +202,51 @@ class DistanceMetric:
             # Save mesh to progress directory with evaluation counter
             csfPath = os.path.join(
                 f"{writePath}-CSF.vtp",
+            )
+            vls.VTKWriter(mesh, csfPath).apply()
+
+        return csf.getSumSquaredDifferences()
+
+    @staticmethod
+    def _compareSparseFieldIterateSample(
+        domain1: vls.Domain,
+        domain2: vls.Domain,
+        saveVisualization: bool = False,
+        writePath: str = None,
+        expansionWidth: int = 200,
+    ) -> float:
+        """
+        Compare domains using sparse field difference with SWAPPED roles.
+
+        In this variant:
+        - domain2 (target) is EXPANDED and used as reference
+        - domain1 (sample/result) is ITERATED (reduced to sparse field)
+
+        This is the INVERSE of the standard CSF metric, useful when you want
+        to iterate over the result/sample points rather than the target points.
+
+        Args:
+            domain1: Sample domain (will be iterated - reduced to sparse field)
+            domain2: Target domain (will be expanded as reference)
+            saveVisualization: Whether to save visualization files
+            writePath: Path for saving visualization files
+            expansionWidth: Expansion width for target domain (default: 200)
+
+        Returns:
+            Sum of squared differences
+        """
+        # SWAP: Pass domain2 as expanded, domain1 as iterated
+        csf = vls.CompareSparseField(domain2, domain1)
+        csf.setExpandedLevelSetWidth(expansionWidth)
+        if saveVisualization:
+            mesh = vls.Mesh()
+            csf.setOutputMesh(mesh)
+        csf.apply()
+
+        if saveVisualization:
+            # Save mesh to progress directory with evaluation counter
+            csfPath = os.path.join(
+                f"{writePath}-CSF-IS.vtp",
             )
             vls.VTKWriter(mesh, csfPath).apply()
 
