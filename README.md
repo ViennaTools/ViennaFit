@@ -20,14 +20,12 @@ pip install .
 - nevergrad 1.0.12+
 - NumPy 1.26.4
 - cma 3.2.2
-- SALib >= 1.5.1+
+- SALib 1.5.1+
+
+### Optional if you want to use Bayesian optimization 
+- botorch 0.15.1
+- gpytorch 1.14
+- ax-platform 1.1.2
 
 ## Python version
 - Python 3.10+
-
-## To do:
-- Custom range + presets for localSensStudy
-- Objective function options
-- 3D implementation
-- Add custom objective function
-
