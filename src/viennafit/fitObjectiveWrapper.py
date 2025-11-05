@@ -1,5 +1,5 @@
 from typing import Tuple, Callable
-from viennaps2d import Domain
+from viennaps import Domain
 from .fitUtilities import (
     saveEvalToProgressFile,
     saveEvalToProgressManager,
@@ -141,8 +141,8 @@ class BaseObjectiveWrapper:
             if len(self.study.project.initialDomains) > 0:
                 # Use multiple named initial domains
                 for name, domain in self.study.project.initialDomains.items():
-                    domainCopy = Domain()
-                    domainCopy.deepCopy(domain)
+                    dimension = 2 if self.study.project.mode == "2D" else 3
+                    domainCopy = Domain(domain, dimension)
                     initialDomains[name] = domainCopy
                     processedDomains[name] = domainCopy  # Same object, will be modified by process
             elif self.study.project.initialDomain is not None:
@@ -173,19 +173,19 @@ class BaseObjectiveWrapper:
                 )
         else:
             # Single-domain processing (backward compatibility)
-            domainCopy = Domain()
+            dimension = 2 if self.study.project.mode == "2D" else 3
             if self.initialDomainName is not None:
                 # Use named initial domain
                 if self.initialDomainName not in self.study.project.initialDomains:
                     raise ValueError(
                         f"Initial domain '{self.initialDomainName}' not found in project"
                     )
-                domainCopy.deepCopy(
-                    self.study.project.initialDomains[self.initialDomainName]
+                domainCopy = Domain(
+                    self.study.project.initialDomains[self.initialDomainName], dimension
                 )
             else:
                 # Use default single initial domain for backward compatibility
-                domainCopy.deepCopy(self.study.project.initialDomain)
+                domainCopy = Domain(self.study.project.initialDomain, dimension)
 
             # Apply process sequence
             processResult = self.study.processSequence(domainCopy, paramDict)

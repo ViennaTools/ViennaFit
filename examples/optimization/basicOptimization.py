@@ -1,4 +1,4 @@
-import viennaps2d as vps
+import viennaps as vps
 import os
 
 import viennafit as fit

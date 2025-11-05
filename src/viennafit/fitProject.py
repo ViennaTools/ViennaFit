@@ -2,9 +2,9 @@ import os
 import json
 import datetime
 from typing import List, Dict, Tuple, Optional
-from viennaps2d import Reader
-from viennals2d import Reader as lsReader
-from viennals2d import Domain as lsDomain
+from viennaps import Reader
+from viennals import Reader as lsReader
+from viennals import Domain as lsDomain
 
 
 class Project:
@@ -183,7 +183,8 @@ class Project:
             self.targetLevelSet = None
         else:
             # Load the target level set
-            targetDomain = lsDomain()
+            dimension = 2 if self.mode == "2D" else 3
+            targetDomain = lsDomain(dimension)
             lsReader(
                 targetDomain,
                 os.path.join(
@@ -199,7 +200,8 @@ class Project:
         self.targetLevelSets = {}
         for targetName, targetPath in self.targetLevelSetPaths.items():
             if targetPath != "" and os.path.exists(targetPath):
-                targetDomain = lsDomain()
+                dimension = 2 if self.mode == "2D" else 3
+                targetDomain = lsDomain(dimension)
                 lsReader(targetDomain, targetPath).apply()
                 self.targetLevelSets[targetName] = targetDomain
                 
@@ -248,8 +250,10 @@ class Project:
         )
 
         if self.mode == "2D":
-            import viennaps2d as vps
-            import viennals2d as vls
+            import viennaps as vps
+            import viennals as vls
+            vps.setDimension(2)
+            vls.setDimension(2)
 
             # Save the domain
             vps.Writer(domain, domainPath).apply()
@@ -275,8 +279,10 @@ class Project:
                 vls.VTKWriter(meshSurface, surfacePath).apply()
 
         elif self.mode == "3D":
-            import viennaps3d as vps
-            import viennals3d as vls
+            import viennaps as vps
+            import viennals as vls
+            vps.setDimension(3)
+            vls.setDimension(3)
 
             vps.Writer(domain, domainPath).apply()
 
@@ -331,7 +337,8 @@ class Project:
         )
 
         if self.mode == "2D":
-            import viennals2d as vls
+            import viennals as vls
+            vls.setDimension(2)
 
             # Save the level set
             vls.Writer(levelSet, domainPath).apply()
@@ -353,7 +360,8 @@ class Project:
             vls.VTKWriter(meshSurface, surfacePath).apply()
 
         elif self.mode == "3D":
-            import viennals3d as vls
+            import viennals as vls
+            vls.setDimension(3)
 
             # Save the level set
             vls.Writer(levelSet, domainPath).apply()
@@ -527,7 +535,8 @@ class Project:
             raise ValueError("Target domain file must be in .lvst format.")
 
         # Load the level set
-        levelSet = lsDomain()
+        dimension = 2 if self.mode == "2D" else 3
+        levelSet = lsDomain(dimension)
         lsReader(levelSet, filePath).apply()
 
         # Use existing setTargetLevelSet method to save to project structure
@@ -552,7 +561,8 @@ class Project:
         )
 
         if self.mode == "2D":
-            import viennals2d as vls
+            import viennals as vls
+            vls.setDimension(2)
 
             # Save the level set
             vls.Writer(levelSet, domainPath).apply()
@@ -574,7 +584,8 @@ class Project:
             vls.VTKWriter(meshSurface, surfacePath).apply()
 
         elif self.mode == "3D":
-            import viennals3d as vls
+            import viennals as vls
+            vls.setDimension(3)
 
             # Save the level set
             vls.Writer(levelSet, domainPath).apply()
@@ -654,7 +665,8 @@ class Project:
             raise ValueError("Target domain file must be in .lvst format.")
 
         # Load the level set
-        levelSet = lsDomain()
+        dimension = 2 if self.mode == "2D" else 3
+        levelSet = lsDomain(dimension)
         lsReader(levelSet, filePath).apply()
 
         # Use existing addTargetLevelSet method to save to project structure
@@ -679,8 +691,10 @@ class Project:
         )
 
         if self.mode == "2D":
-            import viennaps2d as vps
-            import viennals2d as vls
+            import viennaps as vps
+            import viennals as vls
+            vps.setDimension(2)
+            vls.setDimension(2)
 
             # Save the domain
             vps.Writer(domain, domainPath).apply()
@@ -706,8 +720,10 @@ class Project:
                 vls.VTKWriter(meshSurface, surfacePath).apply()
 
         elif self.mode == "3D":
-            import viennaps3d as vps
-            import viennals3d as vls
+            import viennaps as vps
+            import viennals as vls
+            vps.setDimension(3)
+            vls.setDimension(3)
 
             vps.Writer(domain, domainPath).apply()
 

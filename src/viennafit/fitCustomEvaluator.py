@@ -1,8 +1,8 @@
 from .fitProject import Project
 from .fitUtilities import loadOptimumFromResultsFile
 from .fitDistanceMetrics import DistanceMetric
-import viennaps2d as vps
-import viennals2d as vls
+import viennaps as vps
+import viennals as vls
 import importlib.util
 import sys
 import os
@@ -716,14 +716,16 @@ class CustomEvaluator:
                             raise ValueError(
                                 f"Initial domain '{initialDomainName}' not found in project"
                             )
+                        dimension = 2 if self.project.mode == "2D" else 3
                         domainCopy = vps.Domain(
-                            self.project.initialDomains[initialDomainName]
+                            self.project.initialDomains[initialDomainName], dimension
                         )
                         initialDomains[initialDomainName] = domainCopy
                     else:
                         # Use all available initial domains
+                        dimension = 2 if self.project.mode == "2D" else 3
                         for name, domain in self.project.initialDomains.items():
-                            domainCopy = vps.Domain(domain)
+                            domainCopy = vps.Domain(domain, dimension)
                             initialDomains[name] = domainCopy
 
                     # Run process sequence with all domains
@@ -788,12 +790,14 @@ class CustomEvaluator:
                             raise ValueError(
                                 f"Initial domain '{initialDomainName}' not found in project"
                             )
+                        dimension = 2 if self.project.mode == "2D" else 3
                         domainCopy = vps.Domain(
-                            self.project.initialDomains[initialDomainName]
+                            self.project.initialDomains[initialDomainName], dimension
                         )
                     else:
                         # Use default single initial domain for backward compatibility
-                        domainCopy = vps.Domain(self.project.initialDomain)
+                        dimension = 2 if self.project.mode == "2D" else 3
+                        domainCopy = vps.Domain(self.project.initialDomain, dimension)
 
                     # Run process sequence with current parameters on the copy
                     resultDomain = self.processSequence(domainCopy, evalParams)

@@ -1,8 +1,12 @@
-import viennals2d as vls
-import viennaps2d as vps
+import viennals as vls
+import viennaps as vps
 
 import viennafit as fit
 import os
+
+# Set dimensions for 2D mode
+vps.setDimension(2)
+vls.setDimension(2)
 
 
 # In this example we create initial and target domains and assign them to a project.
@@ -53,7 +57,11 @@ vls.FromSurfaceMesh(domainTarget, meshTarget).apply()
 
 
 # Create the initial domain with the bottom domain as a material
-domainInitial = vps.Domain()
+domainInitial = vps.Domain(
+    gridDelta=gridDelta,
+    xExtent=extentBottom[1] - extentBottom[0],  # width of the domain
+    boundary=vps.BoundaryType.REFLECTIVE_BOUNDARY,
+)
 domainInitial.insertNextLevelSetAsMaterial(domainBottom, vps.Material.Si)
 
 # Assign the initial and target domains to the project

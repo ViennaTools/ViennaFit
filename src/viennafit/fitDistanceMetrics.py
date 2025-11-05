@@ -1,5 +1,5 @@
 from typing import Callable
-import viennals2d as vls
+import viennals as vls
 import os
 
 

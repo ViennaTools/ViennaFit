@@ -1,5 +1,5 @@
 from .fitProject import Project
-import viennaps2d as vps
+import viennaps as vps
 import importlib.util
 import sys
 import os
@@ -174,9 +174,9 @@ class Study:
         Args:
             processFunction: Function with one of these signatures:
                 Single-domain (backward compatibility):
-                    (domain: viennaps2d.Domain, params: dict[str, float]) -> viennaps2d.Domain
+                    (domain: viennaps.Domain, params: dict[str, float]) -> viennaps.Domain
                 Multi-domain:
-                    (domains: dict[str, viennaps2d.Domain], params: dict[str, float]) -> dict[str, viennaps2d.Domain]
+                    (domains: dict[str, viennaps.Domain], params: dict[str, float]) -> dict[str, viennaps.Domain]
                 The function should take initial domain(s) and parameter dictionary,
                 apply the process sequence, and return the resulting domain(s).
 
@@ -203,7 +203,7 @@ class Study:
 
         if domainParam.annotation not in validDomainTypes:
             raise TypeError(
-                f"First parameter must be viennaps2d.Domain, dict[str, viennaps2d.Domain], or list[viennaps2d.Domain], got {domainParam.annotation}"
+                f"First parameter must be viennaps.Domain, dict[str, viennaps.Domain], or list[viennaps.Domain], got {domainParam.annotation}"
             )
 
         # Check second parameter (params dict)
@@ -229,8 +229,8 @@ class Study:
             )
             source = inspect.getsource(self.processSequence)
             with open(processFilePath, "w") as f:
-                f.write("import viennaps2d as vps\n")
-                f.write("import viennals2d as vls\n\n")
+                f.write("import viennaps as vps\n")
+                f.write("import viennals as vls\n\n")
                 f.write(source)
             print(f"Process sequence saved to: {processFilePath}")
 

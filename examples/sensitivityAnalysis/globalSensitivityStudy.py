@@ -1,5 +1,5 @@
 import viennafit as fit
-import viennaps2d as vps
+import viennaps as vps
 import os
 
 # Create project and load data

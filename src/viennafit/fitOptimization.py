@@ -8,7 +8,7 @@ from .fitUtilities import (
     ProgressDataManager,
 )
 from .postprocessing import OptimizationPostprocessor
-import viennaps2d as vps
+import viennaps as vps
 import os
 import json
 import shutil
