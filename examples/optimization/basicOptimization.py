@@ -1,13 +1,17 @@
-import viennaps2d as vps
+import viennaps as vps
+import viennals as vls
 import os
 
 import viennafit as fit
 
+# Set dimensions for 2D mode
+vps.setDimension(2)
+vls.setDimension(2)
+
 p1 = fit.Project()
-projectToLoad = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "../projects/exampleProject",
-)
+# Path to the example project created by setup scripts
+scriptDir = os.path.dirname(os.path.abspath(__file__))
+projectToLoad = os.path.abspath(os.path.join(scriptDir, "../../projects/exampleProject"))
 p1.load(projectToLoad)
 
 opt1 = fit.Optimization(p1)
@@ -81,8 +85,14 @@ opt1.setVariableParameters(
 # Set fixed parameters
 opt1.setFixedParameters({"ionEnergy": 100.0})
 
-opt1.setDistanceMetric("CA+CSF")
+# Set distance metrics: CCH (Chamfer) as primary, CSF as additional metric.
+opt1.setDistanceMetrics(
+    primaryMetric="CCH",
+    additionalMetrics=["CSF"],
+)
 
 opt1.setName("run1")
 
-opt1.apply(numEvaluations=100, saveVisualization=True)
+opt1.setNotes("Basic optimization example with Chamfer and CSF metrics.")
+
+opt1.apply(numEvaluations=10, saveVisualization=True)

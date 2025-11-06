@@ -1,11 +1,11 @@
 from .fitProject import Project
-import viennaps2d as vps
+import viennaps as vps
 import importlib.util
 import sys
 import os
 import json
 import inspect
-from typing import Dict, List, Callable
+from typing import Callable
 
 
 class Study:
@@ -15,7 +15,7 @@ class Study:
         """Generate run directory with conflict resolution"""
         runDir = os.path.join(self.project.projectPath, studyType, baseName)
         name = baseName
-        
+
         if os.path.exists(runDir):
             # Find the highest existing index
             studyDir = os.path.join(self.project.projectPath, studyType)
@@ -38,7 +38,7 @@ class Study:
                 f"Run directory already exists. Renaming study to '{name}' "
                 f"and using directory: {runDir}"
             )
-        
+
         return name, runDir
 
     def __init__(self, name: str, project: Project, studyType: str):
@@ -65,9 +65,14 @@ class Study:
         self.applied = False
         self.processSequence = None
         self.distanceMetric = None
+        self.primaryDistanceMetric = None
+        self.additionalDistanceMetrics = []
+        self.criticalDimensionRanges = None
+        self.sparseFieldExpansionWidth = 200
         self.evalCounter = 0
         self.saveVisualization = True
         self.saveAllEvaluations = False
+        self.saveAdditionalMetricVisualizations = False
 
         # Parameter handling
         self.parameterNames = []
@@ -76,18 +81,19 @@ class Study:
         self.bestParameters = None
         self.bestScore = float("inf")
         self.bestEvaluationNumber = None
+        self.optimizationStartTime = None  # Will be set when optimization starts
 
         print(
             f"{studyType.capitalize()} '{self.name}' assigned to project '{self.project.projectName}'"
             f" and initialized in {self.runDir}"
         )
 
-    def setParameterNames(self, paramNames: List[str]):
+    def setParameterNames(self, paramNames: list[str]):
         """Specifies names of parameters that will be used in the study"""
         self.parameterNames = paramNames
         return self
 
-    def setFixedParameters(self, fixedParams: Dict[str, float]):
+    def setFixedParameters(self, fixedParams: dict[str, float]):
         """
         Set multiple parameters as fixed with specific values
 
@@ -136,11 +142,15 @@ class Study:
 
                     # Check function has exactly 2 parameters
                     if len(params) == 2:
-                        # Check parameter types
-                        if (
-                            params[0].annotation == vps.Domain
-                            or params[0].annotation == inspect.Parameter.empty
-                        ):
+                        # Check parameter types - support both single and multi-domain
+                        validDomainTypes = [
+                            vps.Domain,  # Single domain (backward compatibility)
+                            dict[str, vps.Domain],  # Multi-domain dict
+                            list[vps.Domain],  # Multi-domain list
+                            inspect.Parameter.empty,  # No annotation
+                        ]
+
+                        if params[0].annotation in validDomainTypes:
                             if (
                                 params[1].annotation == dict[str, float]
                                 or params[1].annotation == inspect.Parameter.empty
@@ -162,10 +172,13 @@ class Study:
         Set the process sequence to be used in the study.
 
         Args:
-            processFunction: Function with signature:
-                (domain: viennaps2d.Domain, params: dict[str, float]) -> viennaps2d.Domain
-                The function should take an initial domain and parameter dictionary,
-                apply the process sequence, and return the resulting domain.
+            processFunction: Function with one of these signatures:
+                Single-domain (backward compatibility):
+                    (domain: viennaps.Domain, params: dict[str, float]) -> viennaps.Domain
+                Multi-domain:
+                    (domains: dict[str, viennaps.Domain], params: dict[str, float]) -> dict[str, viennaps.Domain]
+                The function should take initial domain(s) and parameter dictionary,
+                apply the process sequence, and return the resulting domain(s).
 
         Returns:
             self: For method chaining
@@ -179,14 +192,18 @@ class Study:
                 f"Process sequence must have exactly 2 parameters, got {len(functionParams)}"
             )
 
-        # Check first parameter (domain)
+        # Check first parameter (domain or domains)
         domainParam = functionParams[0]
-        if (
-            domainParam.annotation != vps.Domain
-            and domainParam.annotation != inspect.Parameter.empty
-        ):
+        validDomainTypes = [
+            vps.Domain,  # Single domain (backward compatibility)
+            dict[str, vps.Domain],  # Multi-domain dict
+            list[vps.Domain],  # Multi-domain list
+            inspect.Parameter.empty,  # No annotation
+        ]
+
+        if domainParam.annotation not in validDomainTypes:
             raise TypeError(
-                f"First parameter must be a viennaps2d.Domain, got {domainParam.annotation}"
+                f"First parameter must be viennaps.Domain, dict[str, viennaps.Domain], or list[viennaps.Domain], got {domainParam.annotation}"
             )
 
         # Check second parameter (params dict)
@@ -197,7 +214,7 @@ class Study:
             and paramsParam.annotation != inspect.Parameter.empty
         ):
             raise TypeError(
-                f"Second parameter must be Dict[str, float], got {paramsParam.annotation}"
+                f"Second parameter must be dict[str, float], got {paramsParam.annotation}"
             )
 
         self.processSequence = processFunction
@@ -207,11 +224,13 @@ class Study:
     def _saveProcessSequence(self):
         """Save the process sequence to a file (called by subclasses in apply method)"""
         if self.processSequence is not None:
-            processFilePath = os.path.join(self.runDir, f"{self.name}-processSequence.py")
+            processFilePath = os.path.join(
+                self.runDir, f"{self.name}-processSequence.py"
+            )
             source = inspect.getsource(self.processSequence)
             with open(processFilePath, "w") as f:
-                f.write("import viennaps2d as vps\n")
-                f.write("import viennals2d as vls\n\n")
+                f.write("import viennaps as vps\n")
+                f.write("import viennals as vls\n\n")
                 f.write(source)
             print(f"Process sequence saved to: {processFilePath}")
 
@@ -235,9 +254,14 @@ class Study:
 
         return True
 
-    def setDistanceMetric(self, metric: str):
+    def setDistanceMetric(
+        self,
+        metric: str,
+        criticalDimensionRanges: list[dict] = None,
+        sparseFieldExpansionWidth: int = 200,
+    ):
         """
-        Set the distance metric for comparing level sets.
+        Set the distance metric for comparing level sets (single metric mode).
 
         Args:
             metric: Distance metric to be used.
@@ -246,15 +270,97 @@ class Study:
                         - 'CSF' (Compare sparse field),
                         - 'CNB' (Compare narrow band),
                         - 'CA+CSF' (Sum of CA and CSF),
-                        - 'CA+CNB' (Sum of CA and CNB).
+                        - 'CA+CNB' (Sum of CA and CNB),
+                        - 'CCD' (Compare critical dimensions).
+            criticalDimensionRanges: Required only for 'CCD' metric. List of range configurations.
+                    Each dict should have:
+                        - 'axis': 'x' or 'y' (the axis to scan along)
+                        - 'min': minimum value of the range
+                        - 'max': maximum value of the range
+                        - 'findMaximum': True to find maximum, False to find minimum
+                    Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
+            sparseFieldExpansionWidth: Expansion width for CSF metric (default: 200).
+                    Applied to target level set before comparison to ensure sufficient overlap.
         """
-        if metric not in ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB"]:
+        if metric not in ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD"]:
             raise ValueError(
                 f"Invalid distance metric: {metric}. "
-                "Options are 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB'."
+                "Options are 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB', 'CCD'."
+            )
+
+        if metric == "CCD" and criticalDimensionRanges is None:
+            raise ValueError(
+                "criticalDimensionRanges must be provided when using 'CCD' metric"
             )
 
         self.distanceMetric = metric
+        self.primaryDistanceMetric = metric
+        self.additionalDistanceMetrics = []
+        self.criticalDimensionRanges = criticalDimensionRanges
+        self.sparseFieldExpansionWidth = sparseFieldExpansionWidth
+        return self
+
+    def setDistanceMetrics(
+        self,
+        primaryMetric: str,
+        additionalMetrics: list[str] = None,
+        criticalDimensionRanges: list[dict] = None,
+        sparseFieldExpansionWidth: int = 200,
+        saveAdditionalMetricVisualizations: bool = False,
+    ):
+        """
+        Set multiple distance metrics for comparing level sets.
+        The primary metric is used for optimization, while additional metrics are tracked for analysis.
+
+        Args:
+            primaryMetric: Primary distance metric used for optimization.
+                    Options: 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB', 'CCD'
+            additionalMetrics: List of additional metrics to track (with individual timing).
+                    These are evaluated but not used for optimization.
+            criticalDimensionRanges: Required only if 'CCD' is used. List of range configurations.
+                    Each dict should have:
+                        - 'axis': 'x' or 'y' (the axis to scan along)
+                        - 'min': minimum value of the range
+                        - 'max': maximum value of the range
+                        - 'findMaximum': True to find maximum, False to find minimum
+                    Example: [{'axis': 'x', 'min': -5, 'max': 5, 'findMaximum': True}]
+            sparseFieldExpansionWidth: Expansion width for CSF metric (default: 200).
+                    Applied to all CSF-based metrics to ensure sufficient overlap.
+            saveAdditionalMetricVisualizations: Whether to save visualization meshes for additional metrics.
+                    Only applies when saveVisualization=True in apply() and for best/all evaluations.
+                    Default: False (only primary metric visualizations are saved).
+        """
+        availableMetrics = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD", "CCH"]
+
+        if primaryMetric not in availableMetrics:
+            raise ValueError(
+                f"Invalid primary distance metric: {primaryMetric}. "
+                f"Options are {', '.join(availableMetrics)}."
+            )
+
+        if additionalMetrics is None:
+            additionalMetrics = []
+
+        for metric in additionalMetrics:
+            if metric not in availableMetrics:
+                raise ValueError(
+                    f"Invalid additional distance metric: {metric}. "
+                    f"Options are {', '.join(availableMetrics)}."
+                )
+
+        # Check if CCD is used anywhere
+        allMetrics = [primaryMetric] + additionalMetrics
+        if "CCD" in allMetrics and criticalDimensionRanges is None:
+            raise ValueError(
+                "criticalDimensionRanges must be provided when using 'CCD' metric"
+            )
+
+        self.distanceMetric = primaryMetric  # For backward compatibility
+        self.primaryDistanceMetric = primaryMetric
+        self.additionalDistanceMetrics = additionalMetrics
+        self.criticalDimensionRanges = criticalDimensionRanges
+        self.sparseFieldExpansionWidth = sparseFieldExpansionWidth
+        self.saveAdditionalMetricVisualizations = saveAdditionalMetricVisualizations
         return self
 
     def apply(self, *args, **kwargs):

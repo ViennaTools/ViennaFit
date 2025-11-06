@@ -3,13 +3,13 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-version = "1.0.0"
+version = "2.0.0"
 name = "ViennaFit"
 readme = "README.md"
 description = "A Python package for fitting ViennaPS simulation models to experimental data."
 dependencies = [
-    "viennaps>=3.5.1",
-    "dlib>=19.24.0",
+    "viennaps>=4.0.0",
+    "dlib==19.24.0",
     "cma==3.2.2",
     "numpy==1.26.4",
     "nevergrad>=1.0.12",

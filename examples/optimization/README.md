@@ -8,6 +8,7 @@ This folder contains examples for parameter optimization using ViennaFit.
 - Basic parameter optimization example
 - Defines a process sequence with multiple parameters
 - Shows how to set parameter bounds and run optimization
+- Demonstrates primary and additional metrics configuration
 - Saves results for use in sensitivity analysis
 
 ### customEvaluatorExample.py
@@ -30,6 +31,8 @@ Before running optimization examples:
 
 ## Distance Metrics
 
-The examples use the "CA+CSF" distance metric, which combines:
-- CA (Compare Area): Compares the areas of domains
-- CSF (Compare Surface Features): Compares surface feature characteristics
+The examples use CCH (Chamfer distance) as the primary metric with CSF as an additional metric:
+- **CCH (Compare Chamfer)**: Primary metric - bidirectional distance metric.
+- **CSF (Compare Sparse Field)**: Additional metric - tracked separately.
+
+This configuration optimizes based on Chamfer distance while also tracking sparse field comparison for comprehensive analysis.
