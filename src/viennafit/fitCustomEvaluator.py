@@ -716,16 +716,14 @@ class CustomEvaluator:
                             raise ValueError(
                                 f"Initial domain '{initialDomainName}' not found in project"
                             )
-                        dimension = 2 if self.project.mode == "2D" else 3
                         domainCopy = vps.Domain(
-                            self.project.initialDomains[initialDomainName], dimension
+                            self.project.initialDomains[initialDomainName]
                         )
                         initialDomains[initialDomainName] = domainCopy
                     else:
                         # Use all available initial domains
-                        dimension = 2 if self.project.mode == "2D" else 3
                         for name, domain in self.project.initialDomains.items():
-                            domainCopy = vps.Domain(domain, dimension)
+                            domainCopy = vps.Domain(domain)
                             initialDomains[name] = domainCopy
 
                     # Run process sequence with all domains
@@ -790,14 +788,12 @@ class CustomEvaluator:
                             raise ValueError(
                                 f"Initial domain '{initialDomainName}' not found in project"
                             )
-                        dimension = 2 if self.project.mode == "2D" else 3
                         domainCopy = vps.Domain(
-                            self.project.initialDomains[initialDomainName], dimension
+                            self.project.initialDomains[initialDomainName]
                         )
                     else:
                         # Use default single initial domain for backward compatibility
-                        dimension = 2 if self.project.mode == "2D" else 3
-                        domainCopy = vps.Domain(self.project.initialDomain, dimension)
+                        domainCopy = vps.Domain(self.project.initialDomain)
 
                     # Run process sequence with current parameters on the copy
                     resultDomain = self.processSequence(domainCopy, evalParams)

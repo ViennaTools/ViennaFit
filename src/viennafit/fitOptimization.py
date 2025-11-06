@@ -108,18 +108,33 @@ class Optimization(Study):
         with open(filepath, "w") as f:
             json.dump(result, f, indent=4)
 
-        bestDomainFile = f"{self.name}-{self.bestEvaluationNumber}.vtp"
-        bestDomainPath = os.path.join(self.runDir, "progress", bestDomainFile)
-        if os.path.exists(bestDomainPath):
-            projectDomainDir = os.path.join(
-                self.project.projectAbsPath, "domains", "optimalDomains"
-            )
-            os.makedirs(projectDomainDir, exist_ok=True)
-            targetPath = os.path.join(projectDomainDir, bestDomainFile)
-            shutil.copy2(bestDomainPath, targetPath)
-            print(f"Best domain copied to {targetPath}")
+        # Find and copy all best domain files (handles both single and multi-domain cases)
+        projectDomainDir = os.path.join(
+            self.project.projectAbsPath, "domains", "optimalDomains"
+        )
+        os.makedirs(projectDomainDir, exist_ok=True)
+
+        # Pattern matches both single domain and multi-domain files:
+        # - Single: {name}-{eval:03d}.vtp
+        # - Multi:  {name}-{eval:03d}-{domainName}.vtp
+        basePattern = f"{self.name}-{self.bestEvaluationNumber:03d}"
+        progressDir = os.path.join(self.runDir, "progress")
+
+        copiedFiles = []
+        if os.path.exists(progressDir):
+            for filename in os.listdir(progressDir):
+                if filename.startswith(basePattern) and filename.endswith(".vtp"):
+                    sourcePath = os.path.join(progressDir, filename)
+                    targetPath = os.path.join(projectDomainDir, filename)
+                    shutil.copy2(sourcePath, targetPath)
+                    copiedFiles.append(filename)
+
+        if copiedFiles:
+            print(f"Best domain file(s) copied to {projectDomainDir}:")
+            for filename in copiedFiles:
+                print(f"  - {filename}")
         else:
-            print(f"Best domain file {bestDomainFile} not found in progress directory")
+            print(f"Warning: No domain files found matching pattern '{basePattern}*.vtp' in progress directory")
 
         print(f"Results saved to {filepath}")
 

@@ -141,14 +141,12 @@ class BaseObjectiveWrapper:
             if len(self.study.project.initialDomains) > 0:
                 # Use multiple named initial domains
                 for name, domain in self.study.project.initialDomains.items():
-                    dimension = 2 if self.study.project.mode == "2D" else 3
-                    domainCopy = Domain(domain, dimension)
+                    domainCopy = Domain(domain)
                     initialDomains[name] = domainCopy
                     processedDomains[name] = domainCopy  # Same object, will be modified by process
             elif self.study.project.initialDomain is not None:
                 # Fall back to single domain as "default"
-                domainCopy = Domain()
-                domainCopy.deepCopy(self.study.project.initialDomain)
+                domainCopy = Domain(self.study.project.initialDomain)
                 initialDomains["default"] = domainCopy
                 processedDomains["default"] = domainCopy  # Same object, will be modified by process
             else:
@@ -173,7 +171,6 @@ class BaseObjectiveWrapper:
                 )
         else:
             # Single-domain processing (backward compatibility)
-            dimension = 2 if self.study.project.mode == "2D" else 3
             if self.initialDomainName is not None:
                 # Use named initial domain
                 if self.initialDomainName not in self.study.project.initialDomains:
@@ -181,11 +178,11 @@ class BaseObjectiveWrapper:
                         f"Initial domain '{self.initialDomainName}' not found in project"
                     )
                 domainCopy = Domain(
-                    self.study.project.initialDomains[self.initialDomainName], dimension
+                    self.study.project.initialDomains[self.initialDomainName]
                 )
             else:
                 # Use default single initial domain for backward compatibility
-                domainCopy = Domain(self.study.project.initialDomain, dimension)
+                domainCopy = Domain(self.study.project.initialDomain)
 
             # Apply process sequence
             processResult = self.study.processSequence(domainCopy, paramDict)

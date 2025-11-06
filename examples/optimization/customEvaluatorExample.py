@@ -3,10 +3,9 @@ import os
 
 # Load the project
 p1 = fit.Project()
-projectToLoad = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "../projects/exampleProject",
-)
+# Path to the example project created by setup scripts
+scriptDir = os.path.dirname(os.path.abspath(__file__))
+projectToLoad = os.path.abspath(os.path.join(scriptDir, "../../projects/exampleProject"))
 p1.load(projectToLoad)
 
 # Create a custom evaluator instance
@@ -16,8 +15,11 @@ evaluator = fit.CustomEvaluator(p1)
 # This assumes you have already run the basicOptimization.py example
 evaluator.loadOptimizationRun("run1")
 
-# Set distance metric (same as used in optimization)
-evaluator.setDistanceMetric("CA+CSF")
+# Set distance metrics (same as used in optimization)
+evaluator.setDistanceMetrics(
+    primaryMetric="CCH",
+    additionalMetrics=["CSF"],
+)
 
 # Define parameter grids to evaluate
 # This will vary neutralRate and ionRate around their optimal values

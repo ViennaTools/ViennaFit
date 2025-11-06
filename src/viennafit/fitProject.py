@@ -3,6 +3,7 @@ import json
 import datetime
 from typing import List, Dict, Tuple, Optional
 from viennaps import Reader
+from viennaps import Domain as psDomain
 from viennals import Reader as lsReader
 from viennals import Domain as lsDomain
 
@@ -168,8 +169,10 @@ class Project:
         if self.initialDomainPath == "":
             self.initialDomain = None
         else:
+            self.initialDomain = psDomain()
             # Load the initial domain
-            self.initialDomain = Reader(
+            Reader(
+                self.initialDomain,
                 os.path.join(
                     self.projectPath,
                     "domains",
@@ -183,7 +186,7 @@ class Project:
             self.targetLevelSet = None
         else:
             # Load the target level set
-            dimension = 2 if self.mode == "2D" else 3
+            dimension = 2  # ViennaLS target domains are always 2D
             targetDomain = lsDomain(dimension)
             lsReader(
                 targetDomain,
@@ -200,7 +203,7 @@ class Project:
         self.targetLevelSets = {}
         for targetName, targetPath in self.targetLevelSetPaths.items():
             if targetPath != "" and os.path.exists(targetPath):
-                dimension = 2 if self.mode == "2D" else 3
+                dimension = 2  # ViennaLS target domains are always 2D
                 targetDomain = lsDomain(dimension)
                 lsReader(targetDomain, targetPath).apply()
                 self.targetLevelSets[targetName] = targetDomain
@@ -213,7 +216,8 @@ class Project:
         self.initialDomains = {}
         for domainName, domainPath in self.initialDomainPaths.items():
             if domainPath != "" and os.path.exists(domainPath):
-                domain = Reader(domainPath).apply()
+                domain = psDomain()
+                Reader(domain, domainPath).apply()
                 self.initialDomains[domainName] = domain
                 
                 # If this is the default domain and we don't have a single domain loaded, use it
@@ -336,53 +340,28 @@ class Project:
             targetDomainDir, f"{self.projectName}-targetDomain.lvst"
         )
 
-        if self.mode == "2D":
-            import viennals as vls
-            vls.setDimension(2)
+        # ViennaLS target domains are always 2D
+        import viennals as vls
+        vls.setDimension(2)
 
-            # Save the level set
-            vls.Writer(levelSet, domainPath).apply()
+        # Save the level set
+        vls.Writer(levelSet, domainPath).apply()
 
-            # Create mesh visualization
-            meshLS = vls.Mesh()
-            vls.ToMesh(levelSet, meshLS).apply()
-            meshPath = os.path.join(
-                targetDomainDir, f"{self.projectName}-targetDomain-ls.vtp"
-            )
-            vls.VTKWriter(meshLS, meshPath).apply()
+        # Create mesh visualization
+        meshLS = vls.Mesh()
+        vls.ToMesh(levelSet, meshLS).apply()
+        meshPath = os.path.join(
+            targetDomainDir, f"{self.projectName}-targetDomain-ls.vtp"
+        )
+        vls.VTKWriter(meshLS, meshPath).apply()
 
-            # Create surface mesh visualization
-            meshSurface = vls.Mesh()
-            vls.ToSurfaceMesh(levelSet, meshSurface).apply()
-            surfacePath = os.path.join(
-                targetDomainDir, f"{self.projectName}-targetDomain-surface.vtp"
-            )
-            vls.VTKWriter(meshSurface, surfacePath).apply()
-
-        elif self.mode == "3D":
-            import viennals as vls
-            vls.setDimension(3)
-
-            # Save the level set
-            vls.Writer(levelSet, domainPath).apply()
-
-            # Create mesh visualization
-            meshLS = vls.Mesh()
-            vls.ToMesh(levelSet, meshLS).apply()
-            meshPath = os.path.join(
-                targetDomainDir, f"{self.projectName}-targetDomain-ls.vtp"
-            )
-            vls.VTKWriter(meshLS, meshPath).apply()
-
-            # Create surface mesh visualization
-            meshSurface = vls.Mesh()
-            vls.ToSurfaceMesh(levelSet, meshSurface).apply()
-            surfacePath = os.path.join(
-                targetDomainDir, f"{self.projectName}-targetDomain-surface.vtp"
-            )
-            vls.VTKWriter(meshSurface, surfacePath).apply()
-        else:
-            raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
+        # Create surface mesh visualization
+        meshSurface = vls.Mesh()
+        vls.ToSurfaceMesh(levelSet, meshSurface).apply()
+        surfacePath = os.path.join(
+            targetDomainDir, f"{self.projectName}-targetDomain-surface.vtp"
+        )
+        vls.VTKWriter(meshSurface, surfacePath).apply()
 
         # Store in both old and new format for compatibility
         self.targetLevelSetPath = domainPath
@@ -535,7 +514,7 @@ class Project:
             raise ValueError("Target domain file must be in .lvst format.")
 
         # Load the level set
-        dimension = 2 if self.mode == "2D" else 3
+        dimension = 2  # ViennaLS target domains are always 2D
         levelSet = lsDomain(dimension)
         lsReader(levelSet, filePath).apply()
 
@@ -560,53 +539,28 @@ class Project:
             targetDomainDir, f"{self.projectName}-targetDomain-{name}.lvst"
         )
 
-        if self.mode == "2D":
-            import viennals as vls
-            vls.setDimension(2)
+        # ViennaLS target domains are always 2D
+        import viennals as vls
+        vls.setDimension(2)
 
-            # Save the level set
-            vls.Writer(levelSet, domainPath).apply()
+        # Save the level set
+        vls.Writer(levelSet, domainPath).apply()
 
-            # Create mesh visualization
-            meshLS = vls.Mesh()
-            vls.ToMesh(levelSet, meshLS).apply()
-            meshPath = os.path.join(
-                targetDomainDir, f"{self.projectName}-targetDomain-{name}-ls.vtp"
-            )
-            vls.VTKWriter(meshLS, meshPath).apply()
+        # Create mesh visualization
+        meshLS = vls.Mesh()
+        vls.ToMesh(levelSet, meshLS).apply()
+        meshPath = os.path.join(
+            targetDomainDir, f"{self.projectName}-targetDomain-{name}-ls.vtp"
+        )
+        vls.VTKWriter(meshLS, meshPath).apply()
 
-            # Create surface mesh visualization
-            meshSurface = vls.Mesh()
-            vls.ToSurfaceMesh(levelSet, meshSurface).apply()
-            surfacePath = os.path.join(
-                targetDomainDir, f"{self.projectName}-targetDomain-{name}-surface.vtp"
-            )
-            vls.VTKWriter(meshSurface, surfacePath).apply()
-
-        elif self.mode == "3D":
-            import viennals as vls
-            vls.setDimension(3)
-
-            # Save the level set
-            vls.Writer(levelSet, domainPath).apply()
-
-            # Create mesh visualization
-            meshLS = vls.Mesh()
-            vls.ToMesh(levelSet, meshLS).apply()
-            meshPath = os.path.join(
-                targetDomainDir, f"{self.projectName}-targetDomain-{name}-ls.vtp"
-            )
-            vls.VTKWriter(meshLS, meshPath).apply()
-
-            # Create surface mesh visualization
-            meshSurface = vls.Mesh()
-            vls.ToSurfaceMesh(levelSet, meshSurface).apply()
-            surfacePath = os.path.join(
-                targetDomainDir, f"{self.projectName}-targetDomain-{name}-surface.vtp"
-            )
-            vls.VTKWriter(meshSurface, surfacePath).apply()
-        else:
-            raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
+        # Create surface mesh visualization
+        meshSurface = vls.Mesh()
+        vls.ToSurfaceMesh(levelSet, meshSurface).apply()
+        surfacePath = os.path.join(
+            targetDomainDir, f"{self.projectName}-targetDomain-{name}-surface.vtp"
+        )
+        vls.VTKWriter(meshSurface, surfacePath).apply()
 
         self.targetLevelSetPaths[name] = domainPath
         
@@ -665,7 +619,7 @@ class Project:
             raise ValueError("Target domain file must be in .lvst format.")
 
         # Load the level set
-        dimension = 2 if self.mode == "2D" else 3
+        dimension = 2  # ViennaLS target domains are always 2D
         levelSet = lsDomain(dimension)
         lsReader(levelSet, filePath).apply()
 
