@@ -262,6 +262,15 @@ class Project:
             # Save the domain
             vps.Writer(domain, domainPath).apply()
 
+            # Save the surface mesh
+            domain.saveSurfaceMesh(os.path.join(
+                initialDomainDir, f"{self.projectName}-initialDomain-surfaceMesh.vtp"
+            ), True)
+
+            domain.saveVolumeMesh(os.path.join(
+                initialDomainDir, f"{self.projectName}-initialDomain-volumeMesh"
+            ), True)
+
             # Extract and visualize only the last level set (index -1)
             if domain.getLevelSets():
                 lastLevelSet = domain.getLevelSets()[-1]
@@ -493,7 +502,8 @@ class Project:
             raise ValueError("Initial domain file must be in .vpsd format.")
 
         # Load the domain
-        domain = Reader(filePath).apply()
+        domain = psDomain()
+        Reader(domain, filePath).apply()
 
         # Use existing setInitialDomain method to save to project structure
         self.setInitialDomain(domain)
@@ -760,7 +770,8 @@ class Project:
             raise ValueError("Initial domain file must be in .vpsd format.")
 
         # Load the domain
-        domain = Reader(filePath).apply()
+        domain = psDomain()
+        Reader(domain, filePath).apply()
 
         # Use existing addInitialDomain method to save to project structure
         self.addInitialDomain(name, domain)
