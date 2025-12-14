@@ -59,6 +59,52 @@ class CustomEvaluator:
                 "set the initial and target domains before using the evaluator."
             )
 
+    def _generateEvaluationDirectory(self, baseName: str) -> Tuple[str, str]:
+        """
+        Generate evaluation directory with conflict resolution.
+
+        If the directory already exists, automatically generates a new name
+        with an incremented suffix (e.g., evalName_2, evalName_3, etc.).
+
+        Args:
+            baseName: Desired evaluation name
+
+        Returns:
+            Tuple of (finalName, outputDir) where finalName is the unique name
+            and outputDir is the full path to the directory
+        """
+        outputDir = os.path.join(
+            self.project.projectPath, "customEvaluations", baseName
+        )
+        name = baseName
+
+        if os.path.exists(outputDir):
+            # Find the highest existing index
+            evaluationsDir = os.path.join(self.project.projectPath, "customEvaluations")
+            maxIndex = 0
+
+            if os.path.exists(evaluationsDir):
+                for existingDir in os.listdir(evaluationsDir):
+                    if (
+                        existingDir.startswith(f"{baseName}_")
+                        and existingDir[len(baseName) + 1 :].isdigit()
+                    ):
+                        existingIndex = int(existingDir[len(baseName) + 1 :])
+                        maxIndex = max(maxIndex, existingIndex)
+
+            # Use the next available index
+            newIndex = maxIndex + 1
+            name = f"{baseName}_{newIndex}"
+            outputDir = os.path.join(
+                self.project.projectPath, "customEvaluations", name
+            )
+            print(
+                f"Evaluation directory already exists. Renaming evaluation to '{name}' "
+                f"and using directory: {outputDir}"
+            )
+
+        return name, outputDir
+
     def getAvailableInitialDomains(self) -> List[str]:
         """Get list of available initial domain names."""
         domains = self.project.listInitialDomains()
@@ -858,19 +904,18 @@ class CustomEvaluator:
                 f"Multi-domain setup validation failed: {'; '.join(validationIssues)}"
             )
 
-        self.evaluationName = evaluationName
+        # Generate unique evaluation name and directory (similar to optimization runs)
+        finalName, outputDir = self._generateEvaluationDirectory(evaluationName)
+        self.evaluationName = finalName
         self.gridResults = []
 
         # Create output directory
-        outputDir = os.path.join(
-            self.project.projectPath, "customEvaluations", evaluationName
-        )
-        os.makedirs(outputDir, exist_ok=True)
+        os.makedirs(outputDir, exist_ok=False)
 
         # Save the process sequence to the output directory
         self.savedProcessSequencePath = None
         processSequenceDestPath = os.path.join(
-            outputDir, f"{evaluationName}-processSequence.py"
+            outputDir, f"{finalName}-processSequence.py"
         )
 
         try:
@@ -894,7 +939,7 @@ class CustomEvaluator:
                 except (OSError, TypeError) as e:
                     # Could not extract source (e.g., built-in function, lambda in REPL)
                     warningPath = os.path.join(
-                        outputDir, f"{evaluationName}-processSequence-WARNING.txt"
+                        outputDir, f"{finalName}-processSequence-WARNING.txt"
                     )
                     with open(warningPath, "w") as f:
                         f.write(
@@ -923,7 +968,7 @@ class CustomEvaluator:
                 # Convert dict to tuple in same order as paramNames
                 combinations.append(tuple(combo[name] for name in paramNames))
             print(
-                f"Starting paired evaluation '{evaluationName}' with {len(combinations)} specific combinations..."
+                f"Starting paired evaluation '{finalName}' with {len(combinations)} specific combinations..."
             )
         else:
             # Use grid (Cartesian product)
@@ -931,7 +976,7 @@ class CustomEvaluator:
             paramValueLists = [self.variableValues[name] for name in paramNames]
             combinations = list(itertools.product(*paramValueLists))
             print(
-                f"Starting grid evaluation '{evaluationName}' with {len(combinations)} combinations..."
+                f"Starting grid evaluation '{finalName}' with {len(combinations)} combinations..."
             )
 
         print(
