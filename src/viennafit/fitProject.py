@@ -8,6 +8,7 @@ from viennaps import Reader
 from viennaps import Domain as psDomain
 from viennals import Reader as lsReader
 from viennals import Domain as lsDomain
+from viennafit.postprocessing import OptimizationPostprocessor
 
 
 class Project:
@@ -1045,17 +1046,19 @@ class Project:
         }
 
     def finalizeOptimizationRun(
-        self, runName: str, copyDomainFiles: bool = True
+        self, runName: str, copyDomainFiles: bool = True, generatePlots: bool = True
     ) -> bool:
         """
         Finalize an incomplete optimization run.
 
         Creates final-results.json using the best evaluation found so far,
-        copies domain files to optimalDomains, and updates optimization summary.
+        copies domain files to optimalDomains, generates visualization plots,
+        and updates optimization summary.
 
         Args:
             runName: Name of the optimization run to finalize
             copyDomainFiles: Whether to copy best domain files to optimalDomains folder (default: True)
+            generatePlots: Whether to generate visualization plots (default: True)
 
         Returns:
             True if finalization succeeded, False otherwise
@@ -1064,6 +1067,8 @@ class Project:
             >>> project = Project()
             >>> project.load("./myProject")
             >>> project.finalizeOptimizationRun("incomplete_run_1")
+            >>> # Or with options:
+            >>> project.finalizeOptimizationRun("incomplete_run_1", copyDomainFiles=True, generatePlots=True)
         """
         # Validation Phase
         runDir = os.path.join(self.projectPath, "optimizationRuns", runName)
@@ -1163,6 +1168,22 @@ class Project:
                 print(
                     f"Warning: No domain files found matching pattern '{basePattern}*.vtp' in progress directory"
                 )
+
+        # Plot Generation Phase
+        if generatePlots:
+            try:
+                print(f"Generating visualization plots for '{runName}'...")
+                postprocessor = OptimizationPostprocessor(runDir)
+                plotResults = postprocessor.generatePlots()
+
+                totalPlots = sum(len(files) for files in plotResults.values())
+                if totalPlots > 0:
+                    print(f"Generated {totalPlots} plot(s) in {runDir}/plots/")
+                else:
+                    print("Warning: No plots were generated")
+            except Exception as e:
+                print(f"Warning: Failed to generate plots: {e}")
+                # Don't fail finalization if plots fail
 
         # Summary Update Phase
         try:
