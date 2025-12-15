@@ -1,7 +1,9 @@
 import os
 import json
 import datetime
-from typing import List, Dict, Tuple, Optional
+import csv
+import shutil
+from typing import List, Dict, Tuple, Optional, Any
 from viennaps import Reader
 from viennaps import Domain as psDomain
 from viennals import Reader as lsReader
@@ -913,6 +915,267 @@ class Project:
         summary = self.getOptimizationSummary(forceRescan=True)
         summary.saveSummary()
         print(f"Optimization summary updated for project {self.projectName}")
+
+    def _loadIncompleteRunData(
+        self, runDir: str, runName: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Load data from incomplete optimization run files.
+
+        Args:
+            runDir: Path to the run directory
+            runName: Name of the run
+
+        Returns:
+            Dictionary containing:
+            - bestParameters: dict[str, float]
+            - bestScore: float
+            - bestEvaluationNumber: int
+            - actualNumEvaluations: int
+            - fixedParameters: dict[str, float]
+            - variableParameters: dict[str, tuple[float, float]]
+            - optimizer: str
+            Returns None if critical files are missing.
+        """
+        # Define reserved column names that are not parameters
+        reservedColumns = {
+            "evaluationNumber",
+            "elapsedTime",
+            "simulationTime",
+            "distanceMetricTime",
+            "totalElapsedTime",
+            "objectiveValue",
+        }
+
+        # Load progressBest.csv to get best evaluation data
+        progressBestPath = os.path.join(runDir, "progressBest.csv")
+        if not os.path.exists(progressBestPath):
+            print(f"Error: progressBest.csv not found in {runDir}")
+            return None
+
+        try:
+            with open(progressBestPath, "r") as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+                if not rows:
+                    print(f"Error: progressBest.csv is empty in {runDir}")
+                    return None
+
+                # Get last row (best evaluation so far)
+                lastRow = rows[-1]
+
+                # Extract basic data
+                bestScore = float(lastRow["objectiveValue"])
+                bestEvaluationNumber = int(lastRow["evaluationNumber"])
+
+                # Extract parameters (all columns except reserved ones)
+                bestParameters = {}
+                for key, value in lastRow.items():
+                    if key not in reservedColumns and not key.endswith(
+                        "_value"
+                    ) and not key.endswith("_time"):
+                        try:
+                            bestParameters[key] = float(value)
+                        except (ValueError, TypeError):
+                            pass  # Skip non-numeric values
+
+        except Exception as e:
+            print(f"Error reading progressBest.csv: {e}")
+            return None
+
+        # Load progressAll.csv to count actual evaluations
+        progressAllPath = os.path.join(runDir, "progressAll.csv")
+        if not os.path.exists(progressAllPath):
+            print(f"Error: progressAll.csv not found in {runDir}")
+            return None
+
+        try:
+            with open(progressAllPath, "r") as f:
+                reader = csv.DictReader(f)
+                actualNumEvaluations = len(list(reader))
+        except Exception as e:
+            print(f"Error reading progressAll.csv: {e}")
+            return None
+
+        # Load metadata (try progressAll_metadata.json first, then startingConfiguration.json)
+        fixedParameters = {}
+        variableParameters = {}
+        optimizer = "unknown"
+
+        metadataPath = os.path.join(runDir, "progressAll_metadata.json")
+        if os.path.exists(metadataPath):
+            try:
+                with open(metadataPath, "r") as f:
+                    metadata = json.load(f)
+                    fixedParameters = metadata.get("fixedParameters", {})
+                    # variableParameters stored as parameterBounds in metadata
+                    paramBounds = metadata.get("parameterBounds", {})
+                    for paramName, bounds in paramBounds.items():
+                        if isinstance(bounds, list) and len(bounds) == 2:
+                            variableParameters[paramName] = tuple(bounds)
+                    optimizer = metadata.get("optimizer", "unknown")
+            except Exception as e:
+                print(f"Warning: Could not load progressAll_metadata.json: {e}")
+
+        # Fallback to startingConfiguration.json if metadata not loaded
+        if not variableParameters:
+            configPath = os.path.join(runDir, f"{runName}-startingConfiguration.json")
+            if os.path.exists(configPath):
+                try:
+                    with open(configPath, "r") as f:
+                        config = json.load(f)
+                        fixedParameters = config.get("fixedParameters", {})
+                        variableParameters = config.get("variableParameters", {})
+                        # Convert lists to tuples if needed
+                        for key, value in variableParameters.items():
+                            if isinstance(value, list) and len(value) == 2:
+                                variableParameters[key] = tuple(value)
+                        optimizer = config.get("optimizer", "unknown")
+                except Exception as e:
+                    print(f"Warning: Could not load startingConfiguration.json: {e}")
+
+        return {
+            "bestParameters": bestParameters,
+            "bestScore": bestScore,
+            "bestEvaluationNumber": bestEvaluationNumber,
+            "actualNumEvaluations": actualNumEvaluations,
+            "fixedParameters": fixedParameters,
+            "variableParameters": variableParameters,
+            "optimizer": optimizer,
+        }
+
+    def finalizeOptimizationRun(
+        self, runName: str, copyDomainFiles: bool = True
+    ) -> bool:
+        """
+        Finalize an incomplete optimization run.
+
+        Creates final-results.json using the best evaluation found so far,
+        copies domain files to optimalDomains, and updates optimization summary.
+
+        Args:
+            runName: Name of the optimization run to finalize
+            copyDomainFiles: Whether to copy best domain files to optimalDomains folder (default: True)
+
+        Returns:
+            True if finalization succeeded, False otherwise
+
+        Example:
+            >>> project = Project()
+            >>> project.load("./myProject")
+            >>> project.finalizeOptimizationRun("incomplete_run_1")
+        """
+        # Validation Phase
+        runDir = os.path.join(self.projectPath, "optimizationRuns", runName)
+
+        if not os.path.exists(runDir):
+            print(f"Error: Run directory not found: {runDir}")
+            return False
+
+        # Check if already finalized
+        finalResultsPath = os.path.join(runDir, f"{runName}-final-results.json")
+        if os.path.exists(finalResultsPath):
+            print(
+                f"Warning: Run '{runName}' is already finalized. Skipping finalization."
+            )
+            return True  # Return True since it's already in desired state
+
+        # Verify progress files exist
+        progressBestPath = os.path.join(runDir, "progressBest.csv")
+        progressAllPath = os.path.join(runDir, "progressAll.csv")
+
+        if not os.path.exists(progressBestPath):
+            print(
+                f"Error: Cannot finalize run '{runName}' - progressBest.csv not found."
+            )
+            print(f"Expected location: {progressBestPath}")
+            return False
+
+        if not os.path.exists(progressAllPath):
+            print(
+                f"Error: Cannot finalize run '{runName}' - progressAll.csv not found."
+            )
+            print(f"Expected location: {progressAllPath}")
+            return False
+
+        # Data Loading Phase
+        print(f"Finalizing optimization run '{runName}'...")
+        runData = self._loadIncompleteRunData(runDir, runName)
+
+        if runData is None:
+            print(f"Error: Failed to load data from incomplete run '{runName}'")
+            return False
+
+        # Check if any evaluations were completed
+        if runData["actualNumEvaluations"] == 0:
+            print(
+                f"Error: Cannot finalize run '{runName}' - no evaluations completed."
+            )
+            return False
+
+        # Results Creation Phase
+        result = {
+            "bestScore": runData["bestScore"],
+            "bestEvaluation#": runData["bestEvaluationNumber"],
+            "bestParameters": runData["bestParameters"],
+            "fixedParameters": runData["fixedParameters"],
+            "variableParameters": runData["variableParameters"],
+            "optimizer": runData["optimizer"],
+            "numEvaluations": runData["actualNumEvaluations"],
+        }
+
+        try:
+            with open(finalResultsPath, "w") as f:
+                json.dump(result, f, indent=4)
+            print(f"Created final-results.json with {runData['actualNumEvaluations']} evaluations")
+        except Exception as e:
+            print(f"Error: Failed to create final-results.json: {e}")
+            return False
+
+        # Domain File Copy Phase
+        if copyDomainFiles:
+            projectDomainDir = os.path.join(self.projectAbsPath, "domains", "optimalDomains")
+            os.makedirs(projectDomainDir, exist_ok=True)
+
+            # Pattern matches both single and multi-domain files:
+            # - Single: {name}-{eval:03d}.vtp
+            # - Multi:  {name}-{eval:03d}-{domainName}.vtp
+            basePattern = f"{runName}-{runData['bestEvaluationNumber']:03d}"
+            progressDir = os.path.join(runDir, "progress")
+
+            copiedFiles = []
+            if os.path.exists(progressDir):
+                for filename in os.listdir(progressDir):
+                    if filename.startswith(basePattern) and filename.endswith(".vtp"):
+                        sourcePath = os.path.join(progressDir, filename)
+                        targetPath = os.path.join(projectDomainDir, filename)
+                        try:
+                            shutil.copy2(sourcePath, targetPath)
+                            copiedFiles.append(filename)
+                        except Exception as e:
+                            print(f"Warning: Failed to copy {filename}: {e}")
+
+            if copiedFiles:
+                print(f"Copied {len(copiedFiles)} domain file(s) to {projectDomainDir}:")
+                for filename in copiedFiles:
+                    print(f"  - {filename}")
+            else:
+                print(
+                    f"Warning: No domain files found matching pattern '{basePattern}*.vtp' in progress directory"
+                )
+
+        # Summary Update Phase
+        try:
+            self.updateOptimizationSummary()
+        except Exception as e:
+            print(f"Warning: Could not update optimization summary: {e}")
+
+        # Success
+        print(
+            f"Successfully finalized run '{runName}' with best score {runData['bestScore']:.6f} "
+            f"from evaluation #{runData['bestEvaluationNumber']}"
+        )
+        return True
 
     def generateOptimizationReport(self, outputPath: Optional[str] = None) -> str:
         """
