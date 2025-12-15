@@ -1,20 +1,5 @@
 # Core Concepts
 
-Understanding ViennaFit's fundamental concepts will help you use it effectively. This guide explains the key components and how they work together.
-
-## Overview
-
-ViennaFit orchestrates the following workflow:
-
-```
-1. Define Problem → 2. Run Simulations → 3. Compare Results → 4. Optimize
-     ↓                      ↓                    ↓                ↓
-   Project            Process Sequence      Distance Metric   Algorithm
-   Domains            with Parameters       (CA, CCH, etc.)   (dlib, etc.)
-```
-
-Let's explore each component.
-
 ## Projects
 
 ### What is a Project?
@@ -75,7 +60,6 @@ project.load("./projects/etchCalibration")
 **Multi-Domain**:
 - Multiple initial geometries with names
 - Multiple targets to match
-- Finds universal parameters that work across all
 
 ```python
 # Single-domain (backward compatible)
@@ -98,11 +82,11 @@ project.addTargetLevelSet("wafer2", target2)
 
 ### Initial Domain
 
-The **initial domain** is your starting geometry before any processing.
+The **initial domain** is a ViennaPS domain. It is your starting geometry before any processing.
 
 **Contains:**
 - Material layers (Si, SiO2, etc.)
-- Initial geometry (flat, patterned, etc.)
+- Initial geometry
 - Spatial extent and grid resolution
 
 **Created with ViennaPS:**
@@ -118,6 +102,9 @@ initial = vps.Domain(
 
 # Add material layers
 initial.insertNextLevelSetAsMaterial(substrate, vps.Material.Si)
+
+# See geometry creation tools in ViennaPS:
+# psMakeFin, psMakeHole, psMakeTrench, psMakePlane, psMakeStack...
 ```
 
 ### Target Domain
@@ -125,21 +112,90 @@ initial.insertNextLevelSetAsMaterial(substrate, vps.Material.Si)
 The **target domain** is what you want your simulation to match - typically from experimental data.
 
 **Source:**
-- Experimental measurements (SEM cross-sections, AFM, etc.)
+- Experimental measurements (SEM cross-sections etc.)
+- Loaded from annotated point data (.dat files) or VTK files (.vtp, .vtu)
 - Converted to level set representation
-- Loaded from VTK files (.vtp, .vtu)
 
-**Created with ViennaLS:**
+#### Creating Target from Annotated Experimental Data
+
+The most common workflow uses the `readPointsFromFile` utility to convert experimental measurements into target domains:
+
+**Step 1: Prepare Annotation Data**
+
+Annotate your experimental images (SEM, TEM, etc.) by tracing material boundaries and extracting coordinate points. Save as a `.dat` / `.txt` / `.csv` file with space-separated coordinates:
+
+**2D format** (x y per line):
+```
+-100.0 0.0
+-95.0 0.0
+-90.0 -2.5
+-85.0 -7.5
+...
+```
+
+**3D format** (x y z per line):
+```
+50.0 100.0 0.0
+52.0 98.5 0.0
+54.0 97.0 0.0
+...
+```
+
+Points should be **sequential** along the surface contour. Units are typically nanometers (nm) but can be set in ViennaPS accordingly.
+
+**Step 2: Load Points and Create Target Domain**
+
+```python
+import viennals as vls
+import viennafit as fit
+
+# Create mesh to hold the points
+meshTarget = vls.Mesh()
+
+# Read points from file and get extent
+gridDelta = 5.0  # Grid resolution (nm)
+extentTarget = fit.readPointsFromFile(
+    "experimental_profile.dat",
+    meshTarget,
+    gridDelta,
+    mode="2D",           # "2D" or "3D"
+    reflectX=False,      # Mirror in X axis if needed
+    shiftX=0.0,          # Translate X coordinates if needed
+    shiftY=0.0,          # Translate Y coordinates if needed
+    scaleFactor=1.0      # Scale all coordinates if needed
+)
+
+# Create level set domain with computed extent
+target = vls.Domain(
+    extentTarget,
+    [
+        vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
+        vls.BoundaryConditionEnum.INFINITE_BOUNDARY,
+    ],
+    gridDelta,
+)
+
+# Convert mesh to level set representation
+vls.FromSurfaceMesh(target, meshTarget).apply()
+```
+
+**Common transformations:**
+- **`reflectX=True`**: Mirror coordinates if annotation coordinate system is flipped
+- **`shiftX/Y/Z`**: Center or align geometry to match initial domain
+- **`scaleFactor`**: Convert units (e.g., `scaleFactor=1000` for μm → nm)
+
+**Example:** See `examples/setup/loadExperimentalData.py` for a complete demonstration using `examples/data/u_shaped_trench.dat`.
+
+#### Creating Target Programmatically
+
+For testing or synthetic cases, create targets directly:
+
 ```python
 import viennals as vls
 
 target = vls.Domain([xmin, xmax, ymin, ymax], boundary, gridDelta)
 
-# Load from experimental data
-reader = vls.VTKReader(target)
-reader.apply("experimental_profile.vtp")
-
-# Or create programmatically for testing
+# Create geometric shape
 vls.MakeGeometry(target, vls.lsBox([x, y], [width, height])).apply()
 ```
 
@@ -275,10 +331,9 @@ def complexProcess(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
 | Metric | Full Name | Best For | Speed | Sensitivity |
 |--------|-----------|----------|-------|-------------|
 | **CA** | Compare Area | Area matching | Fast | Coarse |
-| **CCH** | Compare Chamfer | Shape similarity | Medium | High |
-| **CSF** | Compare Sparse Field | Detailed matching | Slow | Very High |
+| **CCH** | Compare Chamfer | Shape similarity | Fast | High |
+| **CSF** | Compare Sparse Field | Detailed matching | Fast | Very High |
 | **CCD** | Compare Critical Dimensions | Specific measurements | Fast | Targeted |
-| **CNB** | Compare Narrow Band | Local features | Medium | Medium |
 
 ### Choosing a Metric
 
@@ -310,7 +365,6 @@ CA = |Area(simulation) - Area(target)|
 
 **Use when:**
 - You care about total material removed/added
-- Speed is important
 - Shape details don't matter
 
 **Example:**
@@ -352,7 +406,7 @@ Sum of squared differences at grid points in narrow band.
 ```python
 opt.setDistanceMetrics(
     primaryMetric="CSF",
-    sparseFieldExpansionWidth=200  # Grid points to compare
+    sparseFieldExpansionWidth=200  # This is explained in the function itself
 )
 ```
 
@@ -392,7 +446,7 @@ Use multiple metrics:
 
 ```python
 opt.setDistanceMetrics(
-    primaryMetric="CA+CSF",           # Optimize using combined
+    primaryMetric="CSF",           # Optimize using combined
     additionalMetrics=["CCH", "CCD"]  # Track but don't optimize
 )
 ```
@@ -421,7 +475,7 @@ opt.setVariableParameters({
 **Tips:**
 - Start with wide bounds, narrow after initial run
 - Use log scale for parameters spanning orders of magnitude
-- Check physics: negative rates usually don't make sense
+- Check physics, set a range which makes sense
 
 ### Fixed Parameters
 
@@ -442,7 +496,37 @@ opt.setFixedParameters({
 
 ### Parameter Names
 
-Must match keys used in process sequence:
+Parameter names must be declared **before** setting fixed and variable parameters using `setParameterNames()`.
+
+**Important rules:**
+
+1. **All parameters must be declared**: Every parameter used in your process sequence must appear in the parameter names list
+2. **No overlap**: A parameter cannot be both fixed and variable
+3. **Complete partition**: Every declared parameter must be classified as either fixed or variable
+
+**Example:**
+```python
+# Step 1: Declare all parameter names
+opt.setParameterNames(["etchRate", "time", "temperature", "pressure"])
+
+# Step 2: Classify parameters
+opt.setVariableParameters({
+    "etchRate": (10, 100),    # Will be optimized
+    "time": (0.5, 5.0)        # Will be optimized
+})
+
+opt.setFixedParameters({
+    "temperature": 300.0,     # Constant
+    "pressure": 1.0           # Constant
+})
+
+# Variable + Fixed = All parameter names
+# {"etchRate", "time"} ∪ {"temperature", "pressure"} = {"etchRate", "time", "temperature", "pressure"} ✓
+```
+
+**Matching process sequence:**
+
+Parameter names must match the keys used in your process sequence:
 
 ```python
 # In optimization setup
@@ -452,10 +536,10 @@ opt.setVariableParameters({
     "time": (0.5, 5.0)
 })
 
-# In process sequence
+# In process sequence - use same key names
 def process(domain, params):
-    rate = params["etchRate"]  # Must match key name
-    time = params["time"]      # Must match key name
+    rate = params["etchRate"]  # Must match "etchRate"
+    time = params["time"]      # Must match "time"
     # ...
 ```
 
@@ -476,14 +560,14 @@ def process(domain, params):
 - Robust to noise
 
 **Nevergrad:**
-- Evolutionary algorithm
-- Better for complex landscapes
-- More exploration
+- Automatic adaptation of strategy durin optimization run
+- Can be slower to converge but better at exploring local minima
 
 **Ax/BoTorch:**
 - Bayesian optimization
-- Best for expensive simulations
-- Needs fewer evaluations
+- Uses batches instead of single evaluations
+- As a result usually needs less evaluations overall
+- User chooses batch size etc.
 
 ```python
 opt.setOptimizer("dlib")       # Default
