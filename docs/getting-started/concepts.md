@@ -547,10 +547,10 @@ def process(domain, params):
 
 ### How Optimization Works
 
-1. **Initialize**: Choose starting parameters (random or specified)
-2. **Evaluate**: Run process sequence, compute distance metric
-3. **Update**: Algorithm chooses next parameters to try
-4. **Repeat**: Until convergence or max evaluations reached
+0. **Optional: Initialize**: Choose starting parameters (random or specified)
+1. **Evaluate**: Run process sequence, compute distance metric
+2. **Update**: Algorithm chooses next parameters to try
+3. **Repeat**: Until convergence or max evaluations reached
 
 ### Optimization Algorithms
 
@@ -560,7 +560,7 @@ def process(domain, params):
 - Robust to noise
 
 **Nevergrad:**
-- Automatic adaptation of strategy durin optimization run
+- Automatic adaptation of strategy during the optimization run
 - Can be slower to converge but better at exploring local minima
 
 **Ax/BoTorch:**
@@ -575,15 +575,6 @@ opt.setOptimizer("nevergrad")  # Alternative
 opt.setOptimizer("ax")         # Bayesian (requires extra packages)
 ```
 
-### Convergence
-
-Optimization stops when:
-
-- Maximum evaluations reached
-- Algorithm declares convergence
-- You manually stop it
-
-**Monitor convergence plots** to check if optimization has truly converged or just hit evaluation limit.
 
 ### Results
 
@@ -594,7 +585,7 @@ After optimization completes:
 optimizationRuns/runName/
 ├── runName-final-results.json    # Best parameters
 ├── progressBest.csv               # Improvement history
-├── progressAll.csv                # All evaluations
+├── progressAll.csv                # History of all evaluations
 ├── plots/                         # Convergence plots
 └── progress/                      # Visualization files
 ```
