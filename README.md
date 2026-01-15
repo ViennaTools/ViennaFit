@@ -75,10 +75,8 @@ pip install botorch>=0.15.1 gpytorch>=1.14 ax-platform>=1.1.2
 
 ## Documentation
 
-📚 **Full Documentation**: [https://viennatools.github.io/ViennaFit/](https://viennatools.github.io/ViennaFit/)
+📚 **Full Documentation**: *[TODO: Not yet published]* https://viennatools.github.io/ViennaFit/
 
-- [Quick Start Guide](https://viennatools.github.io/ViennaFit/getting-started/quick-start/) - Get running in 15 minutes
-- [Tutorials](https://viennatools.github.io/ViennaFit/tutorials/tutorial-1-basic-optimization/) - Step-by-step walkthroughs
 - [Examples](examples/) - Working code examples
 
 ## Quick Start
@@ -144,6 +142,6 @@ ViennaFit is released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Support
 
-- **Documentation**: https://viennatools.github.io/ViennaFit/
+- **Documentation**: https://viennatools.github.io/ViennaFit/ *[TODO: Not yet published]*
 - **Issues**: https://github.com/ViennaTools/ViennaFit/issues
 - **Examples**: See [examples/](examples/) directory
