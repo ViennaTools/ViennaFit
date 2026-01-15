@@ -15,17 +15,17 @@ evaluator = fit.CustomEvaluator(p1)
 # This assumes you have already run the basicOptimization.py example
 evaluator.loadOptimizationRun("run1")
 
-# Set distance metrics (same as used in optimization)
-evaluator.setDistanceMetrics(
-    primaryMetric="CCH",
-    additionalMetrics=["CSF"],
-)
+# Set distance metric (same as used in optimization)
+evaluator.setDistanceMetric("CCH")
+evaluator.setAdditionalMetrics(["CSF"])
 
 # Define parameter grids to evaluate
 # This will vary neutralRate and ionRate around their optimal values
+# neutralRate: 4 values uniformly spaced in ±20 range around 40
+# ionRate: 4 values uniformly spaced in ±0.29 range around 1.44 (±20%)
 variableValues = {
-    "neutralRate": [1.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0],
-    "ionRate": [1.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0],
+    "neutralRate": [20.0, 33.3, 46.7, 60.0],
+    "ionRate": [1.15, 1.34, 1.54, 1.73],
 }
 
 evaluator.setVariableValues(variableValues)
@@ -39,7 +39,7 @@ for paramName, value in optimalParams.items():
 # Run the grid evaluation
 # This will evaluate all combinations of the variable parameters
 # while keeping other parameters at their optimal values
-results = evaluator.evaluateGrid(
+results = evaluator.apply(
     evaluationName="parameterSweep1", saveVisualization=True
 )
 

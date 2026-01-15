@@ -11,6 +11,7 @@ import inspect
 import time
 import itertools
 import shutil
+import pandas as pd
 from typing import Dict, List, Optional, Tuple, Any
 from copy import deepcopy
 
@@ -49,6 +50,7 @@ class CustomEvaluator:
         self.gridResults = []  # List of evaluation results
         self.evaluationName = None
         self.savedProcessSequencePath = None  # Path to saved process sequence in customEvaluations
+        self.isCompleteRun = None  # True if loaded from complete run, False if incomplete, None if not loaded
 
         # Check project readiness
         if not project.isReady:
@@ -56,6 +58,52 @@ class CustomEvaluator:
                 "Project is not ready. Please initialize the project first, "
                 "set the initial and target domains before using the evaluator."
             )
+
+    def _generateEvaluationDirectory(self, baseName: str) -> Tuple[str, str]:
+        """
+        Generate evaluation directory with conflict resolution.
+
+        If the directory already exists, automatically generates a new name
+        with an incremented suffix (e.g., evalName_2, evalName_3, etc.).
+
+        Args:
+            baseName: Desired evaluation name
+
+        Returns:
+            Tuple of (finalName, outputDir) where finalName is the unique name
+            and outputDir is the full path to the directory
+        """
+        outputDir = os.path.join(
+            self.project.projectPath, "customEvaluations", baseName
+        )
+        name = baseName
+
+        if os.path.exists(outputDir):
+            # Find the highest existing index
+            evaluationsDir = os.path.join(self.project.projectPath, "customEvaluations")
+            maxIndex = 0
+
+            if os.path.exists(evaluationsDir):
+                for existingDir in os.listdir(evaluationsDir):
+                    if (
+                        existingDir.startswith(f"{baseName}_")
+                        and existingDir[len(baseName) + 1 :].isdigit()
+                    ):
+                        existingIndex = int(existingDir[len(baseName) + 1 :])
+                        maxIndex = max(maxIndex, existingIndex)
+
+            # Use the next available index
+            newIndex = maxIndex + 1
+            name = f"{baseName}_{newIndex}"
+            outputDir = os.path.join(
+                self.project.projectPath, "customEvaluations", name
+            )
+            print(
+                f"Evaluation directory already exists. Renaming evaluation to '{name}' "
+                f"and using directory: {outputDir}"
+            )
+
+        return name, outputDir
 
     def getAvailableInitialDomains(self) -> List[str]:
         """Get list of available initial domain names."""
@@ -117,7 +165,11 @@ class CustomEvaluator:
         self, runName: str, skipProcessSequence: bool = False
     ) -> "CustomEvaluator":
         """
-        Load optimization results and process sequence from a completed run.
+        Load optimization results and process sequence from a completed or incomplete run.
+
+        Automatically detects whether the run completed successfully by checking for
+        the final-results.json file. If the run is incomplete, falls back to loading
+        from progressBest.csv and metadata files.
 
         Args:
             runName: Name of the optimization run to load
@@ -134,19 +186,82 @@ class CustomEvaluator:
                 f"Optimization run '{runName}' not found in project"
             )
 
-        # Load results file
+        # Check if this is a complete run (has final-results.json)
         resultsFile = os.path.join(runDir, f"{runName}-final-results.json")
-        if not os.path.exists(resultsFile):
-            raise FileNotFoundError(f"Results file not found: {resultsFile}")
+        isComplete = os.path.exists(resultsFile)
 
-        # Load optimization results
-        results = loadOptimumFromResultsFile(resultsFile)
-        self.optimizationResultsPath = resultsFile
-        self.optimalParameters = deepcopy(results["bestParameters"])
+        if isComplete:
+            # === COMPLETE RUN: Load from final-results.json ===
+            results = loadOptimumFromResultsFile(resultsFile)
+            self.optimizationResultsPath = resultsFile
+            self.optimalParameters = deepcopy(results["bestParameters"])
+            self.isCompleteRun = True
 
-        # Store fixed parameters if available
-        if "fixedParameters" in results:
-            self.fixedParameters = deepcopy(results["fixedParameters"])
+            # Store fixed parameters if available
+            if "fixedParameters" in results:
+                self.fixedParameters = deepcopy(results["fixedParameters"])
+
+            bestScore = results.get("bestScore", "Unknown")
+            bestEvalNum = results.get("bestEvaluation#", "Unknown")
+
+        else:
+            # === INCOMPLETE RUN: Fall back to CSV + metadata ===
+            print(
+                f"Warning: Optimization run '{runName}' is incomplete (no final-results.json)"
+            )
+            print("Loading best parameters from progressBest.csv and metadata...")
+
+            # Load best parameters from progressBest.csv
+            csvPath = os.path.join(runDir, "progressBest.csv")
+            if not os.path.exists(csvPath):
+                # Try legacy name
+                csvPath = os.path.join(runDir, "progressAll_best.csv")
+                if not os.path.exists(csvPath):
+                    raise FileNotFoundError(
+                        f"Cannot load incomplete run: progressBest.csv not found in {runDir}\n"
+                        f"The run directory exists but has no final results or progress data."
+                    )
+
+            # Load CSV to get best parameters and objective value
+            df = pd.read_csv(csvPath)
+            if len(df) == 0:
+                raise ValueError(f"progressBest.csv is empty in {runDir}")
+
+            lastRow = df.iloc[-1]
+            bestEvalNum = int(lastRow["evaluationNumber"])
+            bestScore = float(lastRow["objectiveValue"])
+
+            # Extract parameter columns
+            excludeCols = [
+                "evaluationNumber",
+                "elapsedTime",
+                "simulationTime",
+                "distanceMetricTime",
+                "totalElapsedTime",
+                "objectiveValue",
+            ]
+            paramCols = [
+                col
+                for col in df.columns
+                if col not in excludeCols
+                and not col.endswith("_value")
+                and not col.endswith("_time")
+            ]
+            self.optimalParameters = {col: float(lastRow[col]) for col in paramCols}
+
+            # Load fixed parameters from metadata
+            try:
+                metadata = self._loadMetadataFile(runDir, runName)
+                self.fixedParameters = deepcopy(
+                    metadata.get("fixedParameters", {})
+                )
+            except FileNotFoundError as e:
+                print(f"  Warning: Could not load metadata file: {e}")
+                print("  Proceeding with no fixed parameters")
+                self.fixedParameters = {}
+
+            self.optimizationResultsPath = csvPath
+            self.isCompleteRun = False
 
         # Load process sequence file unless skipped
         if not skipProcessSequence:
@@ -162,8 +277,16 @@ class CustomEvaluator:
             # Detect if process sequence supports multi-domain processing
             self.isMultiDomainProcess = self._detectMultiDomainProcess()
 
-        print(f"Loaded optimization run '{runName}':")
-        print(f"  Best score: {results.get('bestScore', 'Unknown')}")
+        # Print summary
+        runStatus = "COMPLETE" if self.isCompleteRun else "INCOMPLETE"
+        print(f"Loaded optimization run '{runName}' ({runStatus}):")
+
+        if not self.isCompleteRun:
+            print(
+                f"  Run was stopped early at evaluation #{bestEvalNum} - parameters may not be fully optimized"
+            )
+
+        print(f"  Best score: {bestScore}")
         print(
             f"  Parameters: {len(self.optimalParameters)} variable, {len(self.fixedParameters)} fixed"
         )
@@ -178,6 +301,126 @@ class CustomEvaluator:
             )
 
         return self
+
+    def _loadMetadataFile(self, runDir: str, runName: str) -> Dict[str, Any]:
+        """
+        Load metadata from progressAll_metadata.json or startingConfiguration.json.
+
+        Args:
+            runDir: Directory containing the optimization run
+            runName: Name of the optimization run
+
+        Returns:
+            Dictionary containing metadata (fixedParameters, parameterBounds, etc.)
+
+        Raises:
+            FileNotFoundError: If no metadata file found
+        """
+        # Try progressAll_metadata.json first (preferred)
+        metadataPath = os.path.join(runDir, "progressAll_metadata.json")
+        if os.path.exists(metadataPath):
+            with open(metadataPath, "r") as f:
+                metadata = json.load(f)
+            return metadata
+
+        # Try legacy startingConfiguration.json
+        configPath = os.path.join(runDir, f"{runName}-startingConfiguration.json")
+        if os.path.exists(configPath):
+            with open(configPath, "r") as f:
+                metadata = json.load(f)
+            return metadata
+
+        # No metadata found
+        raise FileNotFoundError(
+            f"No metadata file found in {runDir}\n"
+            f"Expected: progressAll_metadata.json or {runName}-startingConfiguration.json"
+        )
+
+    def loadBestFromProgressCSV(
+        self, runNameOrPath: str, updateOptimalParameters: bool = True
+    ) -> Dict[str, float]:
+        """
+        Load best parameters from a progressBest.csv file.
+
+        Args:
+            runNameOrPath: Either a run name (e.g., "run1_2") or full path to progressBest.csv
+            updateOptimalParameters: If True, update self.optimalParameters with loaded values
+
+        Returns:
+            Dictionary mapping parameter names to their best values
+
+        Raises:
+            FileNotFoundError: If progressBest.csv file not found
+            ValueError: If CSV file is empty or malformed
+        """
+        # Determine the CSV file path
+        if os.path.isfile(runNameOrPath):
+            # Full path provided
+            csvPath = runNameOrPath
+        else:
+            # Run name provided - look in optimizationRuns directory
+            runDir = os.path.join(
+                self.project.projectPath, "optimizationRuns", runNameOrPath
+            )
+            csvPath = os.path.join(runDir, "progressBest.csv")
+
+            # Try legacy name if new name doesn't exist
+            if not os.path.exists(csvPath):
+                legacyCsvPath = os.path.join(runDir, "progressAll_best.csv")
+                if os.path.exists(legacyCsvPath):
+                    csvPath = legacyCsvPath
+                    print(
+                        f"Using legacy progressAll_best.csv file (consider renaming to progressBest.csv)"
+                    )
+
+        if not os.path.exists(csvPath):
+            raise FileNotFoundError(
+                f"progressBest.csv file not found: {csvPath}\n"
+                f"Make sure the optimization run completed successfully."
+            )
+
+        # Load CSV using pandas
+        try:
+            df = pd.read_csv(csvPath)
+        except Exception as e:
+            raise ValueError(f"Failed to read CSV file {csvPath}: {str(e)}")
+
+        if len(df) == 0:
+            raise ValueError(f"CSV file is empty: {csvPath}")
+
+        # Get last row (final best result)
+        lastRow = df.iloc[-1]
+
+        # Extract parameter columns (exclude standard metadata columns)
+        excludeCols = [
+            "evaluationNumber",
+            "elapsedTime",
+            "simulationTime",
+            "distanceMetricTime",
+            "totalElapsedTime",
+            "objectiveValue",
+        ]
+
+        # Also exclude additional metric columns (ending with _value or _time)
+        paramCols = [
+            col
+            for col in df.columns
+            if col not in excludeCols
+            and not col.endswith("_value")
+            and not col.endswith("_time")
+        ]
+
+        # Build parameter dictionary
+        bestParams = {col: float(lastRow[col]) for col in paramCols}
+
+        # Optionally update the evaluator's optimal parameters
+        if updateOptimalParameters:
+            self.optimalParameters = deepcopy(bestParams)
+            print(f"Loaded best parameters from: {os.path.basename(csvPath)}")
+            print(f"  Objective value: {lastRow['objectiveValue']:.6f}")
+            print(f"  Parameters: {len(bestParams)}")
+
+        return bestParams
 
     def loadProcessSequenceFromFile(self, filePath: str) -> "CustomEvaluator":
         """
@@ -308,15 +551,14 @@ class CustomEvaluator:
 
                     # Check function has exactly 2 parameters
                     if len(params) == 2:
-                        # Check parameter types (allow empty annotations)
-                        if (
-                            params[0].annotation == vps.Domain
-                            or params[0].annotation == inspect.Parameter.empty
-                        ):
-                            if (
-                                params[1].annotation == dict[str, float]
-                                or params[1].annotation == inspect.Parameter.empty
-                            ):
+                        # Check parameter types - support both single and multi-domain
+                        validDomainTypes = [
+                            vps.Domain,  # Single domain
+                            dict[str, vps.Domain],  # Multi-domain dict
+                        ]
+
+                        if params[0].annotation in validDomainTypes:
+                            if params[1].annotation == dict[str, float]:
                                 self.processSequence = item
                                 return
                 except ValueError:
@@ -327,7 +569,16 @@ class CustomEvaluator:
         )
 
     def _detectMultiDomainProcess(self) -> bool:
-        """Detect if the process sequence function supports multi-domain processing."""
+        """
+        Detect if the process sequence function supports multi-domain processing.
+
+        Single-domain is the DEFAULT. Multi-domain is only used when:
+        1. Function is explicitly annotated as dict[str, Domain] or list[Domain], OR
+        2. Project has multiple named domains (more than just "default")
+
+        The "default" domain name is a special marker for legacy single-domain projects
+        and should NOT trigger multi-domain mode.
+        """
         if self.processSequence is None:
             return False
 
@@ -337,18 +588,36 @@ class CustomEvaluator:
 
             if len(params) >= 1:
                 firstParam = params[0]
-                # Check if first parameter is annotated as dict[str, Domain] or list[Domain]
+
+                # Priority 1: Explicit multi-domain annotation
                 if firstParam.annotation in [dict[str, vps.Domain], list[vps.Domain]]:
                     return True
-                # Also check if project has multiple domains/targets
-                elif (
-                    len(getattr(self.project, "initialDomains", {})) > 0
-                    and len(getattr(self.project, "targetLevelSets", {})) > 0
-                ):
-                    return True
 
+                # Priority 2: Explicit single-domain annotation (HIGHEST TRUST)
+                elif firstParam.annotation == vps.Domain:
+                    return False
+
+                # Priority 3: Ambiguous annotation - check project structure conservatively
+                elif firstParam.annotation == inspect.Parameter.empty:
+                    initialDomains = getattr(self.project, "initialDomains", {})
+
+                    # Multi-domain ONLY if:
+                    # - More than one domain exists, OR
+                    # - Exactly one domain with a non-"default" name
+                    # ("default" is a legacy marker for single-domain projects)
+                    if len(initialDomains) > 1:
+                        return True
+                    if len(initialDomains) == 1 and "default" not in initialDomains:
+                        return True
+
+                    # Safe default: single "default" domain = single-domain mode
+                    return False
+
+            # Default to single-domain mode
             return False
+
         except Exception:
+            # On any error, default to single-domain (safest)
             return False
 
     def setDistanceMetric(
@@ -532,6 +801,48 @@ class CustomEvaluator:
         print(f"Parameters: {', '.join(sorted(firstKeys))}")
         return self
 
+    def setConstantParametersWithRepeats(
+        self, parameters: Dict[str, float], numRepeats: int = 10
+    ) -> "CustomEvaluator":
+        """
+        Run multiple evaluations with identical parameter values (repeatability testing).
+
+        This is a convenience method for running N evaluations at exactly the same
+        parameter values to test repeatability or assess simulation variability.
+
+        Args:
+            parameters: Dictionary of parameter name -> value pairs to use for all evaluations
+            numRepeats: Number of times to repeat the evaluation (default: 10)
+
+        Returns:
+            self: For method chaining
+
+        Raises:
+            ValueError: If numRepeats is less than 1
+
+        Example:
+            >>> evaluator = CustomEvaluator(project)
+            >>> evaluator.loadOptimizationRun("my_run")
+            >>> best_params = evaluator.loadBestFromProgressCSV("my_run")
+            >>> evaluator.setConstantParametersWithRepeats(best_params, numRepeats=10)
+            >>> evaluator.apply("repeatability_test")
+        """
+        if numRepeats < 1:
+            raise ValueError(f"numRepeats must be at least 1, got {numRepeats}")
+
+        # Create list of identical parameter dictionaries
+        repeatedParams = [deepcopy(parameters) for _ in range(numRepeats)]
+
+        # Use existing paired values method
+        self.setVariableValuesPaired(repeatedParams)
+
+        print(
+            f"Set {numRepeats} identical evaluations for repeatability testing"
+        )
+        print(f"Parameters held constant: {', '.join(sorted(parameters.keys()))}")
+
+        return self
+
     def getOptimalParameters(self) -> Dict[str, float]:
         """
         Get optimal parameter values from the optimization run.
@@ -543,7 +854,7 @@ class CustomEvaluator:
         allParams.update(self.optimalParameters)
         return allParams
 
-    def evaluateGrid(
+    def apply(
         self,
         evaluationName: str,
         saveVisualization: bool = True,
@@ -551,7 +862,7 @@ class CustomEvaluator:
         saveAllMetricVisualizations: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        Evaluate all combinations of variable values in a grid.
+        Run the custom evaluation with the configured parameters.
 
         Args:
             evaluationName: Name for this custom evaluation run
@@ -592,19 +903,18 @@ class CustomEvaluator:
                 f"Multi-domain setup validation failed: {'; '.join(validationIssues)}"
             )
 
-        self.evaluationName = evaluationName
+        # Generate unique evaluation name and directory (similar to optimization runs)
+        finalName, outputDir = self._generateEvaluationDirectory(evaluationName)
+        self.evaluationName = finalName
         self.gridResults = []
 
         # Create output directory
-        outputDir = os.path.join(
-            self.project.projectPath, "customEvaluations", evaluationName
-        )
-        os.makedirs(outputDir, exist_ok=True)
+        os.makedirs(outputDir, exist_ok=False)
 
         # Save the process sequence to the output directory
         self.savedProcessSequencePath = None
         processSequenceDestPath = os.path.join(
-            outputDir, f"{evaluationName}-processSequence.py"
+            outputDir, f"{finalName}-processSequence.py"
         )
 
         try:
@@ -628,7 +938,7 @@ class CustomEvaluator:
                 except (OSError, TypeError) as e:
                     # Could not extract source (e.g., built-in function, lambda in REPL)
                     warningPath = os.path.join(
-                        outputDir, f"{evaluationName}-processSequence-WARNING.txt"
+                        outputDir, f"{finalName}-processSequence-WARNING.txt"
                     )
                     with open(warningPath, "w") as f:
                         f.write(
@@ -657,7 +967,7 @@ class CustomEvaluator:
                 # Convert dict to tuple in same order as paramNames
                 combinations.append(tuple(combo[name] for name in paramNames))
             print(
-                f"Starting paired evaluation '{evaluationName}' with {len(combinations)} specific combinations..."
+                f"Starting paired evaluation '{finalName}' with {len(combinations)} specific combinations..."
             )
         else:
             # Use grid (Cartesian product)
@@ -665,7 +975,7 @@ class CustomEvaluator:
             paramValueLists = [self.variableValues[name] for name in paramNames]
             combinations = list(itertools.product(*paramValueLists))
             print(
-                f"Starting grid evaluation '{evaluationName}' with {len(combinations)} combinations..."
+                f"Starting grid evaluation '{finalName}' with {len(combinations)} combinations..."
             )
 
         print(
@@ -1008,7 +1318,11 @@ class CustomEvaluator:
         with open(csvPath, "w") as f:
             if self.gridResults:
                 # Write header
-                paramNames = list(self.variableValues.keys())
+                # Extract parameter names from first result to handle both grid and paired values
+                if self.gridResults[0].get("parameters"):
+                    paramNames = sorted(self.gridResults[0]["parameters"].keys())
+                else:
+                    paramNames = []
                 headers = ["evaluationNumber"] + paramNames
 
                 # Add primary metric columns

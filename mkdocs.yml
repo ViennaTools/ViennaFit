@@ -1,0 +1,74 @@
+site_name: ViennaFit Documentation
+site_description: Parameter optimization for ViennaPS process simulations
+site_url: https://viennatools.github.io/ViennaFit/
+repo_url: https://github.com/ViennaTools/ViennaFit
+repo_name: ViennaTools/ViennaFit
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+    - Core Concepts: getting-started/concepts.md
+  - Tutorials:
+    - "Tutorial 1: Basic Optimization": tutorials/tutorial-1-basic-optimization.md
+    - "Tutorial 2: Custom Evaluation": tutorials/tutorial-2-custom-evaluation.md
+    - "Tutorial 3: Sensitivity Analysis": tutorials/tutorial-3-sensitivity-analysis.md
+    - "Tutorial 4: Multi-Domain Optimization": tutorials/tutorial-4-multi-domain.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - tables
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ViennaTools/ViennaFit
+  version:
+    provider: mike

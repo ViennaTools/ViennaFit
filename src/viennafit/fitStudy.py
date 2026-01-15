@@ -144,17 +144,12 @@ class Study:
                     if len(params) == 2:
                         # Check parameter types - support both single and multi-domain
                         validDomainTypes = [
-                            vps.Domain,  # Single domain (backward compatibility)
+                            vps.Domain,  # Single domain
                             dict[str, vps.Domain],  # Multi-domain dict
-                            list[vps.Domain],  # Multi-domain list
-                            inspect.Parameter.empty,  # No annotation
                         ]
 
                         if params[0].annotation in validDomainTypes:
-                            if (
-                                params[1].annotation == dict[str, float]
-                                or params[1].annotation == inspect.Parameter.empty
-                            ):
+                            if params[1].annotation == dict[str, float]:
                                 self.processSequence = item
                                 print(
                                     f"Successfully loaded process sequence: {itemName}"
