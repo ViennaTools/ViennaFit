@@ -4,17 +4,17 @@ This directory contains examples demonstrating the capabilities of the ViennaFit
 
 ## Directory Structure
 
-### data/
+### 0-example-data/
 Contains example annotation data files used throughout the examples:
-- `regular-cropped-SiO2.png.dat` - Bottom domain annotation
-- `regular-cropped-Nitride.png.dat` - Target domain annotation
+- `regular-cropped-SiO2.dat` - Bottom domain annotation
+- `regular-cropped-Nitride.dat` - Target domain annotation
 
-### setup/
+### 1-setup/
 Project initialization and domain creation examples:
-- `initializeProject.py` - Create and initialize a ViennaFit project
-- `createInitialDomain.py` - Set up initial and target domains from annotation data
+- `initializeProject.py` - Create and initialize a ViennaFit project, copies annotations to project folder
+- `assignDomains.py` - Set up initial and target domains from annotation data
 
-### optimization/
+### 2-optimization/
 Parameter optimization examples:
 - `basicOptimization.py` - Basic process parameter optimization
 - `customEvaluatorExample.py` - Custom evaluation after an optimization run
@@ -30,16 +30,15 @@ Parameter sensitivity analysis examples:
 ### 1. Setup Phase
 Run the setup examples in order:
 ```bash
-cd setup/
-python initializeProject.py
-# Copy annotation files from data/ to project/domains/annotations/
-python createInitialDomain.py
+cd 1-setup/
+python initializeProject.py  # Creates project and copies annotations
+python assignDomains.py
 ```
 
 ### 2. Optimization Phase
 Run optimization examples:
 ```bash
-cd optimization/
+cd 2-optimization/
 python basicOptimization.py
 python customEvaluatorExample.py  # (after optimization completes)
 ```

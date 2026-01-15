@@ -58,6 +58,11 @@ def processSequence1(domain: vps.Domain, params: dict[str, float]):
     process.setDomain(domain)
     process.setProcessModel(model)
     process.setProcessDuration(1.0)
+
+    rayTracing = vps.RayTracingParameters()
+    rayTracing.raysPerPoint = 300
+    process.setParameters(rayTracing)
+
     process.apply()
 
     result = domain.getLevelSets()[-1]
@@ -96,4 +101,4 @@ opt1.setName("run1")
 
 opt1.setNotes("Basic optimization of the multiparticle process for deposition.")
 
-opt1.apply(numEvaluations=50, saveVisualization=True)
+opt1.apply(numEvaluations=100, saveVisualization=True)

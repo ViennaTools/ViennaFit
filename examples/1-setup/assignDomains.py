@@ -30,8 +30,9 @@ p1.load(projectPath)
 
 # Define the paths to the annotation files
 # These .dat files contain x y coordinates (in nm) extracted from experimental images
-annotationBottom = os.path.join(scriptDir, "../0-example-data/regular-cropped-SiO2.dat")
-annotationTarget = os.path.join(scriptDir, "../0-example-data/regular-cropped-Nitride.dat")
+# Annotations are loaded from the project's annotations folder (copied during initialization)
+annotationBottom = os.path.join(projectPath, "domains", "annotations", "regular-cropped-SiO2.dat")
+annotationTarget = os.path.join(projectPath, "domains", "annotations", "regular-cropped-Nitride.dat")
 
 # Grid resolution for level set representation
 gridDelta = 3  # nm

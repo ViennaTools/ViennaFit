@@ -673,7 +673,7 @@ evaluator.setVariableValues({
     "param2": [0.1, 0.2, 0.3, 0.4]
 })
 
-results = evaluator.evaluateGrid("gridSearch1")
+results = evaluator.apply("gridSearch1")
 ```
 
 Creates 5 × 4 = 20 evaluations.
@@ -689,7 +689,7 @@ evaluator.setVariableValuesPaired([
     {"param1": 45, "param2": 0.35}
 ])
 
-results = evaluator.evaluateGrid("specific3")
+results = evaluator.apply("specific3")
 ```
 
 ### Repeatability Testing
@@ -700,7 +700,7 @@ Run identical parameters multiple times to assess variance:
 best = evaluator.loadBestFromProgressCSV("run1")
 
 evaluator.setConstantParametersWithRepeats(best, numRepeats=10)
-results = evaluator.evaluateGrid("repeatability")
+results = evaluator.apply("repeatability")
 
 # Analyze variance
 import numpy as np

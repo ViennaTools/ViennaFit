@@ -24,7 +24,7 @@ singleParamValues = {
 }
 
 evaluator.setVariableValues(singleParamValues)
-results = evaluator.evaluateGrid(
+results = evaluator.apply(
     evaluationName="singleParameterSweep", saveVisualization=False
 )
 
@@ -47,7 +47,7 @@ twoParamValues = {
 }
 
 evaluator2.setVariableValues(twoParamValues)
-results2 = evaluator2.evaluateGrid(
+results2 = evaluator2.apply(
     evaluationName="twoParameterStudy", saveVisualization=False
 )
 

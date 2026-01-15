@@ -825,7 +825,7 @@ class CustomEvaluator:
             >>> evaluator.loadOptimizationRun("my_run")
             >>> best_params = evaluator.loadBestFromProgressCSV("my_run")
             >>> evaluator.setConstantParametersWithRepeats(best_params, numRepeats=10)
-            >>> evaluator.evaluateGrid("repeatability_test")
+            >>> evaluator.apply("repeatability_test")
         """
         if numRepeats < 1:
             raise ValueError(f"numRepeats must be at least 1, got {numRepeats}")
@@ -854,7 +854,7 @@ class CustomEvaluator:
         allParams.update(self.optimalParameters)
         return allParams
 
-    def evaluateGrid(
+    def apply(
         self,
         evaluationName: str,
         saveVisualization: bool = True,
@@ -862,7 +862,7 @@ class CustomEvaluator:
         saveAllMetricVisualizations: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        Evaluate all combinations of variable values in a grid.
+        Run the custom evaluation with the configured parameters.
 
         Args:
             evaluationName: Name for this custom evaluation run

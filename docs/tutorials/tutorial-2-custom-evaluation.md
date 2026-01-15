@@ -116,7 +116,7 @@ print(f"\nGrid defined: 5 × 5 = 25 evaluations")
 
 ```python
 # Execute grid evaluation
-results = evaluator.evaluateGrid(
+results = evaluator.apply(
     evaluationName="parameterGrid_ionAndEtchant",
     saveVisualization=False  # Don't save all 25 VTP files
 )
@@ -221,7 +221,7 @@ evaluator.setVariableValuesPaired(specific_combos)
 evaluator.setDistanceMetric("CCH")
 
 # Run evaluation
-specific_results = evaluator.evaluateGrid(
+specific_results = evaluator.apply(
     evaluationName="specificCombinations",
     saveVisualization=True  # Save these for detailed analysis
 )
@@ -262,7 +262,7 @@ evaluator.setConstantParametersWithRepeats(
 evaluator.setDistanceMetric("CCH")
 
 # Execute
-repeat_results = evaluator.evaluateGrid(
+repeat_results = evaluator.apply(
     evaluationName="repeatabilityTest",
     saveVisualization=False
 )
@@ -355,7 +355,7 @@ for param, value in best_from_csv.items():
 # Can now use for further evaluation
 eval_incomplete.setConstantParametersWithRepeats(best_from_csv, numRepeats=5)
 eval_incomplete.setDistanceMetric("CCH")
-results_from_incomplete = eval_incomplete.evaluateGrid("continue_from_incomplete")
+results_from_incomplete = eval_incomplete.apply("continue_from_incomplete")
 ```
 
 !!! info "New in ViennaFit 2.0"
@@ -491,12 +491,12 @@ evaluator.setFixedParameters({
     "neutralStickP": optimal["neutralStickP"]
 })
 evaluator.setDistanceMetric("CCH")
-grid_results = evaluator.evaluateGrid("parameterGrid")
+grid_results = evaluator.apply("parameterGrid")
 
 # 2. Repeatability test
 best_params = evaluator.loadBestFromProgressCSV("run1_initialCalibration")
 evaluator.setConstantParametersWithRepeats(best_params, numRepeats=10)
-repeat_results = evaluator.evaluateGrid("repeatability")
+repeat_results = evaluator.apply("repeatability")
 
 # 3. Analyze
 objectives = [r['objectiveValue'] for r in repeat_results]
