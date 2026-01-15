@@ -551,15 +551,14 @@ class CustomEvaluator:
 
                     # Check function has exactly 2 parameters
                     if len(params) == 2:
-                        # Check parameter types (allow empty annotations)
-                        if (
-                            params[0].annotation == vps.Domain
-                            or params[0].annotation == inspect.Parameter.empty
-                        ):
-                            if (
-                                params[1].annotation == dict[str, float]
-                                or params[1].annotation == inspect.Parameter.empty
-                            ):
+                        # Check parameter types - support both single and multi-domain
+                        validDomainTypes = [
+                            vps.Domain,  # Single domain
+                            dict[str, vps.Domain],  # Multi-domain dict
+                        ]
+
+                        if params[0].annotation in validDomainTypes:
+                            if params[1].annotation == dict[str, float]:
                                 self.processSequence = item
                                 return
                 except ValueError:
