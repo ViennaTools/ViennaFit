@@ -34,7 +34,7 @@ def processSequence1(domain: vps.Domain, params: dict[str, float]):
     model = vps.MultiParticleProcess()
 
     # Set the parameters for the neutral
-    sticking = {vps.Material.Si: params["neutralStickP"]}  # Use dict access
+    sticking = {vps.Material.SiO2: params["neutralStickP"]}  # Use dict access
     model.addNeutralParticle(sticking, label="neutral")
 
     # Set the parameters for the ion
@@ -45,7 +45,7 @@ def processSequence1(domain: vps.Domain, params: dict[str, float]):
     )
 
     def rateFunction(fluxes, material):
-        if material == vps.Material.Si:
+        if material == vps.Material.SiO2:
             return (
                 fluxes[0] * params["neutralRate"] + fluxes[1] * params["ionRate"]
             )  # Use dict access
@@ -54,6 +54,7 @@ def processSequence1(domain: vps.Domain, params: dict[str, float]):
     model.setRateFunction(rateFunction)
 
     process = vps.Process()
+    process.setFluxEngineType(vps.FluxEngineType.CPU_DISK)
     process.setDomain(domain)
     process.setProcessModel(model)
     process.setProcessDuration(1.0)
@@ -64,7 +65,7 @@ def processSequence1(domain: vps.Domain, params: dict[str, float]):
     return result
 
 
-# Set up optimization
+# Set the process sequence for the optimization
 opt1.setProcessSequence(processSequence1)
 
 # Parameters will be automatically detected from function signature
@@ -85,14 +86,14 @@ opt1.setVariableParameters(
 # Set fixed parameters
 opt1.setFixedParameters({"ionEnergy": 100.0})
 
-# Set distance metrics: CCH (Chamfer) as primary, CSF as additional metric.
+# Set distance metrics: CCH (Chamfer) as primary, CA as additional metric.
 opt1.setDistanceMetrics(
     primaryMetric="CCH",
-    additionalMetrics=["CSF"],
+    additionalMetrics=["CA"],
 )
 
 opt1.setName("run1")
 
-opt1.setNotes("Basic optimization example with Chamfer and CSF metrics.")
+opt1.setNotes("Basic optimization of the multiparticle process for deposition.")
 
-opt1.apply(numEvaluations=10, saveVisualization=True)
+opt1.apply(numEvaluations=50, saveVisualization=True)

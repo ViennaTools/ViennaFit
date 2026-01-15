@@ -78,7 +78,7 @@ projects/etchCalibration/
 └── ...
 ```
 
-## Step 2: Load Initial Domain
+## Step 2: Set the Initial Domain for your project
 
 Define the initial substrate geometry before etching:
 

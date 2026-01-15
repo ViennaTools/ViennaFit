@@ -4,12 +4,12 @@ This folder contains examples for setting up ViennaFit projects and creating ini
 
 ## Files
 
-### initializeProject.py
+### 1-initializeProject.py
 - Creates and initializes a new ViennaFit project
 - Shows different initialization options
 - Creates the basic project structure
 
-### createInitialDomain.py
+### 2-createInitialDomain.py
 - Loads annotation data from the data folder
 - Creates initial and target level set domains
 - Sets up domains for optimization and analysis
