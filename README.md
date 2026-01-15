@@ -30,7 +30,7 @@ opt.apply(numEvaluations=100)
 ## Key Features
 
 - **Multiple Optimization Algorithms**: dlib, Nevergrad, Ax/BoTorch (Bayesian optimization)
-- **8 Distance Metrics**: Compare Area (CA), Chamfer (CCH), Sparse Field (CSF), Critical Dimensions (CCD), and more
+- **Distance Metrics**: Compare Area (CA), Chamfer (CCH), Sparse Field (CSF), Critical Dimensions (CCD), and more
 - **Sensitivity Analysis**: Both local and global (Sobol) methods
 - **Multi-Domain Support**: Optimize across multiple geometries simultaneously
 - **Custom Parameter Evaluation**: Grid search and specific parameter combinations
