@@ -5,7 +5,97 @@ import os
 import csv
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from importlib import metadata as importlib_metadata
+
+
+def getViennaVersionInfo() -> Dict[str, Optional[str]]:
+    """
+    Get version information for viennaps and viennals packages.
+
+    Attempts to retrieve:
+    - Package versions via importlib.metadata or __version__ attribute
+    - Git commit hashes if packages were installed from local git repositories
+
+    Returns:
+        Dictionary with keys:
+        - viennapsVersion: version string or "unknown"
+        - viennalsVersion: version string or "unknown"
+        - viennapsCommit: git commit hash or None
+        - viennalsCommit: git commit hash or None
+    """
+    import subprocess
+    from urllib.parse import urlparse
+
+    result = {
+        "viennapsVersion": "unknown",
+        "viennalsVersion": "unknown",
+        "viennapsCommit": None,
+        "viennalsCommit": None,
+    }
+
+    # Get viennaps version
+    try:
+        result["viennapsVersion"] = importlib_metadata.version("viennaps")
+    except importlib_metadata.PackageNotFoundError:
+        try:
+            import viennaps as vps
+            result["viennapsVersion"] = getattr(vps, "__version__", "unknown")
+        except ImportError:
+            pass
+
+    # Get viennals version
+    try:
+        result["viennalsVersion"] = importlib_metadata.version("viennals")
+    except importlib_metadata.PackageNotFoundError:
+        try:
+            import viennals as vls
+            result["viennalsVersion"] = getattr(vls, "__version__", "unknown")
+        except ImportError:
+            pass
+
+    # Try to get git commit hashes from source directories
+    for pkg_name, commit_key in [("viennaps", "viennapsCommit"), ("viennals", "viennalsCommit")]:
+        try:
+            dist = importlib_metadata.distribution(pkg_name)
+            # Check for direct_url.json which contains source directory info
+            direct_url_files = [f for f in dist.files or [] if f.name == "direct_url.json"]
+            if direct_url_files:
+                direct_url_path = direct_url_files[0].locate()
+                if os.path.exists(direct_url_path):
+                    with open(direct_url_path, "r") as f:
+                        direct_url_data = json.load(f)
+
+                        # First check for vcs_info (VCS URL installs)
+                        vcs_info = direct_url_data.get("vcs_info", {})
+                        commit_id = vcs_info.get("commit_id")
+                        if commit_id:
+                            result[commit_key] = commit_id
+                            continue
+
+                        # Check for local file URL (pip install from local directory)
+                        url = direct_url_data.get("url", "")
+                        if url.startswith("file://"):
+                            parsed = urlparse(url)
+                            source_dir = parsed.path
+                            # Check if this directory exists and is a git repo
+                            if os.path.isdir(source_dir) and os.path.isdir(os.path.join(source_dir, ".git")):
+                                try:
+                                    git_result = subprocess.run(
+                                        ["git", "rev-parse", "HEAD"],
+                                        cwd=source_dir,
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=5
+                                    )
+                                    if git_result.returncode == 0:
+                                        result[commit_key] = git_result.stdout.strip()
+                                except (subprocess.SubprocessError, OSError):
+                                    pass
+        except (importlib_metadata.PackageNotFoundError, Exception):
+            pass
+
+    return result
 
 
 def readPointsFromFile(
@@ -296,9 +386,15 @@ class ProgressMetadata:
     optimizer: str
     createdTime: str
     description: str = ""
-    
+    numEvaluations: Optional[int] = None
+    notes: Optional[str] = None
+    viennapsVersion: Optional[str] = None
+    viennalsVersion: Optional[str] = None
+    viennapsCommit: Optional[str] = None
+    viennalsCommit: Optional[str] = None
+
     def toDict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "runName": self.runName,
             "parameterNames": self.parameterNames,
             "parameterBounds": self.parameterBounds,
@@ -307,10 +403,32 @@ class ProgressMetadata:
             "createdTime": self.createdTime,
             "description": self.description
         }
-    
+        # Include numEvaluations and notes if available
+        if self.numEvaluations is not None:
+            result["numEvaluations"] = self.numEvaluations
+        if self.notes is not None:
+            result["notes"] = self.notes
+        # Include version info if available
+        if self.viennapsVersion is not None:
+            result["viennapsVersion"] = self.viennapsVersion
+        if self.viennalsVersion is not None:
+            result["viennalsVersion"] = self.viennalsVersion
+        if self.viennapsCommit is not None:
+            result["viennapsCommit"] = self.viennapsCommit
+        if self.viennalsCommit is not None:
+            result["viennalsCommit"] = self.viennalsCommit
+        return result
+
     @classmethod
     def fromDict(cls, data: Dict[str, Any]) -> 'ProgressMetadata':
-        return cls(**data)
+        # Handle backward compatibility - filter to only known fields
+        known_fields = {
+            "runName", "parameterNames", "parameterBounds", "fixedParameters",
+            "optimizer", "createdTime", "description", "numEvaluations", "notes",
+            "viennapsVersion", "viennalsVersion", "viennapsCommit", "viennalsCommit"
+        }
+        filtered_data = {k: v for k, v in data.items() if k in known_fields}
+        return cls(**filtered_data)
 
 
 @dataclass

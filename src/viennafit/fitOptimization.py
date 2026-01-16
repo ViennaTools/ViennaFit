@@ -6,6 +6,7 @@ from .fitUtilities import (
     ProgressMetadata,
     migrateLegacyProgressFile,
     ProgressDataManager,
+    getViennaVersionInfo,
 )
 from .postprocessing import OptimizationPostprocessor
 import viennaps as vps
@@ -182,31 +183,6 @@ class Optimization(Study):
         except Exception as e:
             print(f"Error parsing file {file_path}: {e}")
             return np.array([])
-
-    def saveStartingConfiguration(self):
-        """Save the starting configuration of the optimization"""
-        if not self.applied:
-            raise RuntimeError(
-                "Optimization must be applied before saving configuration"
-            )
-
-        config = {
-            "name": self.name,
-            "parameterNames": self.parameterNames,
-            "fixedParameters": self.fixedParameters,
-            "variableParameters": self.variableParameters,
-            "optimizer": self.optimizer,
-            "numEvaluations": self.numEvaluations,
-            "notes": self.notes,
-        }
-
-        configFile = os.path.join(
-            self.runDir, self.name + "-startingConfiguration.json"
-        )
-        with open(configFile, "w") as f:
-            json.dump(config, f, indent=4)
-
-        print(f"Starting configuration saved to {configFile}")
 
     def setOptimizer(self, optimizer: str):
         """Set the optimizer to be used"""
@@ -411,7 +387,6 @@ class Optimization(Study):
 
             self.applied = True
             self.evalCounter = 0
-            self.saveStartingConfiguration()
 
             # Save notes to file if provided
             if self.notes is not None:
@@ -422,6 +397,7 @@ class Optimization(Study):
 
             # Initialize progress manager with metadata
             if hasattr(self, "parameterNames") and self.parameterNames:
+                versionInfo = getViennaVersionInfo()
                 metadata = ProgressMetadata(
                     runName=self.name,
                     parameterNames=self.parameterNames,
@@ -430,6 +406,12 @@ class Optimization(Study):
                     optimizer=self.optimizer,
                     createdTime=datetime.now().isoformat(),
                     description=f"Optimization run for {self.name}",
+                    numEvaluations=self.numEvaluations,
+                    notes=self.notes,
+                    viennapsVersion=versionInfo["viennapsVersion"],
+                    viennalsVersion=versionInfo["viennalsVersion"],
+                    viennapsCommit=versionInfo["viennapsCommit"],
+                    viennalsCommit=versionInfo["viennalsCommit"],
                 )
 
                 progressFilepath = os.path.join(self.runDir, "progressAll")

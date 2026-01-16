@@ -4,6 +4,7 @@ from .fitUtilities import (
     createProgressManager,
     ProgressMetadata,
     saveEvalToProgressManager,
+    getViennaVersionInfo,
 )
 import os
 import json
@@ -379,6 +380,7 @@ class LocalSensitivityStudy(Study):
 
             # Initialize progress manager with metadata
             if hasattr(self, "parameterNames") and self.parameterNames:
+                versionInfo = getViennaVersionInfo()
                 metadata = ProgressMetadata(
                     runName=self.name,
                     parameterNames=self.parameterNames,
@@ -387,6 +389,11 @@ class LocalSensitivityStudy(Study):
                     optimizer="local_sensitivity",
                     createdTime=datetime.now().isoformat(),
                     description=f"Local sensitivity study for {self.name}",
+                    notes=self.notes,
+                    viennapsVersion=versionInfo["viennapsVersion"],
+                    viennalsVersion=versionInfo["viennalsVersion"],
+                    viennapsCommit=versionInfo["viennapsCommit"],
+                    viennalsCommit=versionInfo["viennalsCommit"],
                 )
 
                 progressFilepath = os.path.join(self.runDir, "progressAll")
