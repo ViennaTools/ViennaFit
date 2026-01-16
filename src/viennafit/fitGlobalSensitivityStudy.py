@@ -36,6 +36,7 @@ class GlobalSensitivityStudy(Study):
         # Progress management
         self.progressManager = None  # Will be initialized in apply()
         self.storageFormat = "csv"  # Default storage format
+        self.notes = None  # Optional notes for the sensitivity study
 
     def setVariableParameters(self, varParams: Dict[str, Tuple[float, float]]):
         """
@@ -177,6 +178,11 @@ class GlobalSensitivityStudy(Study):
         self.storageFormat = storageFormat.lower()
         return self
 
+    def setNotes(self, notes: str):
+        """Set notes for the sensitivity study"""
+        self.notes = notes
+        return self
+
     def _prepareSALibProblem(self):
         """Prepare the problem dictionary for SALib"""
         return {
@@ -216,6 +222,7 @@ class GlobalSensitivityStudy(Study):
                     optimizer="global_sensitivity",
                     createdTime=datetime.now().isoformat(),
                     description=f"Global sensitivity study for {self.name}",
+                    notes=self.notes,
                     viennapsVersion=versionInfo["viennapsVersion"],
                     viennalsVersion=versionInfo["viennalsVersion"],
                     viennapsCommit=versionInfo["viennapsCommit"],

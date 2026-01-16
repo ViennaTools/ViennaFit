@@ -386,6 +386,8 @@ class ProgressMetadata:
     optimizer: str
     createdTime: str
     description: str = ""
+    numEvaluations: Optional[int] = None
+    notes: Optional[str] = None
     viennapsVersion: Optional[str] = None
     viennalsVersion: Optional[str] = None
     viennapsCommit: Optional[str] = None
@@ -401,6 +403,11 @@ class ProgressMetadata:
             "createdTime": self.createdTime,
             "description": self.description
         }
+        # Include numEvaluations and notes if available
+        if self.numEvaluations is not None:
+            result["numEvaluations"] = self.numEvaluations
+        if self.notes is not None:
+            result["notes"] = self.notes
         # Include version info if available
         if self.viennapsVersion is not None:
             result["viennapsVersion"] = self.viennapsVersion
@@ -417,8 +424,8 @@ class ProgressMetadata:
         # Handle backward compatibility - filter to only known fields
         known_fields = {
             "runName", "parameterNames", "parameterBounds", "fixedParameters",
-            "optimizer", "createdTime", "description", "viennapsVersion",
-            "viennalsVersion", "viennapsCommit", "viennalsCommit"
+            "optimizer", "createdTime", "description", "numEvaluations", "notes",
+            "viennapsVersion", "viennalsVersion", "viennapsCommit", "viennalsCommit"
         }
         filtered_data = {k: v for k, v in data.items() if k in known_fields}
         return cls(**filtered_data)

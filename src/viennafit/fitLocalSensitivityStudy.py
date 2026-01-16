@@ -389,6 +389,7 @@ class LocalSensitivityStudy(Study):
                     optimizer="local_sensitivity",
                     createdTime=datetime.now().isoformat(),
                     description=f"Local sensitivity study for {self.name}",
+                    notes=self.notes,
                     viennapsVersion=versionInfo["viennapsVersion"],
                     viennalsVersion=versionInfo["viennalsVersion"],
                     viennapsCommit=versionInfo["viennapsCommit"],
