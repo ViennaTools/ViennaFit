@@ -6,6 +6,7 @@ from .fitUtilities import (
     ProgressMetadata,
     migrateLegacyProgressFile,
     ProgressDataManager,
+    getViennaVersionInfo,
 )
 from .postprocessing import OptimizationPostprocessor
 import viennaps as vps
@@ -422,6 +423,7 @@ class Optimization(Study):
 
             # Initialize progress manager with metadata
             if hasattr(self, "parameterNames") and self.parameterNames:
+                versionInfo = getViennaVersionInfo()
                 metadata = ProgressMetadata(
                     runName=self.name,
                     parameterNames=self.parameterNames,
@@ -430,6 +432,10 @@ class Optimization(Study):
                     optimizer=self.optimizer,
                     createdTime=datetime.now().isoformat(),
                     description=f"Optimization run for {self.name}",
+                    viennapsVersion=versionInfo["viennapsVersion"],
+                    viennalsVersion=versionInfo["viennalsVersion"],
+                    viennapsCommit=versionInfo["viennapsCommit"],
+                    viennalsCommit=versionInfo["viennalsCommit"],
                 )
 
                 progressFilepath = os.path.join(self.runDir, "progressAll")

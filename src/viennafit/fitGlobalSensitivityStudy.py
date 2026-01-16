@@ -6,6 +6,7 @@ from .fitUtilities import (
     ProgressMetadata,
     migrateLegacyProgressFile,
     ProgressDataManager,
+    getViennaVersionInfo,
 )
 from .postprocessing import GSSPostprocessor
 import os
@@ -206,6 +207,7 @@ class GlobalSensitivityStudy(Study):
 
             # Initialize progress manager with metadata
             if hasattr(self, "parameterNames") and self.parameterNames:
+                versionInfo = getViennaVersionInfo()
                 metadata = ProgressMetadata(
                     runName=self.name,
                     parameterNames=self.parameterNames,
@@ -214,6 +216,10 @@ class GlobalSensitivityStudy(Study):
                     optimizer="global_sensitivity",
                     createdTime=datetime.now().isoformat(),
                     description=f"Global sensitivity study for {self.name}",
+                    viennapsVersion=versionInfo["viennapsVersion"],
+                    viennalsVersion=versionInfo["viennalsVersion"],
+                    viennapsCommit=versionInfo["viennapsCommit"],
+                    viennalsCommit=versionInfo["viennalsCommit"],
                 )
 
                 # Create single progress manager (like optimization)
