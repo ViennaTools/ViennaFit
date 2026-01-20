@@ -68,6 +68,7 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
     def optimize(self, numEvaluations: int) -> Dict[str, Any]:
         """Run optimization using dlib's find_min_global."""
         from dlib import find_min_global
+        from .fitExceptions import EarlyStoppingException
 
         # Get bounds
         lowerBounds, upperBounds = self.getBounds()
@@ -76,12 +77,20 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
         objectiveFunction = ObjectiveWrapper.create("dlib", self.optimization)
 
         # Run optimization
-        x, fx = find_min_global(
-            objectiveFunction,
-            lowerBounds,
-            upperBounds,
-            numEvaluations,
-        )
+        earlyStopped = False
+        try:
+            x, fx = find_min_global(
+                objectiveFunction,
+                lowerBounds,
+                upperBounds,
+                numEvaluations,
+            )
+        except EarlyStoppingException:
+            earlyStopped = True
+            # Use best parameters found so far
+            parameterNames = list(self.optimization.variableParameters.keys())
+            x = [self.optimization.bestParameters.get(name) for name in parameterNames]
+            fx = self.optimization.bestScore
 
         # Format results
         parameterNames = list(self.optimization.variableParameters.keys())
@@ -91,7 +100,8 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
             "success": True,
             "x": optimizedParams,
             "fun": fx,
-            "nfev": numEvaluations,
+            "nfev": self.optimization.evalCounter,
+            "earlyStopped": earlyStopped,
         }
 
 
@@ -101,6 +111,7 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
     def optimize(self, numEvaluations: int) -> Dict[str, Any]:
         """Run optimization using Nevergrad."""
         import nevergrad as ng
+        from .fitExceptions import EarlyStoppingException
 
         # Get bounds and parameter names in consistent order
         parameterNames = list(self.optimization.variableParameters.keys())
@@ -126,26 +137,45 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
         )
 
         # Run optimization
-        recommendation = optimizer.minimize(objectiveFunction)
+        earlyStopped = False
+        try:
+            recommendation = optimizer.minimize(objectiveFunction)
+            optimizedParamValues = recommendation.value
+            bestLoss = recommendation.loss
+        except EarlyStoppingException:
+            earlyStopped = True
+            # Get best so far from recommendation
+            recommendation = optimizer.recommend()
+            optimizedParamValues = recommendation.value
+            bestLoss = self.optimization.bestScore
 
         # Format results - recommendation.value is an array, map to parameter names
-        optimizedParamValues = recommendation.value
         optimizedParams = dict(zip(parameterNames, optimizedParamValues))
 
         return {
             "success": True,
             "x": optimizedParams,
-            "fun": recommendation.loss,
-            "nfev": numEvaluations,
+            "fun": bestLoss,
+            "nfev": self.optimization.evalCounter,
+            "earlyStopped": earlyStopped,
         }
 
 
 class AxOptimizerWrapper(BaseOptimizerWrapper):
     """Wrapper for Ax/BoTorch optimizer using qExpectedImprovement."""
 
+    def _shouldStopEarly(self) -> bool:
+        """Check if early stopping criterion is met."""
+        if self.optimization.earlyStoppingPatience is None:
+            return False
+        if self.optimization.evalCounter < self.optimization.earlyStoppingMinEvaluations:
+            return False
+        return self.optimization.evaluationsSinceImprovement >= self.optimization.earlyStoppingPatience
+
     def optimize(self, numEvaluations: int) -> Dict[str, Any]:  # numEvaluations is validated in apply(), unused here
         """Run Bayesian optimization using Ax with BoTorch qEI acquisition function."""
         from ax import Client, RangeParameterConfig
+        from .fitExceptions import EarlyStoppingException
 
         # Get configuration
         parameterNames = list(self.optimization.variableParameters.keys())
@@ -203,7 +233,14 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
 
         # Run optimization loop
         numTrials = 0
+        earlyStopped = False
         while numTrials < totalEvaluations:
+            # Check early stopping BEFORE generating new trials
+            if self._shouldStopEarly():
+                self.optimization.earlyStoppedAt = self.optimization.evalCounter
+                earlyStopped = True
+                break
+
             # Generate batch of trials
             trialsToEvaluate = []
             for _ in range(min(batchSize, totalEvaluations - numTrials)):
@@ -221,12 +258,25 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
 
             # Evaluate batch
             for trialIndex, parameterization in trialsToEvaluate:
+                # Check early stopping before each evaluation
+                if self._shouldStopEarly():
+                    self.optimization.earlyStoppedAt = self.optimization.evalCounter
+                    earlyStopped = True
+                    break
+
                 # Evaluate single trial
-                result = objectiveWrapper.evaluateTrial(parameterization)
+                try:
+                    result = objectiveWrapper.evaluateTrial(parameterization)
+                except EarlyStoppingException:
+                    earlyStopped = True
+                    break
 
                 # Complete trial with result
                 axClient.complete_trial(trial_index=trialIndex, raw_data=result)
                 numTrials += 1
+
+            if earlyStopped:
+                break
 
         # Get best parameters
         # Returns: (parameters_dict, metrics_dict, trial_index, arm_name)
@@ -267,4 +317,5 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
             "x": bestParameters,
             "fun": bestObjective,
             "nfev": numTrials,
+            "earlyStopped": earlyStopped,
         }

@@ -104,6 +104,9 @@ class Optimization(Study):
             "variableParameters": self.variableParameters,
             "optimizer": self.optimizer,
             "numEvaluations": self.numEvaluations,
+            "actualEvaluations": self.evalCounter,
+            "earlyStopped": self.earlyStoppedAt is not None,
+            "earlyStoppedAtEvaluation": self.earlyStoppedAt,
         }
 
         with open(filepath, "w") as f:
@@ -184,6 +187,32 @@ class Optimization(Study):
             print(f"Error parsing file {file_path}: {e}")
             return np.array([])
 
+    def saveStartingConfiguration(self):
+        """Save the starting configuration of the optimization"""
+        if not self.applied:
+            raise RuntimeError(
+                "Optimization must be applied before saving configuration"
+            )
+
+        config = {
+            "name": self.name,
+            "parameterNames": self.parameterNames,
+            "fixedParameters": self.fixedParameters,
+            "variableParameters": self.variableParameters,
+            "optimizer": self.optimizer,
+            "numEvaluations": self.numEvaluations,
+            "notes": self.notes,
+            "earlyStoppingPatience": getattr(self, "earlyStoppingPatience", None),
+            "earlyStoppingMinEvaluations": getattr(self, "earlyStoppingMinEvaluations", 0),
+        }
+
+        configFile = os.path.join(
+            self.runDir, self.name + "-startingConfiguration.json"
+        )
+        with open(configFile, "w") as f:
+            json.dump(config, f, indent=4)
+
+        print(f"Starting configuration saved to {configFile}")
     def setOptimizer(self, optimizer: str):
         """Set the optimizer to be used"""
         self.optimizer = optimizer
@@ -277,6 +306,24 @@ class Optimization(Study):
         if numBatches < 1:
             raise ValueError("Number of batches must be at least 1")
         self.numBatches = numBatches
+        return self
+
+    def setEarlyStopping(self, patienceEvaluations: int = None, minEvaluations: int = 0):
+        """
+        Configure early stopping criterion.
+
+        Args:
+            patienceEvaluations: Stop if no improvement for this many evaluations.
+                                Set to None to disable.
+            minEvaluations: Minimum evaluations before early stopping can trigger.
+
+        Returns:
+            self for method chaining
+        """
+        if patienceEvaluations is not None and patienceEvaluations < 1:
+            raise ValueError("patienceEvaluations must be at least 1")
+        self.earlyStoppingPatience = patienceEvaluations
+        self.earlyStoppingMinEvaluations = minEvaluations
         return self
 
     def migrateLegacyProgressFiles(self):
@@ -447,6 +494,10 @@ class Optimization(Study):
                 for name, value in result["x"].items():
                     print(f"    {name}: {value:.6f}")
                 print(f" Best evaluation #: {self.bestEvaluationNumber}")
+
+                if result.get("earlyStopped", False):
+                    print(f"  Optimization stopped early at evaluation {self.earlyStoppedAt}")
+                    print(f"    (No improvement for {self.earlyStoppingPatience} evaluations)")
 
                 # Save final results
                 self.saveResults(self.name + "-final-results.json")

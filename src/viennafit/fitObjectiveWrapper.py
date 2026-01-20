@@ -348,6 +348,12 @@ class BaseObjectiveWrapper:
             self.study.bestParameters = paramDict.copy()
             self.study.bestEvaluationNumber = self.study.evalCounter
 
+        # Early stopping tracking
+        if newBest:
+            self.study.evaluationsSinceImprovement = 0
+        else:
+            self.study.evaluationsSinceImprovement += 1
+
         # Save ALL evaluations to progress manager (both best and regular)
         if self.progressManager:
             # Order parameters according to metadata parameterNames
@@ -414,6 +420,12 @@ class BaseObjectiveWrapper:
                 # Save the processed vps.Domain (not the returned level set)
                 domainCopy.saveSurfaceMesh(filePath, True)
 
+        # Check early stopping criterion (after all data is saved)
+        if self._shouldTriggerEarlyStopping():
+            self.study.earlyStoppedAt = self.study.evalCounter
+            from .fitExceptions import EarlyStoppingException
+            raise EarlyStoppingException(self.study.evalCounter, self.study.bestScore)
+
         return objectiveValue, elapsedTime, simulationTime, distanceMetricTime
 
     def _generateParameterString(self, paramDict: dict[str, float], variableParamNames: set[str] = None) -> str:
@@ -436,6 +448,14 @@ class BaseObjectiveWrapper:
                 paramStrings.append(f"{abbrevName}{valueStr}")
 
         return "_".join(paramStrings)
+
+    def _shouldTriggerEarlyStopping(self) -> bool:
+        """Check if early stopping criterion is met."""
+        if self.study.earlyStoppingPatience is None:
+            return False
+        if self.study.evalCounter < self.study.earlyStoppingMinEvaluations:
+            return False
+        return self.study.evaluationsSinceImprovement >= self.study.earlyStoppingPatience
 
     def _evaluateObjectiveBatch(
         self,
