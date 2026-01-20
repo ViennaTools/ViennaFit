@@ -83,6 +83,12 @@ class Study:
         self.bestEvaluationNumber = None
         self.optimizationStartTime = None  # Will be set when optimization starts
 
+        # Early stopping configuration
+        self.earlyStoppingPatience = None
+        self.earlyStoppingMinEvaluations = 0
+        self.evaluationsSinceImprovement = 0
+        self.earlyStoppedAt = None
+
         print(
             f"{studyType.capitalize()} '{self.name}' assigned to project '{self.project.projectName}'"
             f" and initialized in {self.runDir}"
