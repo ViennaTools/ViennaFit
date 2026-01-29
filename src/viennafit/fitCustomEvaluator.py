@@ -1044,17 +1044,8 @@ class CustomEvaluator:
                             "Multi-domain process sequence must return dict[str, Domain]"
                         )
 
-                    # Convert result domains to level sets for comparison
-                    resultLevelSets = {}
-                    for name, domain in resultDomains.items():
-                        if domain.getLevelSets():
-                            resultLevelSets[name] = domain.getLevelSets()[
-                                -1
-                            ]  # Use last level set
-                        else:
-                            raise ValueError(
-                                f"Result domain '{name}' has no level sets"
-                            )
+                    # Result domains are ViennaLS level sets - use directly
+                    resultLevelSets = resultDomains
 
                     # Save visualization if requested
                     resultPaths = {}
