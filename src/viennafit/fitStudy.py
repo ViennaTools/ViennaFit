@@ -58,18 +58,18 @@ class Study:
 
         self.name = name
         self.runDir = runDir
-        self.progressDir = os.path.join(self.runDir, "progress")
+        self._progressDir = os.path.join(self.runDir, "progress")
 
         # Common internal variables
         self.resultLevelSet = None
-        self.applied = False
+        self._applied = False
         self.processSequence = None
         self.distanceMetric = None
-        self.primaryDistanceMetric = None
+        self._primaryDistanceMetric = None
         self.additionalDistanceMetrics = []
         self.criticalDimensionRanges = None
         self.sparseFieldExpansionWidth = 200
-        self.evalCounter = 0
+        self._evalCounter = 0
         self.saveVisualization = True
         self.saveAllEvaluations = False
         self.saveAdditionalMetricVisualizations = False
@@ -81,12 +81,12 @@ class Study:
         self.bestParameters = None
         self.bestScore = float("inf")
         self.bestEvaluationNumber = None
-        self.optimizationStartTime = None  # Will be set when optimization starts
+        self._optimizationStartTime = None  # Will be set when optimization starts
 
         # Early stopping configuration
         self.earlyStoppingPatience = None
         self.earlyStoppingMinEvaluations = 0
-        self.evaluationsSinceImprovement = 0
+        self._evaluationsSinceImprovement = 0
         self.earlyStoppedAt = None
 
         print(
@@ -295,7 +295,7 @@ class Study:
             )
 
         self.distanceMetric = metric
-        self.primaryDistanceMetric = metric
+        self._primaryDistanceMetric = metric
         self.additionalDistanceMetrics = []
         self.criticalDimensionRanges = criticalDimensionRanges
         self.sparseFieldExpansionWidth = sparseFieldExpansionWidth
@@ -357,7 +357,7 @@ class Study:
             )
 
         self.distanceMetric = primaryMetric  # For backward compatibility
-        self.primaryDistanceMetric = primaryMetric
+        self._primaryDistanceMetric = primaryMetric
         self.additionalDistanceMetrics = additionalMetrics
         self.criticalDimensionRanges = criticalDimensionRanges
         self.sparseFieldExpansionWidth = sparseFieldExpansionWidth

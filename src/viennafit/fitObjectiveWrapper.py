@@ -49,37 +49,37 @@ class BaseObjectiveWrapper:
     """Base class for objective function wrappers."""
 
     def __init__(self, study, initialDomainName: str = None):
-        self.study = study
-        self.initialDomainName = initialDomainName
+        self._study = study
+        self._initialDomainName = initialDomainName
 
         # Detect if process sequence supports multi-domain processing
-        self.isMultiDomainProcess = self._detectMultiDomainProcess()
+        self._isMultiDomainProcess = self._detectMultiDomainProcess()
 
         # Create appropriate distance metric(s)
         criticalDimensionRanges = getattr(study, "criticalDimensionRanges", None)
         sparseFieldExpansionWidth = getattr(study, "sparseFieldExpansionWidth", 200)
 
         # Primary metric (for optimization)
-        primaryMetric = getattr(study, "primaryDistanceMetric", None) or study.distanceMetric
-        self.distanceMetric = DistanceMetric.create(
+        primaryMetric = getattr(study, "_primaryDistanceMetric", None) or study.distanceMetric
+        self._distanceMetric = DistanceMetric.create(
             primaryMetric,
-            multiDomain=self.isMultiDomainProcess,
+            multiDomain=self._isMultiDomainProcess,
             criticalDimensionRanges=criticalDimensionRanges,
             sparseFieldExpansionWidth=sparseFieldExpansionWidth,
         )
 
         # Additional metrics (for tracking)
-        self.additionalDistanceMetrics = {}
+        self._additionalDistanceMetrics = {}
         additionalMetrics = getattr(study, "additionalDistanceMetrics", [])
         for metricName in additionalMetrics:
-            self.additionalDistanceMetrics[metricName] = DistanceMetric.create(
+            self._additionalDistanceMetrics[metricName] = DistanceMetric.create(
                 metricName,
-                multiDomain=self.isMultiDomainProcess,
+                multiDomain=self._isMultiDomainProcess,
                 criticalDimensionRanges=criticalDimensionRanges,
                 sparseFieldExpansionWidth=sparseFieldExpansionWidth,
             )
 
-        self.progressManager = getattr(study, "progressManager", None)
+        self._progressManager = getattr(study, "_progressManager", None)
 
     def _saveEvaluationData(
         self,
@@ -96,10 +96,10 @@ class BaseObjectiveWrapper:
     ):
         """Save evaluation data to progress file."""
         # Use new progress manager if available
-        if self.progressManager:
+        if self._progressManager:
             saveEvalToProgressManager(
-                self.progressManager,
-                evaluationNumber=self.study.evalCounter,
+                self._progressManager,
+                evaluationNumber=self._study._evalCounter,
                 parameterValues=paramValues,
                 elapsedTime=elapsedTime,
                 objectiveValue=objectiveValue,
@@ -115,7 +115,7 @@ class BaseObjectiveWrapper:
             # Fallback to legacy system
             saveEvalToProgressFile(
                 [*paramValues, elapsedTime, objectiveValue],
-                os.path.join(self.study.runDir, filename + ".txt"),
+                os.path.join(self._study.runDir, filename + ".txt"),
             )
 
     def _evaluateObjective(
@@ -133,20 +133,20 @@ class BaseObjectiveWrapper:
         startTime = time.time()
         simulationStartTime = startTime
 
-        if self.isMultiDomainProcess:
+        if self._isMultiDomainProcess:
             # Multi-domain processing
             initialDomains = {}
             processedDomains = {}  # Keep references to vps.Domains that get processed
 
-            if len(self.study.project.initialDomains) > 0:
+            if len(self._study.project.initialDomains) > 0:
                 # Use multiple named initial domains
-                for name, domain in self.study.project.initialDomains.items():
+                for name, domain in self._study.project.initialDomains.items():
                     domainCopy = Domain(domain)
                     initialDomains[name] = domainCopy
                     processedDomains[name] = domainCopy  # Same object, will be modified by process
-            elif self.study.project.initialDomain is not None:
+            elif self._study.project.initialDomain is not None:
                 # Fall back to single domain as "default"
-                domainCopy = Domain(self.study.project.initialDomain)
+                domainCopy = Domain(self._study.project.initialDomain)
                 initialDomains["default"] = domainCopy
                 processedDomains["default"] = domainCopy  # Same object, will be modified by process
             else:
@@ -155,7 +155,7 @@ class BaseObjectiveWrapper:
                 )
 
             # Apply process sequence to all domains (modifies vps.Domains in-place)
-            processResult = self.study.processSequence(initialDomains, paramDict)
+            processResult = self._study.processSequence(initialDomains, paramDict)
 
             # Handle optional timing dict return
             postProcessingTime = 0.0
@@ -171,21 +171,21 @@ class BaseObjectiveWrapper:
                 )
         else:
             # Single-domain processing (backward compatibility)
-            if self.initialDomainName is not None:
+            if self._initialDomainName is not None:
                 # Use named initial domain
-                if self.initialDomainName not in self.study.project.initialDomains:
+                if self._initialDomainName not in self._study.project.initialDomains:
                     raise ValueError(
-                        f"Initial domain '{self.initialDomainName}' not found in project"
+                        f"Initial domain '{self._initialDomainName}' not found in project"
                     )
                 domainCopy = Domain(
-                    self.study.project.initialDomains[self.initialDomainName]
+                    self._study.project.initialDomains[self._initialDomainName]
                 )
             else:
                 # Use default single initial domain for backward compatibility
-                domainCopy = Domain(self.study.project.initialDomain)
+                domainCopy = Domain(self._study.project.initialDomain)
 
             # Apply process sequence
-            processResult = self.study.processSequence(domainCopy, paramDict)
+            processResult = self._study.processSequence(domainCopy, paramDict)
 
             # Handle optional timing dict return
             postProcessingTime = 0.0
@@ -199,136 +199,136 @@ class BaseObjectiveWrapper:
         simulationTime = time.time() - simulationStartTime - postProcessingTime
         distanceMetricStartTime = time.time()
 
-        self.study.evalCounter += 1
+        self._study._evalCounter += 1
 
         # Evaluate primary metric and additional metrics with individual timing
         additionalMetricValues = {}
         additionalMetricTimes = {}
 
-        if self.isMultiDomainProcess:
+        if self._isMultiDomainProcess:
             # Multi-domain distance calculation
-            if len(self.study.project.targetLevelSets) == 0:
+            if len(self._study.project.targetLevelSets) == 0:
                 raise ValueError(
                     "No target level sets available for multi-domain comparison"
                 )
 
             # Calculate primary objective value
             primaryMetricStartTime = time.time()
-            objectiveValue = self.distanceMetric(
+            objectiveValue = self._distanceMetric(
                 resultDomains,
-                self.study.project.targetLevelSets,
+                self._study.project.targetLevelSets,
                 False,  # Don't save visualization yet
                 os.path.join(
-                    self.study.progressDir,
-                    f"{self.study.name}-{self.study.evalCounter}",
+                    self._study._progressDir,
+                    f"{self._study.name}-{self._study._evalCounter}",
                 ),
             )
             primaryMetricTime = time.time() - primaryMetricStartTime
 
             # Store primary metric value and time for tracking
-            primaryMetricName = getattr(self.study, "primaryDistanceMetric", None) or self.study.distanceMetric
+            primaryMetricName = getattr(self._study, "_primaryDistanceMetric", None) or self._study.distanceMetric
             additionalMetricValues[primaryMetricName] = objectiveValue
             additionalMetricTimes[primaryMetricName] = primaryMetricTime
 
             # Calculate additional metrics with individual timing
-            for metricName, metricFunc in self.additionalDistanceMetrics.items():
+            for metricName, metricFunc in self._additionalDistanceMetrics.items():
                 additionalMetricStartTime = time.time()
                 additionalMetricValues[metricName] = metricFunc(
                     resultDomains,
-                    self.study.project.targetLevelSets,
+                    self._study.project.targetLevelSets,
                     False,  # Don't save visualization
                     os.path.join(
-                        self.study.progressDir,
-                        f"{self.study.name}-{self.study.evalCounter}",
+                        self._study._progressDir,
+                        f"{self._study.name}-{self._study._evalCounter}",
                     ),
                 )
                 additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
 
             # Only save visualization if saveAll is True or if current evaluation is better than current best
             if saveVisualization and (
-                saveAll or objectiveValue <= self.study.bestScore
+                saveAll or objectiveValue <= self._study.bestScore
             ):
                 # Save primary metric visualization
-                self.distanceMetric(
+                self._distanceMetric(
                     resultDomains,
-                    self.study.project.targetLevelSets,
+                    self._study.project.targetLevelSets,
                     True,  # Save visualization
                     os.path.join(
-                        self.study.progressDir,
-                        f"{self.study.name}-{self.study.evalCounter}",
+                        self._study._progressDir,
+                        f"{self._study.name}-{self._study._evalCounter}",
                     ),
                 )
 
                 # Save additional metric visualizations if requested
-                if getattr(self.study, "saveAdditionalMetricVisualizations", False):
-                    for metricName, metricFunc in self.additionalDistanceMetrics.items():
+                if getattr(self._study, "saveAdditionalMetricVisualizations", False):
+                    for metricName, metricFunc in self._additionalDistanceMetrics.items():
                         metricFunc(
                             resultDomains,
-                            self.study.project.targetLevelSets,
+                            self._study.project.targetLevelSets,
                             True,  # Save visualization
                             os.path.join(
-                                self.study.progressDir,
-                                f"{self.study.name}-{self.study.evalCounter}",
+                                self._study._progressDir,
+                                f"{self._study.name}-{self._study._evalCounter}",
                             ),
                         )
         else:
             # Single-domain distance calculation (backward compatibility)
             primaryMetricStartTime = time.time()
-            objectiveValue = self.distanceMetric(
+            objectiveValue = self._distanceMetric(
                 resultDomain,
-                self.study.project.targetLevelSet,
+                self._study.project.targetLevelSet,
                 False,  # Don't save visualization yet
                 os.path.join(
-                    self.study.progressDir,
-                    f"{self.study.name}-{self.study.evalCounter}",
+                    self._study._progressDir,
+                    f"{self._study.name}-{self._study._evalCounter}",
                 ),
             )
             primaryMetricTime = time.time() - primaryMetricStartTime
 
             # Store primary metric value and time for tracking
-            primaryMetricName = getattr(self.study, "primaryDistanceMetric", None) or self.study.distanceMetric
+            primaryMetricName = getattr(self._study, "_primaryDistanceMetric", None) or self._study.distanceMetric
             additionalMetricValues[primaryMetricName] = objectiveValue
             additionalMetricTimes[primaryMetricName] = primaryMetricTime
 
             # Calculate additional metrics with individual timing
-            for metricName, metricFunc in self.additionalDistanceMetrics.items():
+            for metricName, metricFunc in self._additionalDistanceMetrics.items():
                 additionalMetricStartTime = time.time()
                 additionalMetricValues[metricName] = metricFunc(
                     resultDomain,
-                    self.study.project.targetLevelSet,
+                    self._study.project.targetLevelSet,
                     False,  # Don't save visualization
                     os.path.join(
-                        self.study.progressDir,
-                        f"{self.study.name}-{self.study.evalCounter}",
+                        self._study._progressDir,
+                        f"{self._study.name}-{self._study._evalCounter}",
                     ),
                 )
                 additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
 
             # Only save visualization if saveAll is True or if current evaluation is better than current best
             if saveVisualization and (
-                saveAll or objectiveValue <= self.study.bestScore
+                saveAll or objectiveValue <= self._study.bestScore
             ):
                 # Save primary metric visualization
-                self.distanceMetric(
+                self._distanceMetric(
                     resultDomain,
-                    self.study.project.targetLevelSet,
+                    self._study.project.targetLevelSet,
                     True,  # Save visualization
                     os.path.join(
-                        self.study.progressDir,
-                        f"{self.study.name}-{self.study.evalCounter}",
+                        self._study._progressDir,
+                        f"{self._study.name}-{self._study._evalCounter}",
                     ),
                 )
 
                 # Save additional metric visualizations if requested
-                if getattr(self.study, "saveAdditionalMetricVisualizations", False):
-                    for metricName, metricFunc in self.additionalDistanceMetrics.items():
+                if getattr(self._study, "saveAdditionalMetricVisualizations", False):
+                    for metricName, metricFunc in self._additionalDistanceMetrics.items():
                         metricFunc(
                             resultDomain,
-                            self.study.project.targetLevelSet,
+                            self._study.project.targetLevelSet,
                             True,  # Save visualization
                             os.path.join(
-                                self.study.progressDir,
-                                f"{self.study.name}-{self.study.evalCounter}",
+                                self._study._progressDir,
+                                f"{self._study.name}-{self._study._evalCounter}",
                             ),
                         )
 
@@ -338,33 +338,33 @@ class BaseObjectiveWrapper:
 
         # Calculate total elapsed time since optimization started
         totalElapsedTime = 0.0
-        if hasattr(self.study, 'optimizationStartTime') and self.study.optimizationStartTime is not None:
-            totalElapsedTime = time.time() - self.study.optimizationStartTime
+        if hasattr(self._study, 'optimizationStartTime') and self._study._optimizationStartTime is not None:
+            totalElapsedTime = time.time() - self._study._optimizationStartTime
 
-        newBest = objectiveValue <= self.study.bestScore
+        newBest = objectiveValue <= self._study.bestScore
 
         if newBest:
-            self.study.bestScore = objectiveValue
-            self.study.bestParameters = paramDict.copy()
-            self.study.bestEvaluationNumber = self.study.evalCounter
+            self._study.bestScore = objectiveValue
+            self._study.bestParameters = paramDict.copy()
+            self._study.bestEvaluationNumber = self._study._evalCounter
 
         # Early stopping tracking
         if newBest:
-            self.study.evaluationsSinceImprovement = 0
+            self._study._evaluationsSinceImprovement = 0
         else:
-            self.study.evaluationsSinceImprovement += 1
+            self._study._evaluationsSinceImprovement += 1
 
         # Save ALL evaluations to progress manager (both best and regular)
-        if self.progressManager:
+        if self._progressManager:
             # Order parameters according to metadata parameterNames
             if (
-                self.progressManager.metadata
-                and hasattr(self.progressManager.metadata, "parameterNames")
-                and self.progressManager.metadata.parameterNames
+                self._progressManager.metadata
+                and hasattr(self._progressManager.metadata, "parameterNames")
+                and self._progressManager.metadata.parameterNames
             ):
                 orderedParams = [
                     paramDict.get(name, 0.0)
-                    for name in self.progressManager.metadata.parameterNames
+                    for name in self._progressManager.metadata.parameterNames
                 ]
             else:
                 orderedParams = list(paramDict.values())
@@ -397,34 +397,34 @@ class BaseObjectiveWrapper:
                     totalElapsedTime=totalElapsedTime,
                 )
 
-        if newBest or self.study.saveAllEvaluations:
+        if newBest or self._study.saveAllEvaluations:
             # Generate parameter string for filename (only for LocalSensitivityStudy)
             paramString = self._generateParameterString(paramDict, variableParamNames)
             paramSuffix = f"-{paramString}" if paramString else ""
 
-            if self.isMultiDomainProcess:
+            if self._isMultiDomainProcess:
                 # Save all processed vps.Domains with corresponding names
                 for domainName, processedDomain in processedDomains.items():
                     filePath = os.path.join(
-                        self.study.progressDir,
-                        f"{self.study.name}-{self.study.evalCounter:03d}{paramSuffix}-{domainName}.vtp",
+                        self._study._progressDir,
+                        f"{self._study.name}-{self._study._evalCounter:03d}{paramSuffix}-{domainName}.vtp",
                     )
                     # Save the processed vps.Domain (not the returned level set)
                     processedDomain.saveSurfaceMesh(filePath, True)
             else:
                 # Single domain save (backward compatibility)
                 filePath = os.path.join(
-                    self.study.progressDir,
-                    f"{self.study.name}-{self.study.evalCounter:03d}{paramSuffix}.vtp",
+                    self._study._progressDir,
+                    f"{self._study.name}-{self._study._evalCounter:03d}{paramSuffix}.vtp",
                 )
                 # Save the processed vps.Domain (not the returned level set)
                 domainCopy.saveSurfaceMesh(filePath, True)
 
         # Check early stopping criterion (after all data is saved)
         if self._shouldTriggerEarlyStopping():
-            self.study.earlyStoppedAt = self.study.evalCounter
+            self._study.earlyStoppedAt = self._study._evalCounter
             from .fitExceptions import EarlyStoppingException
-            raise EarlyStoppingException(self.study.evalCounter, self.study.bestScore)
+            raise EarlyStoppingException(self._study._evalCounter, self._study.bestScore)
 
         return objectiveValue, elapsedTime, simulationTime, distanceMetricTime
 
@@ -451,11 +451,11 @@ class BaseObjectiveWrapper:
 
     def _shouldTriggerEarlyStopping(self) -> bool:
         """Check if early stopping criterion is met."""
-        if self.study.earlyStoppingPatience is None:
+        if self._study.earlyStoppingPatience is None:
             return False
-        if self.study.evalCounter < self.study.earlyStoppingMinEvaluations:
+        if self._study._evalCounter < self._study.earlyStoppingMinEvaluations:
             return False
-        return self.study.evaluationsSinceImprovement >= self.study.earlyStoppingPatience
+        return self._study._evaluationsSinceImprovement >= self._study.earlyStoppingPatience
 
     def _evaluateObjectiveBatch(
         self,
@@ -489,13 +489,13 @@ class BaseObjectiveWrapper:
     def _detectMultiDomainProcess(self) -> bool:
         """Detect if the process sequence function supports multi-domain processing."""
         if (
-            not hasattr(self.study, "processSequence")
-            or self.study.processSequence is None
+            not hasattr(self._study, "processSequence")
+            or self._study.processSequence is None
         ):
             return False
 
         try:
-            sig = inspect.signature(self.study.processSequence)
+            sig = inspect.signature(self._study.processSequence)
             params = list(sig.parameters.values())
 
             if len(params) >= 1:
@@ -515,21 +515,21 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
     def __call__(self, *x):
         """Wrapper compatible with dlib's find_min_global."""
         # Create parameter dictionary with fixed parameters
-        paramDict = self.study.fixedParameters.copy()
+        paramDict = self._study.fixedParameters.copy()
 
         # Add variable parameters - x contains individual floats
-        for value, (name, _) in zip(x, self.study.variableParameters.items()):
+        for value, (name, _) in zip(x, self._study.variableParameters.items()):
             paramDict[name] = value
 
         # Evaluate process
         objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
             paramDict,
-            self.study.saveVisualization,
-            saveAll=self.study.saveAllEvaluations,
+            self._study.saveVisualization,
+            saveAll=self._study.saveAllEvaluations,
         )
 
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
-        if not self.progressManager:
+        if not self._progressManager:
             # Only use legacy system if no progress manager
             self._saveEvaluationData(
                 list(paramDict.values()),
@@ -562,21 +562,21 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
             paramValues = [x]
 
         # Create parameter dictionary with fixed parameters
-        paramDict = self.study.fixedParameters.copy()
+        paramDict = self._study.fixedParameters.copy()
 
         # Add variable parameters - map array values to parameter names
-        for value, (name, _) in zip(paramValues, self.study.variableParameters.items()):
+        for value, (name, _) in zip(paramValues, self._study.variableParameters.items()):
             paramDict[name] = value
 
         # Evaluate process
         objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
             paramDict,
-            self.study.saveVisualization,
-            saveAll=self.study.saveAllEvaluations,
+            self._study.saveVisualization,
+            saveAll=self._study.saveAllEvaluations,
         )
 
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
-        if not self.progressManager:
+        if not self._progressManager:
             # Only use legacy system if no progress manager
             self._saveEvaluationData(
                 list(paramDict.values()),
@@ -597,7 +597,7 @@ class AxObjectiveWrapper(BaseObjectiveWrapper):
     def __init__(self, study, initialDomainName: str = None):
         super().__init__(study, initialDomainName)
         # Track trial index for Ax integration
-        self.currentTrialIndex = None
+        self._currentTrialIndex = None
 
     def evaluateTrial(self, parameterization: dict[str, float]) -> dict[str, tuple[float, float]]:
         """
@@ -611,20 +611,20 @@ class AxObjectiveWrapper(BaseObjectiveWrapper):
             For deterministic simulations, sem is always 0.0
         """
         # Create parameter dictionary with fixed parameters
-        paramDict = self.study.fixedParameters.copy()
+        paramDict = self._study.fixedParameters.copy()
         paramDict.update(parameterization)
 
         # Evaluate process
         objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
             paramDict,
-            self.study.saveVisualization,
-            saveAll=self.study.saveAllEvaluations,
+            self._study.saveVisualization,
+            saveAll=self._study.saveAllEvaluations,
         )
 
         # Ax expects metrics as dict[metric_name, (mean, sem)]
         # For deterministic simulations, SEM is 0
         # Return metric with its plain name (Ax handles minimization via objective config)
-        primaryMetricName = getattr(self.study, "primaryDistanceMetric", None) or self.study.distanceMetric
+        primaryMetricName = getattr(self._study, "_primaryDistanceMetric", None) or self._study.distanceMetric
         return {primaryMetricName: (objectiveValue, 0.0)}
 
     def evaluateBatch(self, parameterizationList: list[dict[str, float]]) -> list[dict[str, tuple[float, float]]]:

@@ -17,15 +17,15 @@ class LocalSensitivityStudy(Study):
         super().__init__(name, project, "locSensStudies")
         self.nEval = None
         # Override the progress directory name
-        self.progressDir = os.path.join(self.runDir, "evaluations")
+        self._progressDir = os.path.join(self.runDir, "evaluations")
 
         # Support for exact value evaluation mode
         self.variableParameterValues = {}  # Dict[str, List[float]] - exact values
         self.useExactValues = False  # Flag to indicate evaluation mode
 
         # Progress tracking
-        self.progressManager = None  # Will be initialized in apply()
-        self.storageFormat = "csv"  # Default storage format
+        self._progressManager = None  # Will be initialized in apply()
+        self._storageFormat = "csv"  # Default storage format
         self.notes = None  # Optional notes for the sensitivity study
 
     def setParameterSensitivityRanges(
@@ -153,7 +153,7 @@ class LocalSensitivityStudy(Study):
 
     def setName(self, name: str):
         """Set the name for the sensitivity study (only allowed before apply() is called)"""
-        if self.applied:
+        if self._applied:
             raise RuntimeError("Cannot change name after study has been applied")
 
         # Generate new directory paths using parent class logic
@@ -162,7 +162,7 @@ class LocalSensitivityStudy(Study):
         # Update name and paths (directories will be created when apply() is called)
         self.name = newName
         self.runDir = newRunDir
-        self.progressDir = os.path.join(self.runDir, "evaluations")
+        self._progressDir = os.path.join(self.runDir, "evaluations")
 
         return self
 
@@ -291,9 +291,9 @@ class LocalSensitivityStudy(Study):
             }
 
             # Save evaluation to progress manager
-            if self.progressManager:
+            if self._progressManager:
                 saveEvalToProgressManager(
-                    self.progressManager,
+                    self._progressManager,
                     evalNumber,
                     list(paramSet.values()),
                     execTime,
@@ -312,9 +312,9 @@ class LocalSensitivityStudy(Study):
             }
 
             # Save failed evaluation to progress manager
-            if self.progressManager:
+            if self._progressManager:
                 saveEvalToProgressManager(
-                    self.progressManager,
+                    self._progressManager,
                     evalNumber,
                     list(paramSet.values()),
                     time.time() - startTime,
@@ -366,17 +366,17 @@ class LocalSensitivityStudy(Study):
         saveVisualization: bool = True,
     ):
         """Apply the sensitivity study."""
-        if not self.applied:
+        if not self._applied:
             self.validate()
             self.saveVisualization = saveVisualization
             self.saveAllEvaluations = saveAllEvaluations
 
             # Create directories (similar to fitOptimization.py)
             os.makedirs(self.runDir, exist_ok=True)
-            os.makedirs(self.progressDir, exist_ok=True)
+            os.makedirs(self._progressDir, exist_ok=True)
 
-            self.applied = True
-            self.evalCounter = 0
+            self._applied = True
+            self._evalCounter = 0
 
             # Initialize progress manager with metadata
             if hasattr(self, "parameterNames") and self.parameterNames:
@@ -397,10 +397,10 @@ class LocalSensitivityStudy(Study):
                 )
 
                 progressFilepath = os.path.join(self.runDir, "progressAll")
-                self.progressManager = createProgressManager(
-                    progressFilepath, self.storageFormat, metadata
+                self._progressManager = createProgressManager(
+                    progressFilepath, self._storageFormat, metadata
                 )
-                self.progressManager.saveMetadata()
+                self._progressManager.saveMetadata()
 
             # Save notes to file if provided
             if self.notes is not None:

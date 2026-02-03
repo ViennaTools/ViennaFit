@@ -33,24 +33,24 @@ class CustomEvaluator:
             project: ViennaFit project instance
         """
         self.project = project
-        self.optimizationResultsPath = None
-        self.processSequencePath = None
-        self.processSequence = None
-        self.optimalParameters = {}
-        self.fixedParameters = {}
+        self._optimizationResultsPath = None
+        self._processSequencePath = None
+        self._processSequence = None
+        self._optimalParameters = {}
+        self._fixedParameters = {}
         self.variableValues = (
             {}
         )  # Dict[str, List[float]] - parameter name to list of values
         self.pairedVariableValues = None  # List[Dict[str, float]] - specific parameter combinations (not grid)
         self.distanceMetric = None
-        self.distanceMetricFunction = None
+        self._distanceMetricFunction = None
         self.additionalDistanceMetrics = []  # List of additional metric names
-        self.additionalDistanceMetricFunctions = {}  # Dict of metric name -> callable
-        self.isMultiDomainProcess = False
-        self.gridResults = []  # List of evaluation results
-        self.evaluationName = None
-        self.savedProcessSequencePath = None  # Path to saved process sequence in customEvaluations
-        self.isCompleteRun = None  # True if loaded from complete run, False if incomplete, None if not loaded
+        self._additionalDistanceMetricFunctions = {}  # Dict of metric name -> callable
+        self._isMultiDomainProcess = False
+        self._gridResults = []  # List of evaluation results
+        self._evaluationName = None
+        self._savedProcessSequencePath = None  # Path to saved process sequence in customEvaluations
+        self._isCompleteRun = None  # True if loaded from complete run, False if incomplete, None if not loaded
 
         # Check project readiness
         if not project.isReady:
@@ -120,7 +120,7 @@ class CustomEvaluator:
         """Validate multi-domain setup and return list of issues."""
         issues = []
 
-        if self.isMultiDomainProcess:
+        if self._isMultiDomainProcess:
             # Check for multi-domain requirements
             if len(self.project.initialDomains) == 0:
                 issues.append("Multi-domain process requires multiple initial domains")
@@ -155,7 +155,7 @@ class CustomEvaluator:
 
     def isReadyForEvaluation(self) -> bool:
         """Check if evaluator is ready for grid evaluation."""
-        if not self.processSequence:
+        if not self._processSequence:
             return False
 
         issues = self.validateMultiDomainSetup()
@@ -193,13 +193,13 @@ class CustomEvaluator:
         if isComplete:
             # === COMPLETE RUN: Load from final-results.json ===
             results = loadOptimumFromResultsFile(resultsFile)
-            self.optimizationResultsPath = resultsFile
-            self.optimalParameters = deepcopy(results["bestParameters"])
-            self.isCompleteRun = True
+            self._optimizationResultsPath = resultsFile
+            self._optimalParameters = deepcopy(results["bestParameters"])
+            self._isCompleteRun = True
 
             # Store fixed parameters if available
             if "fixedParameters" in results:
-                self.fixedParameters = deepcopy(results["fixedParameters"])
+                self._fixedParameters = deepcopy(results["fixedParameters"])
 
             bestScore = results.get("bestScore", "Unknown")
             bestEvalNum = results.get("bestEvaluation#", "Unknown")
@@ -247,21 +247,21 @@ class CustomEvaluator:
                 and not col.endswith("_value")
                 and not col.endswith("_time")
             ]
-            self.optimalParameters = {col: float(lastRow[col]) for col in paramCols}
+            self._optimalParameters = {col: float(lastRow[col]) for col in paramCols}
 
             # Load fixed parameters from metadata
             try:
                 metadata = self._loadMetadataFile(runDir, runName)
-                self.fixedParameters = deepcopy(
+                self._fixedParameters = deepcopy(
                     metadata.get("fixedParameters", {})
                 )
             except FileNotFoundError as e:
                 print(f"  Warning: Could not load metadata file: {e}")
                 print("  Proceeding with no fixed parameters")
-                self.fixedParameters = {}
+                self._fixedParameters = {}
 
-            self.optimizationResultsPath = csvPath
-            self.isCompleteRun = False
+            self._optimizationResultsPath = csvPath
+            self._isCompleteRun = False
 
         # Load process sequence file unless skipped
         if not skipProcessSequence:
@@ -271,29 +271,29 @@ class CustomEvaluator:
                     f"Process sequence file not found: {processSequenceFile}"
                 )
 
-            self.processSequencePath = processSequenceFile
+            self._processSequencePath = processSequenceFile
             self._loadProcessSequence(processSequenceFile)
 
             # Detect if process sequence supports multi-domain processing
-            self.isMultiDomainProcess = self._detectMultiDomainProcess()
+            self._isMultiDomainProcess = self._detectMultiDomainProcess()
 
         # Print summary
-        runStatus = "COMPLETE" if self.isCompleteRun else "INCOMPLETE"
+        runStatus = "COMPLETE" if self._isCompleteRun else "INCOMPLETE"
         print(f"Loaded optimization run '{runName}' ({runStatus}):")
 
-        if not self.isCompleteRun:
+        if not self._isCompleteRun:
             print(
                 f"  Run was stopped early at evaluation #{bestEvalNum} - parameters may not be fully optimized"
             )
 
         print(f"  Best score: {bestScore}")
         print(
-            f"  Parameters: {len(self.optimalParameters)} variable, {len(self.fixedParameters)} fixed"
+            f"  Parameters: {len(self._optimalParameters)} variable, {len(self._fixedParameters)} fixed"
         )
         if not skipProcessSequence:
-            print(f"  Process sequence: {self.processSequence.__name__}")
+            print(f"  Process sequence: {self._processSequence.__name__}")
             print(
-                f"  Multi-domain support: {'Yes' if self.isMultiDomainProcess else 'No'}"
+                f"  Multi-domain support: {'Yes' if self._isMultiDomainProcess else 'No'}"
             )
         else:
             print(
@@ -344,7 +344,7 @@ class CustomEvaluator:
 
         Args:
             runNameOrPath: Either a run name (e.g., "run1_2") or full path to progressBest.csv
-            updateOptimalParameters: If True, update self.optimalParameters with loaded values
+            updateOptimalParameters: If True, update self._optimalParameters with loaded values
 
         Returns:
             Dictionary mapping parameter names to their best values
@@ -415,7 +415,7 @@ class CustomEvaluator:
 
         # Optionally update the evaluator's optimal parameters
         if updateOptimalParameters:
-            self.optimalParameters = deepcopy(bestParams)
+            self._optimalParameters = deepcopy(bestParams)
             print(f"Loaded best parameters from: {os.path.basename(csvPath)}")
             print(f"  Objective value: {lastRow['objectiveValue']:.6f}")
             print(f"  Parameters: {len(bestParams)}")
@@ -438,15 +438,15 @@ class CustomEvaluator:
         if not os.path.exists(filePath):
             raise FileNotFoundError(f"Process sequence file not found: {filePath}")
 
-        self.processSequencePath = filePath
+        self._processSequencePath = filePath
         self._loadProcessSequence(filePath)
 
         # Detect if process sequence supports multi-domain processing
-        self.isMultiDomainProcess = self._detectMultiDomainProcess()
+        self._isMultiDomainProcess = self._detectMultiDomainProcess()
 
         print(f"Loaded process sequence from: {os.path.basename(filePath)}")
-        print(f"  Function: {self.processSequence.__name__}")
-        print(f"  Multi-domain support: {'Yes' if self.isMultiDomainProcess else 'No'}")
+        print(f"  Function: {self._processSequence.__name__}")
+        print(f"  Multi-domain support: {'Yes' if self._isMultiDomainProcess else 'No'}")
 
         return self
 
@@ -519,14 +519,14 @@ class CustomEvaluator:
             raise ValueError(f"Invalid process sequence signature: {str(e)}")
 
         # Set the process sequence
-        self.processSequence = processSequence
-        self.processSequencePath = None  # Mark as not loaded from file
+        self._processSequence = processSequence
+        self._processSequencePath = None  # Mark as not loaded from file
 
         # Detect if process sequence supports multi-domain processing
-        self.isMultiDomainProcess = self._detectMultiDomainProcess()
+        self._isMultiDomainProcess = self._detectMultiDomainProcess()
 
         print(f"Set process sequence: {processSequence.__name__}")
-        print(f"  Multi-domain support: {'Yes' if self.isMultiDomainProcess else 'No'}")
+        print(f"  Multi-domain support: {'Yes' if self._isMultiDomainProcess else 'No'}")
 
         return self
 
@@ -559,7 +559,7 @@ class CustomEvaluator:
 
                         if params[0].annotation in validDomainTypes:
                             if params[1].annotation == dict[str, float]:
-                                self.processSequence = item
+                                self._processSequence = item
                                 return
                 except ValueError:
                     continue
@@ -579,11 +579,11 @@ class CustomEvaluator:
         The "default" domain name is a special marker for legacy single-domain projects
         and should NOT trigger multi-domain mode.
         """
-        if self.processSequence is None:
+        if self._processSequence is None:
             return False
 
         try:
-            sig = inspect.signature(self.processSequence)
+            sig = inspect.signature(self._processSequence)
             params = list(sig.parameters.values())
 
             if len(params) >= 1:
@@ -654,9 +654,9 @@ class CustomEvaluator:
         self.distanceMetric = metric
         self.criticalDimensionRanges = criticalDimensionRanges
         # Create the distance metric function with appropriate multi-domain support
-        self.distanceMetricFunction = DistanceMetric.create(
+        self._distanceMetricFunction = DistanceMetric.create(
             metric,
-            multiDomain=self.isMultiDomainProcess,
+            multiDomain=self._isMultiDomainProcess,
             criticalDimensionRanges=criticalDimensionRanges,
         )
         return self
@@ -683,7 +683,7 @@ class CustomEvaluator:
             raise ValueError("metrics must be a list of metric names")
 
         self.additionalDistanceMetrics = []
-        self.additionalDistanceMetricFunctions = {}
+        self._additionalDistanceMetricFunctions = {}
 
         for metric in metrics:
             if metric not in DistanceMetric.AVAILABLE_METRICS:
@@ -701,9 +701,9 @@ class CustomEvaluator:
             self.additionalDistanceMetrics.append(metric)
 
             # Create metric function
-            self.additionalDistanceMetricFunctions[metric] = DistanceMetric.create(
+            self._additionalDistanceMetricFunctions[metric] = DistanceMetric.create(
                 metric,
-                multiDomain=self.isMultiDomainProcess,
+                multiDomain=self._isMultiDomainProcess,
                 criticalDimensionRanges=criticalDimensionRanges,
                 sparseFieldExpansionWidth=sparseFieldExpansionWidth,
             )
@@ -724,8 +724,8 @@ class CustomEvaluator:
             self: For method chaining
         """
         for paramName, valueList in variableValues.items():
-            if paramName not in self.optimalParameters:
-                if paramName in self.fixedParameters:
+            if paramName not in self._optimalParameters:
+                if paramName in self._fixedParameters:
                     print(f"Warning: '{paramName}' is a fixed parameter, cannot vary")
                     continue
                 else:
@@ -786,7 +786,7 @@ class CustomEvaluator:
                 )
 
         # Validate that all parameters exist in optimal or fixed parameters
-        allParams = {**self.fixedParameters, **self.optimalParameters}
+        allParams = {**self._fixedParameters, **self._optimalParameters}
         for paramName in firstKeys:
             if paramName not in allParams:
                 print(
@@ -850,8 +850,8 @@ class CustomEvaluator:
         Returns:
             Dictionary of optimal parameter values (variable + fixed)
         """
-        allParams = deepcopy(self.fixedParameters)
-        allParams.update(self.optimalParameters)
+        allParams = deepcopy(self._fixedParameters)
+        allParams.update(self._optimalParameters)
         return allParams
 
     def apply(
@@ -873,7 +873,7 @@ class CustomEvaluator:
         Returns:
             List of evaluation results for each parameter combination
         """
-        if not self.processSequence:
+        if not self._processSequence:
             raise ValueError(
                 "No process sequence loaded. Call loadOptimizationRun() first."
             )
@@ -885,11 +885,11 @@ class CustomEvaluator:
             self.setDistanceMetric("CA")
 
         # Ensure distance metric function is created if not already done
-        if not self.distanceMetricFunction:
+        if not self._distanceMetricFunction:
             criticalDimensionRanges = getattr(self, "criticalDimensionRanges", None)
-            self.distanceMetricFunction = DistanceMetric.create(
+            self._distanceMetricFunction = DistanceMetric.create(
                 self.distanceMetric,
-                multiDomain=self.isMultiDomainProcess,
+                multiDomain=self._isMultiDomainProcess,
                 criticalDimensionRanges=criticalDimensionRanges,
             )
 
@@ -905,33 +905,33 @@ class CustomEvaluator:
 
         # Generate unique evaluation name and directory (similar to optimization runs)
         finalName, outputDir = self._generateEvaluationDirectory(evaluationName)
-        self.evaluationName = finalName
-        self.gridResults = []
+        self._evaluationName = finalName
+        self._gridResults = []
 
         # Create output directory
         os.makedirs(outputDir, exist_ok=False)
 
         # Save the process sequence to the output directory
-        self.savedProcessSequencePath = None
+        self._savedProcessSequencePath = None
         processSequenceDestPath = os.path.join(
             outputDir, f"{finalName}-processSequence.py"
         )
 
         try:
-            if self.processSequencePath and os.path.exists(self.processSequencePath):
+            if self._processSequencePath and os.path.exists(self._processSequencePath):
                 # Copy process sequence file from original location
-                shutil.copy2(self.processSequencePath, processSequenceDestPath)
-                self.savedProcessSequencePath = processSequenceDestPath
+                shutil.copy2(self._processSequencePath, processSequenceDestPath)
+                self._savedProcessSequencePath = processSequenceDestPath
                 print(
                     f"Saved process sequence to: {os.path.basename(processSequenceDestPath)}"
                 )
-            elif self.processSequence:
+            elif self._processSequence:
                 # Process sequence was set directly as a callable, extract source
                 try:
-                    processSequenceSource = inspect.getsource(self.processSequence)
+                    processSequenceSource = inspect.getsource(self._processSequence)
                     with open(processSequenceDestPath, "w") as f:
                         f.write(processSequenceSource)
-                    self.savedProcessSequencePath = processSequenceDestPath
+                    self._savedProcessSequencePath = processSequenceDestPath
                     print(
                         f"Saved process sequence source to: {os.path.basename(processSequenceDestPath)}"
                     )
@@ -944,7 +944,7 @@ class CustomEvaluator:
                         f.write(
                             f"Warning: Could not extract process sequence source code.\n"
                         )
-                        f.write(f"Function name: {self.processSequence.__name__}\n")
+                        f.write(f"Function name: {self._processSequence.__name__}\n")
                         f.write(f"Error: {str(e)}\n\n")
                         f.write(
                             "The process sequence was set programmatically and its source "
@@ -979,9 +979,9 @@ class CustomEvaluator:
             )
 
         print(
-            f"Multi-domain mode: {'Enabled' if self.isMultiDomainProcess else 'Disabled'}"
+            f"Multi-domain mode: {'Enabled' if self._isMultiDomainProcess else 'Disabled'}"
         )
-        if self.isMultiDomainProcess:
+        if self._isMultiDomainProcess:
             print(
                 f"Available initial domains: {list(self.project.initialDomains.keys())}"
             )
@@ -989,12 +989,12 @@ class CustomEvaluator:
                 f"Available target domains: {list(self.project.targetLevelSets.keys())}"
             )
 
-        distanceFunction = self.distanceMetricFunction
+        distanceFunction = self._distanceMetricFunction
 
         for i, combination in enumerate(combinations, 1):
             # Create parameter set for this combination
-            evalParams = deepcopy(self.fixedParameters)
-            evalParams.update(self.optimalParameters)  # Start with optimal values
+            evalParams = deepcopy(self._fixedParameters)
+            evalParams.update(self._optimalParameters)  # Start with optimal values
 
             # Override with current combination values
             for paramName, value in zip(paramNames, combination):
@@ -1003,7 +1003,7 @@ class CustomEvaluator:
             print(f"\nEvaluation {i}/{len(combinations)}:")
             print("  Variable parameters:")
             for paramName, value in zip(paramNames, combination):
-                optimal = self.optimalParameters[paramName]
+                optimal = self._optimalParameters[paramName]
                 print(f"    {paramName}: {value:.6f} (optimal: {optimal:.6f})")
 
             # Execute process sequence
@@ -1016,7 +1016,7 @@ class CustomEvaluator:
                 if saveVisualization:
                     writePath = os.path.join(outputDir, outputName)
 
-                if self.isMultiDomainProcess:
+                if self._isMultiDomainProcess:
                     # Multi-domain processing
                     initialDomains = {}
 
@@ -1037,7 +1037,7 @@ class CustomEvaluator:
                             initialDomains[name] = domainCopy
 
                     # Run process sequence with all domains
-                    resultDomains = self.processSequence(initialDomains, evalParams)
+                    resultDomains = self._processSequence(initialDomains, evalParams)
 
                     if not isinstance(resultDomains, dict):
                         raise ValueError(
@@ -1071,7 +1071,7 @@ class CustomEvaluator:
                     # Calculate additional metrics
                     additionalMetricValues = {}
                     additionalMetricTimes = {}
-                    for metricName, metricFunc in self.additionalDistanceMetricFunctions.items():
+                    for metricName, metricFunc in self._additionalDistanceMetricFunctions.items():
                         additionalMetricStartTime = time.time()
                         additionalMetricValues[metricName] = metricFunc(
                             resultLevelSets,
@@ -1097,7 +1097,7 @@ class CustomEvaluator:
                         domainCopy = vps.Domain(self.project.initialDomain)
 
                     # Run process sequence with current parameters on the copy
-                    resultDomain = self.processSequence(domainCopy, evalParams)
+                    resultDomain = self._processSequence(domainCopy, evalParams)
 
                     # Save visualization if requested
                     resultPath = None
@@ -1122,7 +1122,7 @@ class CustomEvaluator:
                     # Calculate additional metrics
                     additionalMetricValues = {}
                     additionalMetricTimes = {}
-                    for metricName, metricFunc in self.additionalDistanceMetricFunctions.items():
+                    for metricName, metricFunc in self._additionalDistanceMetricFunctions.items():
                         additionalMetricStartTime = time.time()
                         additionalMetricValues[metricName] = metricFunc(
                             resultDomain,
@@ -1145,12 +1145,12 @@ class CustomEvaluator:
                     "additionalMetricValues": additionalMetricValues,
                     "additionalMetricTimes": additionalMetricTimes,
                     "resultPath": (
-                        resultPaths if self.isMultiDomainProcess else resultPath
+                        resultPaths if self._isMultiDomainProcess else resultPath
                     ),
-                    "multiDomain": self.isMultiDomainProcess,
+                    "multiDomain": self._isMultiDomainProcess,
                 }
 
-                self.gridResults.append(result)
+                self._gridResults.append(result)
 
                 print(f"  Objective value: {objectiveValue:.6f}")
                 print(f"  Execution time: {executionTime:.2f} seconds")
@@ -1169,17 +1169,17 @@ class CustomEvaluator:
                     "additionalMetricTimes": {},
                     "error": str(e),
                     "resultPath": None,
-                    "multiDomain": self.isMultiDomainProcess,
+                    "multiDomain": self._isMultiDomainProcess,
                 }
-                self.gridResults.append(result)
+                self._gridResults.append(result)
 
         # Save grid results
         self.saveGridReport(outputDir)
 
-        print(f"\nGrid evaluation completed: {len(self.gridResults)} evaluations")
+        print(f"\nGrid evaluation completed: {len(self._gridResults)} evaluations")
         print(f"Results saved to: {outputDir}")
 
-        return self.gridResults
+        return self._gridResults
 
     def getGridResults(self) -> List[Dict[str, Any]]:
         """
@@ -1188,7 +1188,7 @@ class CustomEvaluator:
         Returns:
             List of evaluation results
         """
-        return deepcopy(self.gridResults)
+        return deepcopy(self._gridResults)
 
     def getBestResult(self) -> Optional[Dict[str, Any]]:
         """
@@ -1197,11 +1197,11 @@ class CustomEvaluator:
         Returns:
             Dictionary with the best evaluation result, or None if no results
         """
-        if not self.gridResults:
+        if not self._gridResults:
             return None
 
         validResults = [
-            r for r in self.gridResults if r["objectiveValue"] != float("inf")
+            r for r in self._gridResults if r["objectiveValue"] != float("inf")
         ]
         if not validResults:
             return None
@@ -1218,9 +1218,9 @@ class CustomEvaluator:
         Returns:
             Path to the saved report file
         """
-        if outputDir is None and self.evaluationName:
+        if outputDir is None and self._evaluationName:
             outputDir = os.path.join(
-                self.project.projectPath, "customEvaluations", self.evaluationName
+                self.project.projectPath, "customEvaluations", self._evaluationName
             )
 
         if outputDir is None:
@@ -1231,41 +1231,41 @@ class CustomEvaluator:
         # Create comprehensive report
         bestResult = self.getBestResult()
         validResults = [
-            r for r in self.gridResults if r["objectiveValue"] != float("inf")
+            r for r in self._gridResults if r["objectiveValue"] != float("inf")
         ]
 
         report = {
             "metadata": {
-                "evaluationName": self.evaluationName,
+                "evaluationName": self._evaluationName,
                 "projectName": self.project.projectName,
                 "evaluationTime": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "optimizationRunSource": (
-                    os.path.basename(self.optimizationResultsPath)
-                    if self.optimizationResultsPath
+                    os.path.basename(self._optimizationResultsPath)
+                    if self._optimizationResultsPath
                     else None
                 ),
                 "processSequenceSource": (
-                    os.path.basename(self.processSequencePath)
-                    if self.processSequencePath
+                    os.path.basename(self._processSequencePath)
+                    if self._processSequencePath
                     else None
                 ),
                 "processSequenceSaved": (
-                    os.path.basename(self.savedProcessSequencePath)
-                    if self.savedProcessSequencePath
+                    os.path.basename(self._savedProcessSequencePath)
+                    if self._savedProcessSequencePath
                     else None
                 ),
-                "processSequenceSavedSuccessfully": self.savedProcessSequencePath is not None,
+                "processSequenceSavedSuccessfully": self._savedProcessSequencePath is not None,
                 "distanceMetric": self.distanceMetric,
                 "additionalDistanceMetrics": self.additionalDistanceMetrics,
-                "totalEvaluations": len(self.gridResults),
+                "totalEvaluations": len(self._gridResults),
                 "successfulEvaluations": len(validResults),
-                "failedEvaluations": len(self.gridResults) - len(validResults),
+                "failedEvaluations": len(self._gridResults) - len(validResults),
             },
             "configuration": {
-                "optimalParameters": self.optimalParameters,
-                "fixedParameters": self.fixedParameters,
+                "optimalParameters": self._optimalParameters,
+                "fixedParameters": self._fixedParameters,
                 "variableValues": self.variableValues,
-                "isMultiDomainProcess": self.isMultiDomainProcess,
+                "isMultiDomainProcess": self._isMultiDomainProcess,
                 "availableInitialDomains": self.getAvailableInitialDomains(),
                 "availableTargetDomains": self.getAvailableTargetDomains(),
             },
@@ -1296,7 +1296,7 @@ class CustomEvaluator:
                     ),
                 },
             },
-            "results": self.gridResults,
+            "results": self._gridResults,
         }
 
         # Save main report
@@ -1307,11 +1307,11 @@ class CustomEvaluator:
         # Save CSV summary for easy analysis
         csvPath = os.path.join(outputDir, "grid_results_summary.csv")
         with open(csvPath, "w") as f:
-            if self.gridResults:
+            if self._gridResults:
                 # Write header
                 # Extract parameter names from first result to handle both grid and paired values
-                if self.gridResults[0].get("parameters"):
-                    paramNames = sorted(self.gridResults[0]["parameters"].keys())
+                if self._gridResults[0].get("parameters"):
+                    paramNames = sorted(self._gridResults[0]["parameters"].keys())
                 else:
                     paramNames = []
                 headers = ["evaluationNumber"] + paramNames
@@ -1332,7 +1332,7 @@ class CustomEvaluator:
                 f.write(",".join(headers) + "\n")
 
                 # Write data rows
-                for result in self.gridResults:
+                for result in self._gridResults:
                     row = [str(result["evaluationNumber"])]
                     for paramName in paramNames:
                         row.append(str(result["parameters"].get(paramName, "")))

@@ -26,17 +26,17 @@ class Project:
 
         # Domain related attributes
         self.initialDomain = None
-        self.initialDomainPath = None
+        self._initialDomainPath = None
         self.targetLevelSet = None
-        self.targetLevelSetPath = None
+        self._targetLevelSetPath = None
         
         # Multi-domain support (dictionary-based)
         self.initialDomains = {}  # {name: domain}
-        self.initialDomainPaths = {}  # {name: path}
+        self._initialDomainPaths = {}  # {name: path}
         
         # Multi-target support (dictionary-based)
         self.targetLevelSets = {}  # {name: levelSet}
-        self.targetLevelSetPaths = {}  # {name: path}
+        self._targetLevelSetPaths = {}  # {name: path}
 
         # Set paths if name is provided
         if name is not None:
@@ -67,14 +67,14 @@ class Project:
             self.projectName = name
             self.projectPath = os.path.join(projectDir, name)
             self.projectAbsPath = os.path.abspath(self.projectPath)
-            self.projectInfoPath = os.path.join(
+            self._projectInfoPath = os.path.join(
                 self.projectAbsPath, f"{name}-info.json"
             )
             print(f"Project '{name}' will be created in '{self.projectAbsPath}'.")
         else:
             self.projectPath = None
             self.projectAbsPath = None
-            self.projectInfoPath = None
+            self._projectInfoPath = None
 
     def initialize(self):
         """Initialize the project with a standard directory structure."""
@@ -120,10 +120,10 @@ class Project:
         }
 
         # Save project information to JSON file
-        with open(self.projectInfoPath, "w") as f:
+        with open(self._projectInfoPath, "w") as f:
             json.dump(projectInfo, f, indent=4)
 
-        print(f"Project information saved to {self.projectInfoPath}")
+        print(f"Project information saved to {self._projectInfoPath}")
         return self
 
     def load(self, projectPath: str = "projectPath"):
@@ -145,31 +145,31 @@ class Project:
         self.projectName = projectInfo["projectName"]
         self.projectPath = projectInfo["projectPath"]
         self.projectAbsPath = os.path.abspath(self.projectPath)
-        self.projectInfoPath = projectInfoPath
+        self._projectInfoPath = projectInfoPath
         self.mode = projectInfo["mode"]
-        self.initialDomainPath = projectInfo["initialDomainPath"]
-        self.targetLevelSetPath = projectInfo["targetLevelSetPath"]
+        self._initialDomainPath = projectInfo["initialDomainPath"]
+        self._targetLevelSetPath = projectInfo["targetLevelSetPath"]
         
         # Load multi-domain paths (new format) with backward compatibility
         if "initialDomainPaths" in projectInfo:
-            self.initialDomainPaths = projectInfo["initialDomainPaths"]
+            self._initialDomainPaths = projectInfo["initialDomainPaths"]
         else:
             # Old format: create multi-domain structure from single domain
-            self.initialDomainPaths = {}
-            if self.initialDomainPath != "":
-                self.initialDomainPaths["default"] = self.initialDomainPath
+            self._initialDomainPaths = {}
+            if self._initialDomainPath != "":
+                self._initialDomainPaths["default"] = self._initialDomainPath
         
         # Load multi-target paths (new format) with backward compatibility
         if "targetLevelSetPaths" in projectInfo:
-            self.targetLevelSetPaths = projectInfo["targetLevelSetPaths"]
+            self._targetLevelSetPaths = projectInfo["targetLevelSetPaths"]
         else:
             # Old format: create multi-target structure from single target
-            self.targetLevelSetPaths = {}
-            if self.targetLevelSetPath != "":
-                self.targetLevelSetPaths["default"] = self.targetLevelSetPath
+            self._targetLevelSetPaths = {}
+            if self._targetLevelSetPath != "":
+                self._targetLevelSetPaths["default"] = self._targetLevelSetPath
 
         # Load single initial domain (backward compatibility)
-        if self.initialDomainPath == "":
+        if self._initialDomainPath == "":
             self.initialDomain = None
         else:
             self.initialDomain = psDomain()
@@ -185,7 +185,7 @@ class Project:
             ).apply()
 
         # Load single target (backward compatibility)
-        if self.targetLevelSetPath == "":
+        if self._targetLevelSetPath == "":
             self.targetLevelSet = None
         else:
             # Load the target level set
@@ -204,7 +204,7 @@ class Project:
 
         # Load all named targets (new multi-target support)
         self.targetLevelSets = {}
-        for targetName, targetPath in self.targetLevelSetPaths.items():
+        for targetName, targetPath in self._targetLevelSetPaths.items():
             if targetPath != "" and os.path.exists(targetPath):
                 dimension = 2  # ViennaLS target domains are always 2D
                 targetDomain = lsDomain(dimension)
@@ -217,7 +217,7 @@ class Project:
 
         # Load all named initial domains (new multi-domain support)
         self.initialDomains = {}
-        for domainName, domainPath in self.initialDomainPaths.items():
+        for domainName, domainPath in self._initialDomainPaths.items():
             if domainPath != "" and os.path.exists(domainPath):
                 domain = psDomain()
                 Reader(domain, domainPath).apply()
@@ -325,12 +325,12 @@ class Project:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
 
         # Store in both old and new format for compatibility
-        self.initialDomainPath = domainPath
-        self.initialDomainPaths[defaultDomainName] = domainPath
+        self._initialDomainPath = domainPath
+        self._initialDomainPaths[defaultDomainName] = domainPath
         
         # Update project info with both old and new format
         self.updateProjectInfo("initialDomainPath", domainPath)
-        self.updateProjectInfo("initialDomainPaths", self.initialDomainPaths)
+        self.updateProjectInfo("initialDomainPaths", self._initialDomainPaths)
         print(f"Initial domain and visualization meshes saved to {initialDomainDir}")
         return self
 
@@ -376,12 +376,12 @@ class Project:
         vls.VTKWriter(meshSurface, surfacePath).apply()
 
         # Store in both old and new format for compatibility
-        self.targetLevelSetPath = domainPath
-        self.targetLevelSetPaths[defaultTargetName] = domainPath
+        self._targetLevelSetPath = domainPath
+        self._targetLevelSetPaths[defaultTargetName] = domainPath
         
         # Update project info with both old and new format
         self.updateProjectInfo("targetLevelSetPath", domainPath)
-        self.updateProjectInfo("targetLevelSetPaths", self.targetLevelSetPaths)
+        self.updateProjectInfo("targetLevelSetPaths", self._targetLevelSetPaths)
         print(f"Target level set and visualization meshes saved to {targetDomainDir}")
         return self
 
@@ -459,13 +459,13 @@ class Project:
         Returns:
             self: For method chaining
         """
-        if self.projectInfoPath is None or not os.path.exists(self.projectInfoPath):
+        if self._projectInfoPath is None or not os.path.exists(self._projectInfoPath):
             raise ValueError(
                 "Project information file does not exist. Initialize or load a project first."
             )
 
         # Load current project info
-        with open(self.projectInfoPath, "r") as f:
+        with open(self._projectInfoPath, "r") as f:
             projectInfo = json.load(f)
 
         # Update the specified field
@@ -481,7 +481,7 @@ class Project:
         projectInfo["lastModifiedDate"] = str(datetime.datetime.now())
 
         # Save updated info back to file
-        with open(self.projectInfoPath, "w") as f:
+        with open(self._projectInfoPath, "w") as f:
             json.dump(projectInfo, f, indent=4)
 
         # Also update the corresponding instance variable if it exists
@@ -575,10 +575,10 @@ class Project:
         )
         vls.VTKWriter(meshSurface, surfacePath).apply()
 
-        self.targetLevelSetPaths[name] = domainPath
+        self._targetLevelSetPaths[name] = domainPath
         
         # Update project info with the multi-target paths
-        self.updateProjectInfo("targetLevelSetPaths", self.targetLevelSetPaths)
+        self.updateProjectInfo("targetLevelSetPaths", self._targetLevelSetPaths)
         print(f"Target level set '{name}' and visualization meshes saved to {targetDomainDir}")
         return self
 
@@ -590,9 +590,9 @@ class Project:
 
     def getTargetLevelSetPath(self, name: str):
         """Get the file path for a named target level set."""
-        if name not in self.targetLevelSetPaths:
+        if name not in self._targetLevelSetPaths:
             raise KeyError(f"Target level set path for '{name}' not found.")
-        return self.targetLevelSetPaths[name]
+        return self._targetLevelSetPaths[name]
 
     def removeTargetLevelSet(self, name: str):
         """Remove a named target level set from the project."""
@@ -603,15 +603,15 @@ class Project:
         del self.targetLevelSets[name]
         
         # Remove file path reference
-        if name in self.targetLevelSetPaths:
+        if name in self._targetLevelSetPaths:
             # Optionally remove the actual files
-            filePath = self.targetLevelSetPaths[name]
+            filePath = self._targetLevelSetPaths[name]
             if os.path.exists(filePath):
                 os.remove(filePath)
-            del self.targetLevelSetPaths[name]
+            del self._targetLevelSetPaths[name]
         
         # Update project info
-        self.updateProjectInfo("targetLevelSetPaths", self.targetLevelSetPaths)
+        self.updateProjectInfo("targetLevelSetPaths", self._targetLevelSetPaths)
         print(f"Target level set '{name}' removed from project")
         return self
 
@@ -716,10 +716,10 @@ class Project:
         else:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
 
-        self.initialDomainPaths[name] = domainPath
+        self._initialDomainPaths[name] = domainPath
         
         # Update project info with the multi-domain paths
-        self.updateProjectInfo("initialDomainPaths", self.initialDomainPaths)
+        self.updateProjectInfo("initialDomainPaths", self._initialDomainPaths)
         print(f"Initial domain '{name}' and visualization meshes saved to {initialDomainDir}")
         return self
 
@@ -731,9 +731,9 @@ class Project:
 
     def getInitialDomainPath(self, name: str):
         """Get the file path for a named initial domain."""
-        if name not in self.initialDomainPaths:
+        if name not in self._initialDomainPaths:
             raise KeyError(f"Initial domain path for '{name}' not found.")
-        return self.initialDomainPaths[name]
+        return self._initialDomainPaths[name]
 
     def removeInitialDomain(self, name: str):
         """Remove a named initial domain from the project."""
@@ -744,15 +744,15 @@ class Project:
         del self.initialDomains[name]
         
         # Remove file path reference
-        if name in self.initialDomainPaths:
+        if name in self._initialDomainPaths:
             # Optionally remove the actual files
-            filePath = self.initialDomainPaths[name]
+            filePath = self._initialDomainPaths[name]
             if os.path.exists(filePath):
                 os.remove(filePath)
-            del self.initialDomainPaths[name]
+            del self._initialDomainPaths[name]
         
         # Update project info
-        self.updateProjectInfo("initialDomainPaths", self.initialDomainPaths)
+        self.updateProjectInfo("initialDomainPaths", self._initialDomainPaths)
         print(f"Initial domain '{name}' removed from project")
         return self
 
@@ -860,13 +860,13 @@ class Project:
             # Multi-domain case
             for domainName in self.initialDomains.keys():
                 if domainName in self.targetLevelSets:
-                    initialPath = self.initialDomainPaths.get(domainName, "")
-                    targetPath = self.targetLevelSetPaths.get(domainName, "")
+                    initialPath = self._initialDomainPaths.get(domainName, "")
+                    targetPath = self._targetLevelSetPaths.get(domainName, "")
                     pairings[domainName] = (initialPath, targetPath)
         else:
             # Single domain case (backward compatibility)
             if self.initialDomain is not None and self.targetLevelSet is not None:
-                pairings["default"] = (self.initialDomainPath, self.targetLevelSetPath)
+                pairings["default"] = (self._initialDomainPath, self._targetLevelSetPath)
 
         return pairings
 

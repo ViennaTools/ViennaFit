@@ -467,10 +467,10 @@ class ProgressDataManager(ABC):
     """Abstract base class for progress data storage"""
     
     def __init__(self, filepath: str, metadata: Optional[ProgressMetadata] = None):
-        self.filepath = filepath
+        self._filepath = filepath
         self.metadata = metadata
-        self.bestRecords: List[EvaluationRecord] = []
-        self.allRecords: List[EvaluationRecord] = []
+        self._bestRecords: List[EvaluationRecord] = []
+        self._allRecords: List[EvaluationRecord] = []
     
     @abstractmethod
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:
@@ -489,36 +489,36 @@ class ProgressDataManager(ABC):
     
     def getBestRecords(self) -> List[EvaluationRecord]:
         """Get all best evaluation records"""
-        return self.bestRecords
+        return self._bestRecords
     
     def getAllRecords(self) -> List[EvaluationRecord]:
         """Get all evaluation records"""
-        return self.allRecords
+        return self._allRecords
     
     def getConvergenceData(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get convergence data as (evaluationNumbers, objectiveValues)"""
-        if not self.bestRecords:
+        if not self._bestRecords:
             return np.array([]), np.array([])
         
-        evalNums = np.array([r.evaluationNumber for r in self.bestRecords])
-        objVals = np.array([r.objectiveValue for r in self.bestRecords])
+        evalNums = np.array([r.evaluationNumber for r in self._bestRecords])
+        objVals = np.array([r.objectiveValue for r in self._bestRecords])
         return evalNums, objVals
     
     def getAllConvergenceData(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get all evaluations convergence data"""
-        if not self.allRecords:
+        if not self._allRecords:
             return np.array([]), np.array([])
         
-        evalNums = np.array([r.evaluationNumber for r in self.allRecords])
-        objVals = np.array([r.objectiveValue for r in self.allRecords])
+        evalNums = np.array([r.evaluationNumber for r in self._allRecords])
+        objVals = np.array([r.objectiveValue for r in self._allRecords])
         return evalNums, objVals
     
     def getParameterData(self) -> Tuple[np.ndarray, Dict[str, float]]:
         """Get parameter data for best solution"""
-        if not self.bestRecords:
+        if not self._bestRecords:
             return np.array([]), {}
         
-        bestRecord = min(self.bestRecords, key=lambda r: r.objectiveValue)
+        bestRecord = min(self._bestRecords, key=lambda r: r.objectiveValue)
         paramArray = np.array(bestRecord.parameterValues)
         
         if self.metadata:
@@ -542,20 +542,20 @@ class CSVProgressStorage(ProgressDataManager):
         super().__init__(filepath, metadata)
         # Generate progressBest.csv instead of progressAll_best.csv for cleaner naming
         base_dir = os.path.dirname(filepath)
-        self.bestFilepath = os.path.join(base_dir, 'progressBest.csv')
-        self.metadataFilepath = filepath.replace('.csv', '_metadata.json')
+        self._bestFilepath = os.path.join(base_dir, 'progressBest.csv')
+        self._metadataFilepath = filepath.replace('.csv', '_metadata.json')
     
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:
         """Save evaluation record to CSV files"""
         # Save to all evaluations file
         if saveAll:
-            self._saveRecordToCsv(record, self.filepath)
-            self.allRecords.append(record)
+            self._saveRecordToCsv(record, self._filepath)
+            self._allRecords.append(record)
         
         # Save to best evaluations file if it's a best record
         if record.isBest:
-            self._saveRecordToCsv(record, self.bestFilepath)
-            self.bestRecords.append(record)
+            self._saveRecordToCsv(record, self._bestFilepath)
+            self._bestRecords.append(record)
     
     def _saveRecordToCsv(self, record: EvaluationRecord, filepath: str) -> None:
         """Save a single record to CSV file"""
@@ -613,16 +613,16 @@ class CSVProgressStorage(ProgressDataManager):
         
         # Load all records
         allRecords = []
-        if os.path.exists(self.filepath):
-            allRecords = self._loadRecordsFromCsv(self.filepath)
+        if os.path.exists(self._filepath):
+            allRecords = self._loadRecordsFromCsv(self._filepath)
         
         # Load best records
         bestRecords = []
-        if os.path.exists(self.bestFilepath):
-            bestRecords = self._loadRecordsFromCsv(self.bestFilepath)
+        if os.path.exists(self._bestFilepath):
+            bestRecords = self._loadRecordsFromCsv(self._bestFilepath)
         
-        self.allRecords = allRecords
-        self.bestRecords = bestRecords
+        self._allRecords = allRecords
+        self._bestRecords = bestRecords
         self.metadata = metadata
         
         return bestRecords, allRecords, metadata
@@ -670,7 +670,7 @@ class CSVProgressStorage(ProgressDataManager):
                     parameterValues=paramValues,
                     elapsedTime=elapsedTime,
                     objectiveValue=objectiveValue,
-                    isBest=(filepath == self.bestFilepath),
+                    isBest=(filepath == self._bestFilepath),
                     simulationTime=simulationTime,
                     distanceMetricTime=distanceMetricTime,
                     totalElapsedTime=totalElapsedTime,
@@ -684,13 +684,13 @@ class CSVProgressStorage(ProgressDataManager):
     def saveMetadata(self) -> None:
         """Save metadata to JSON file"""
         if self.metadata:
-            with open(self.metadataFilepath, 'w') as f:
+            with open(self._metadataFilepath, 'w') as f:
                 json.dump(self.metadata.toDict(), f, indent=2)
     
     def _loadMetadata(self) -> Optional[ProgressMetadata]:
         """Load metadata from JSON file"""
-        if os.path.exists(self.metadataFilepath):
-            with open(self.metadataFilepath, 'r') as f:
+        if os.path.exists(self._metadataFilepath):
+            with open(self._metadataFilepath, 'r') as f:
                 data = json.load(f)
                 return ProgressMetadata.fromDict(data)
         return None
@@ -709,18 +709,18 @@ class NumpyProgressStorage(ProgressDataManager):
         super().__init__(filepath, metadata)
         # Generate progressBest.npz instead of progressAll_best.npz for cleaner naming
         base_dir = os.path.dirname(filepath)
-        self.bestFilepath = os.path.join(base_dir, 'progressBest.npz')
-        self.metadataFilepath = filepath.replace('.npz', '_metadata.json')
+        self._bestFilepath = os.path.join(base_dir, 'progressBest.npz')
+        self._metadataFilepath = filepath.replace('.npz', '_metadata.json')
     
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:
         """Save evaluation record to NumPy files"""
         if saveAll:
-            self.allRecords.append(record)
-            self._saveRecordsToNpz(self.allRecords, self.filepath)
+            self._allRecords.append(record)
+            self._saveRecordsToNpz(self._allRecords, self._filepath)
         
         if record.isBest:
-            self.bestRecords.append(record)
-            self._saveRecordsToNpz(self.bestRecords, self.bestFilepath)
+            self._bestRecords.append(record)
+            self._saveRecordsToNpz(self._bestRecords, self._bestFilepath)
     
     def _saveRecordsToNpz(self, records: List[EvaluationRecord], filepath: str) -> None:
         """Save records to NumPy compressed archive"""
@@ -751,16 +751,16 @@ class NumpyProgressStorage(ProgressDataManager):
         
         # Load all records
         allRecords = []
-        if os.path.exists(self.filepath):
-            allRecords = self._loadRecordsFromNpz(self.filepath)
+        if os.path.exists(self._filepath):
+            allRecords = self._loadRecordsFromNpz(self._filepath)
         
         # Load best records
         bestRecords = []
-        if os.path.exists(self.bestFilepath):
-            bestRecords = self._loadRecordsFromNpz(self.bestFilepath, isBest=True)
+        if os.path.exists(self._bestFilepath):
+            bestRecords = self._loadRecordsFromNpz(self._bestFilepath, isBest=True)
         
-        self.allRecords = allRecords
-        self.bestRecords = bestRecords
+        self._allRecords = allRecords
+        self._bestRecords = bestRecords
         self.metadata = metadata
         
         return bestRecords, allRecords, metadata
@@ -796,13 +796,13 @@ class NumpyProgressStorage(ProgressDataManager):
     def saveMetadata(self) -> None:
         """Save metadata to JSON file"""
         if self.metadata:
-            with open(self.metadataFilepath, 'w') as f:
+            with open(self._metadataFilepath, 'w') as f:
                 json.dump(self.metadata.toDict(), f, indent=2)
     
     def _loadMetadata(self) -> Optional[ProgressMetadata]:
         """Load metadata from JSON file"""
-        if os.path.exists(self.metadataFilepath):
-            with open(self.metadataFilepath, 'r') as f:
+        if os.path.exists(self._metadataFilepath):
+            with open(self._metadataFilepath, 'r') as f:
                 data = json.load(f)
                 return ProgressMetadata.fromDict(data)
         return None

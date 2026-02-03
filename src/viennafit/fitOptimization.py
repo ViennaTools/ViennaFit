@@ -25,7 +25,7 @@ class Optimization(Study):
     def __init__(self, project: Project):
         super().__init__(project.projectName, project, "optimizationRuns")
         self.optimizer = "dlib"  # Default optimizer
-        self.progressManager = None  # Will be initialized in apply()
+        self._progressManager = None  # Will be initialized in apply()
         self.storageFormat = "csv"  # Default storage format
         self.notes = None  # Optional notes for the optimization run
         # Ax/BoTorch specific configuration
@@ -104,7 +104,7 @@ class Optimization(Study):
             "variableParameters": self.variableParameters,
             "optimizer": self.optimizer,
             "numEvaluations": self.numEvaluations,
-            "actualEvaluations": self.evalCounter,
+            "actualEvaluations": self._evalCounter,
             "earlyStopped": self.earlyStoppedAt is not None,
             "earlyStoppedAtEvaluation": self.earlyStoppedAt,
         }
@@ -189,7 +189,7 @@ class Optimization(Study):
 
     def saveStartingConfiguration(self):
         """Save the starting configuration of the optimization"""
-        if not self.applied:
+        if not self._applied:
             raise RuntimeError(
                 "Optimization must be applied before saving configuration"
             )
@@ -227,7 +227,7 @@ class Optimization(Study):
 
     def setName(self, name: str):
         """Set the name for the optimization run (only allowed before apply() is called)"""
-        if self.applied:
+        if self._applied:
             raise RuntimeError("Cannot change name after optimization has been applied")
 
         # Generate new directory paths using parent class logic
@@ -236,7 +236,7 @@ class Optimization(Study):
         # Update name and paths (directories will be created when apply() is called)
         self.name = newName
         self.runDir = newRunDir
-        self.progressDir = os.path.join(self.runDir, "progress")
+        self._progressDir = os.path.join(self.runDir, "progress")
 
         return self
 
@@ -328,7 +328,7 @@ class Optimization(Study):
 
     def migrateLegacyProgressFiles(self):
         """Migrate existing progress.txt and progressAll.txt files to new format"""
-        if not self.applied:
+        if not self._applied:
             print("Optimization must be applied first")
             return
 
@@ -395,7 +395,7 @@ class Optimization(Study):
                 Only applies when saveVisualization=True and for best/all evaluations.
                 Default: False (only primary metric visualizations are saved).
         """
-        if not self.applied:
+        if not self._applied:
             self.validate()
 
             # Validate numEvaluations based on optimizer
@@ -427,13 +427,13 @@ class Optimization(Study):
 
             # Create directories
             os.makedirs(self.runDir, exist_ok=False)
-            os.makedirs(self.progressDir, exist_ok=False)
+            os.makedirs(self._progressDir, exist_ok=False)
 
             # Save process sequence to file now that directory exists
             self._saveProcessSequence()
 
-            self.applied = True
-            self.evalCounter = 0
+            self._applied = True
+            self._evalCounter = 0
 
             # Save notes to file if provided
             if self.notes is not None:
@@ -462,16 +462,16 @@ class Optimization(Study):
                 )
 
                 progressFilepath = os.path.join(self.runDir, "progressAll")
-                self.progressManager = createProgressManager(
+                self._progressManager = createProgressManager(
                     progressFilepath, self.storageFormat, metadata
                 )
-                self.progressManager.saveMetadata()
+                self._progressManager.saveMetadata()
         else:
             print("Optimization has already been applied.")
             return
 
         # Set optimization start time for total elapsed time tracking
-        self.optimizationStartTime = time.time()
+        self._optimizationStartTime = time.time()
 
         # Create optimizer wrapper
         optimizer = OptimizerWrapper.create(self.optimizer, self)
@@ -526,7 +526,7 @@ class Optimization(Study):
         Returns:
             Dictionary mapping plot type names to lists of created file paths.
         """
-        if not self.applied:
+        if not self._applied:
             print(
                 "Warning: Optimization has not been applied yet. Some plots may not be available."
             )
@@ -536,7 +536,7 @@ class Optimization(Study):
             results = postprocessor.generatePlots(plotTypes)
 
             totalPlots = sum(len(files) for files in results.values())
-            print(f"Generated {totalPlots} plot(s) in {postprocessor.plotsDir}")
+            print(f"Generated {totalPlots} plot(s) in {postprocessor._plotsDir}")
 
             return results
 
