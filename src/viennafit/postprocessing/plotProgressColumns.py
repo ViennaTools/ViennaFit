@@ -28,8 +28,8 @@ class ProgressPlotter:
             csvPath: Path to progressAll.csv or progressBest.csv file
         """
         self.csvPath = csvPath
-        self.data = pd.read_csv(csvPath)
-        self.columns = list(self.data.columns)
+        self._data = pd.read_csv(csvPath)
+        self._columns = list(self._data.columns)
 
     def getAvailableColumns(self) -> List[str]:
         """
@@ -38,7 +38,7 @@ class ProgressPlotter:
         Returns:
             List of column names
         """
-        return self.columns
+        return self._columns
 
     def plot(self,
              columns: Optional[List[str]] = None,
@@ -81,18 +81,18 @@ class ProgressPlotter:
         # Determine which columns to plot
         if columns is None:
             # Plot all numeric columns except standard metadata
-            numericCols = self.data.select_dtypes(include=[np.number]).columns
+            numericCols = self._data.select_dtypes(include=[np.number]).columns
             excludeCols = ['evaluationNumber', 'elapsedTime']
             columns = [col for col in numericCols if col not in excludeCols]
 
         # Validate columns
-        invalidCols = [col for col in columns if col not in self.columns]
+        invalidCols = [col for col in columns if col not in self._columns]
         if invalidCols:
-            raise ValueError(f"Invalid columns: {invalidCols}. Available: {self.columns}")
+            raise ValueError(f"Invalid columns: {invalidCols}. Available: {self._columns}")
 
         # Validate x column
-        if xColumn not in self.columns:
-            raise ValueError(f"Invalid x column: {xColumn}. Available: {self.columns}")
+        if xColumn not in self._columns:
+            raise ValueError(f"Invalid x column: {xColumn}. Available: {self._columns}")
 
         # Setup log scale settings
         if isinstance(logScale, bool):
@@ -132,12 +132,12 @@ class ProgressPlotter:
                          'brown', 'pink', 'gray', 'olive', 'cyan']
 
             # Get x data
-            xData = self.data[xColumn].values
+            xData = self._data[xColumn].values
 
             # Plot each column
             for i, column in enumerate(columns):
                 ax = axs[i]
-                yData = self.data[column].values
+                yData = self._data[column].values
                 color = colors[i % len(colors)]
 
                 # Plot line and scatter
@@ -256,14 +256,14 @@ class ProgressPlotter:
         """
         # Determine which columns to plot
         if columns is None:
-            numericCols = self.data.select_dtypes(include=[np.number]).columns
+            numericCols = self._data.select_dtypes(include=[np.number]).columns
             excludeCols = ['evaluationNumber', 'elapsedTime']
             columns = [col for col in numericCols if col not in excludeCols]
 
         # Validate columns
-        invalidCols = [col for col in columns if col not in self.columns]
+        invalidCols = [col for col in columns if col not in self._columns]
         if invalidCols:
-            raise ValueError(f"Invalid columns: {invalidCols}. Available: {self.columns}")
+            raise ValueError(f"Invalid columns: {invalidCols}. Available: {self._columns}")
 
         # Validate conflicting options
         if logScale and individualScale:
@@ -289,11 +289,11 @@ class ProgressPlotter:
             fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
             # Get x data
-            xData = self.data[xColumn].values
+            xData = self._data[xColumn].values
 
             # Plot each column
             for i, column in enumerate(columns):
-                yDataOriginal = self.data[column].values.copy()
+                yDataOriginal = self._data[column].values.copy()
                 yData = yDataOriginal.copy()
                 color = colors[i % len(colors)]
                 label = self._formatColumnName(column)

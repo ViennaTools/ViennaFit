@@ -31,20 +31,20 @@ class BaseOptimizerWrapper:
     """Base class for optimizer wrappers."""
 
     def __init__(self, optimization):
-        self.optimization = optimization
+        self._optimization = optimization
 
     def getBounds(self) -> Tuple[List[float], List[float]]:
         """Get parameter bounds as separate lower and upper bound lists."""
         lowerBounds = []
         upperBounds = []
-        for lower, upper in self.optimization.variableParameters.values():
+        for lower, upper in self._optimization.variableParameters.values():
             lowerBounds.append(lower)
             upperBounds.append(upper)
 
         # Verify bounds
         if not lowerBounds or not upperBounds:
             raise ValueError("No bounds defined for variable parameters")
-        if len(lowerBounds) != len(self.optimization.variableParameters):
+        if len(lowerBounds) != len(self._optimization.variableParameters):
             raise ValueError("Missing bounds for some variable parameters")
 
         return lowerBounds, upperBounds
@@ -74,7 +74,7 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
         lowerBounds, upperBounds = self.getBounds()
 
         # Create objective function
-        objectiveFunction = ObjectiveWrapper.create("dlib", self.optimization)
+        objectiveFunction = ObjectiveWrapper.create("dlib", self._optimization)
 
         # Run optimization
         earlyStopped = False
@@ -88,19 +88,19 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
         except EarlyStoppingException:
             earlyStopped = True
             # Use best parameters found so far
-            parameterNames = list(self.optimization.variableParameters.keys())
-            x = [self.optimization.bestParameters.get(name) for name in parameterNames]
-            fx = self.optimization.bestScore
+            parameterNames = list(self._optimization.variableParameters.keys())
+            x = [self._optimization.bestParameters.get(name) for name in parameterNames]
+            fx = self._optimization.bestScore
 
         # Format results
-        parameterNames = list(self.optimization.variableParameters.keys())
+        parameterNames = list(self._optimization.variableParameters.keys())
         optimizedParams = dict(zip(parameterNames, x))
 
         return {
             "success": True,
             "x": optimizedParams,
             "fun": fx,
-            "nfev": self.optimization.evalCounter,
+            "nfev": self._optimization._evalCounter,
             "earlyStopped": earlyStopped,
         }
 
@@ -114,7 +114,7 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
         from .fitExceptions import EarlyStoppingException
 
         # Get bounds and parameter names in consistent order
-        parameterNames = list(self.optimization.variableParameters.keys())
+        parameterNames = list(self._optimization.variableParameters.keys())
         lowerBounds, upperBounds = self.getBounds()
 
         # Create starting point at center of bounds
@@ -127,7 +127,7 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
         parametrization.set_bounds(lowerBounds, upperBounds)
 
         # Create objective function
-        objectiveFunction = ObjectiveWrapper.create("nevergrad", self.optimization)
+        objectiveFunction = ObjectiveWrapper.create("nevergrad", self._optimization)
 
         # Create optimizer
         optimizer = ng.optimizers.NGOpt4(
@@ -147,7 +147,7 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
             # Get best so far from recommendation
             recommendation = optimizer.recommend()
             optimizedParamValues = recommendation.value
-            bestLoss = self.optimization.bestScore
+            bestLoss = self._optimization.bestScore
 
         # Format results - recommendation.value is an array, map to parameter names
         optimizedParams = dict(zip(parameterNames, optimizedParamValues))
@@ -156,7 +156,7 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
             "success": True,
             "x": optimizedParams,
             "fun": bestLoss,
-            "nfev": self.optimization.evalCounter,
+            "nfev": self._optimization._evalCounter,
             "earlyStopped": earlyStopped,
         }
 
@@ -166,11 +166,11 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
 
     def _shouldStopEarly(self) -> bool:
         """Check if early stopping criterion is met."""
-        if self.optimization.earlyStoppingPatience is None:
+        if self._optimization.earlyStoppingPatience is None:
             return False
-        if self.optimization.evalCounter < self.optimization.earlyStoppingMinEvaluations:
+        if self._optimization._evalCounter < self._optimization.earlyStoppingMinEvaluations:
             return False
-        return self.optimization.evaluationsSinceImprovement >= self.optimization.earlyStoppingPatience
+        return self._optimization._evaluationsSinceImprovement >= self._optimization.earlyStoppingPatience
 
     def optimize(self, numEvaluations: int) -> Dict[str, Any]:  # numEvaluations is validated in apply(), unused here
         """Run Bayesian optimization using Ax with BoTorch qEI acquisition function."""
@@ -178,13 +178,13 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
         from .fitExceptions import EarlyStoppingException
 
         # Get configuration
-        parameterNames = list(self.optimization.variableParameters.keys())
+        parameterNames = list(self._optimization.variableParameters.keys())
         lowerBounds, upperBounds = self.getBounds()
 
         # Get batch configuration (already validated in apply())
-        batchSize = getattr(self.optimization, "batchSize", 4)
-        initialSamples = getattr(self.optimization, "initialSamples", max(5, 2 * len(parameterNames)))
-        numBatches = self.optimization.numBatches  # Guaranteed to be set by apply() validation
+        batchSize = getattr(self._optimization, "batchSize", 4)
+        initialSamples = getattr(self._optimization, "initialSamples", max(5, 2 * len(parameterNames)))
+        numBatches = self._optimization.numBatches  # Guaranteed to be set by apply() validation
 
         # Calculate total evaluations
         totalEvaluations = initialSamples + (numBatches * batchSize)
@@ -196,7 +196,7 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
         print(f"  Total evaluations: {totalEvaluations} = {initialSamples} + ({numBatches} × {batchSize})")
 
         # Get primary metric name for objective
-        primaryMetricName = getattr(self.optimization, "primaryDistanceMetric", None) or self.optimization.distanceMetric
+        primaryMetricName = getattr(self._optimization, "_primaryDistanceMetric", None) or self._optimization.distanceMetric
 
         # Create Ax client
         axClient = Client(random_seed=None)
@@ -214,7 +214,7 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
 
         axClient.configure_experiment(
             parameters=parameters,
-            name=self.optimization.name,
+            name=self._optimization.name,
         )
 
         # Configure optimization objective (prefix with '-' for minimization)
@@ -229,7 +229,7 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
         )
 
         # Get objective wrapper
-        objectiveWrapper = ObjectiveWrapper.create("ax", self.optimization)
+        objectiveWrapper = ObjectiveWrapper.create("ax", self._optimization)
 
         # Run optimization loop
         numTrials = 0
@@ -237,7 +237,7 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
         while numTrials < totalEvaluations:
             # Check early stopping BEFORE generating new trials
             if self._shouldStopEarly():
-                self.optimization.earlyStoppedAt = self.optimization.evalCounter
+                self._optimization.earlyStoppedAt = self._optimization._evalCounter
                 earlyStopped = True
                 break
 
@@ -260,7 +260,7 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
             for trialIndex, parameterization in trialsToEvaluate:
                 # Check early stopping before each evaluation
                 if self._shouldStopEarly():
-                    self.optimization.earlyStoppedAt = self.optimization.evalCounter
+                    self._optimization.earlyStoppedAt = self._optimization._evalCounter
                     earlyStopped = True
                     break
 

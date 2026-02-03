@@ -84,13 +84,13 @@ class BasePostprocessor(ABC):
         self.runDir = os.path.abspath(runDir)
         self.config = config or PlotConfig()
         self.studyName = os.path.basename(self.runDir)
-        self.plotsDir = os.path.join(self.runDir, "plots")
+        self._plotsDir = os.path.join(self.runDir, "plots")
         
         # Ensure plots directory exists
-        os.makedirs(self.plotsDir, exist_ok=True)
+        os.makedirs(self._plotsDir, exist_ok=True)
         
         # Available plotters
-        self.plotters: List[BasePlotter] = []
+        self._plotters: List[BasePlotter] = []
         
     @abstractmethod
     def loadData(self) -> StudyData:
@@ -132,7 +132,7 @@ class BasePostprocessor(ABC):
         for plotter in plottersToUse:
             plotterName = plotter.__class__.__name__.replace('Plotter', '').lower()
             try:
-                createdFiles = plotter.plot(data, self.plotsDir)
+                createdFiles = plotter.plot(data, self._plotsDir)
                 results[plotterName] = createdFiles
                 print(f"Generated {len(createdFiles)} {plotterName} plot(s)")
             except Exception as e:

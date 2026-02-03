@@ -19,14 +19,14 @@ class RunsSummary:
         Args:
             projectPath: Absolute path to the project directory
         """
-        self.projectPath = os.path.abspath(projectPath)
-        self.projectName = os.path.basename(self.projectPath)
-        self.optimizationRunsDir = os.path.join(self.projectPath, "optimizationRuns")
-        self.summaryFilePath = os.path.join(
-            self.projectPath, f"{self.projectName}-optimization-summary.json"
+        self._projectPath = os.path.abspath(projectPath)
+        self._projectName = os.path.basename(self._projectPath)
+        self._optimizationRunsDir = os.path.join(self._projectPath, "optimizationRuns")
+        self._summaryFilePath = os.path.join(
+            self._projectPath, f"{self._projectName}-optimization-summary.json"
         )
-        self.runs = []
-        self.bestRun = None
+        self._runs = []
+        self._bestRun = None
 
     def scanRuns(self) -> int:
         """
@@ -35,15 +35,15 @@ class RunsSummary:
         Returns:
             Number of runs found
         """
-        self.runs = []
+        self._runs = []
 
-        if not os.path.exists(self.optimizationRunsDir):
-            print(f"No optimizationRuns directory found in {self.projectPath}")
+        if not os.path.exists(self._optimizationRunsDir):
+            print(f"No optimizationRuns directory found in {self._projectPath}")
             return 0
 
         # Find all final-results.json files
         resultsPattern = os.path.join(
-            self.optimizationRunsDir, "**", "*-final-results.json"
+            self._optimizationRunsDir, "**", "*-final-results.json"
         )
         resultsFiles = glob.glob(resultsPattern, recursive=True)
 
@@ -94,24 +94,24 @@ class RunsSummary:
                     "createdTime": createdTime,
                 }
 
-                self.runs.append(runInfo)
+                self._runs.append(runInfo)
 
             except Exception as e:
                 print(f"Warning: Could not load results from {resultsFile}: {e}")
 
         # Sort runs by creation time (most recent first)
-        self.runs.sort(
+        self._runs.sort(
             key=lambda x: x.get("createdTime", ""), reverse=True
         )
 
         # Identify best run (lowest bestScore)
-        if self.runs:
-            validRuns = [r for r in self.runs if r["bestScore"] is not None]
+        if self._runs:
+            validRuns = [r for r in self._runs if r["bestScore"] is not None]
             if validRuns:
-                self.bestRun = min(validRuns, key=lambda x: x["bestScore"])
+                self._bestRun = min(validRuns, key=lambda x: x["bestScore"])
 
-        print(f"Found {len(self.runs)} optimization run(s)")
-        return len(self.runs)
+        print(f"Found {len(self._runs)} optimization run(s)")
+        return len(self._runs)
 
     def getBestRun(self) -> Optional[Dict]:
         """
@@ -120,7 +120,7 @@ class RunsSummary:
         Returns:
             Dictionary with best run information, or None if no runs found
         """
-        return self.bestRun
+        return self._bestRun
 
     def getRuns(self) -> List[Dict]:
         """
@@ -129,7 +129,7 @@ class RunsSummary:
         Returns:
             List of dictionaries with run information
         """
-        return self.runs
+        return self._runs
 
     def getRunByName(self, runName: str) -> Optional[Dict]:
         """
@@ -141,37 +141,37 @@ class RunsSummary:
         Returns:
             Dictionary with run information, or None if not found
         """
-        for run in self.runs:
+        for run in self._runs:
             if run["runName"] == runName:
                 return run
         return None
 
     def saveSummary(self):
         """Save the runs summary to a JSON file."""
-        if not self.runs:
+        if not self._runs:
             print("No runs to save")
             return
 
         summary = {
-            "projectName": self.projectName,
-            "projectPath": self.projectPath,
-            "totalRuns": len(self.runs),
+            "projectName": self._projectName,
+            "projectPath": self._projectPath,
+            "totalRuns": len(self._runs),
             "bestRun": {
-                "runName": self.bestRun["runName"],
-                "bestScore": self.bestRun["bestScore"],
-                "bestEvaluationNumber": self.bestRun["bestEvaluationNumber"],
-                "createdTime": self.bestRun.get("createdTime", None),
+                "runName": self._bestRun["runName"],
+                "bestScore": self._bestRun["bestScore"],
+                "bestEvaluationNumber": self._bestRun["bestEvaluationNumber"],
+                "createdTime": self._bestRun.get("createdTime", None),
             }
-            if self.bestRun
+            if self._bestRun
             else None,
             "lastUpdated": datetime.now().isoformat(),
-            "runs": self.runs,
+            "runs": self._runs,
         }
 
-        with open(self.summaryFilePath, "w") as f:
+        with open(self._summaryFilePath, "w") as f:
             json.dump(summary, f, indent=4)
 
-        print(f"Summary saved to {self.summaryFilePath}")
+        print(f"Summary saved to {self._summaryFilePath}")
 
     def loadSummary(self) -> bool:
         """
@@ -180,14 +180,14 @@ class RunsSummary:
         Returns:
             True if loaded successfully, False otherwise
         """
-        if not os.path.exists(self.summaryFilePath):
+        if not os.path.exists(self._summaryFilePath):
             return False
 
         try:
-            with open(self.summaryFilePath, "r") as f:
+            with open(self._summaryFilePath, "r") as f:
                 summary = json.load(f)
 
-            self.runs = summary.get("runs", [])
+            self._runs = summary.get("runs", [])
             bestRunName = (
                 summary.get("bestRun", {}).get("runName", None)
                 if summary.get("bestRun")
@@ -195,9 +195,9 @@ class RunsSummary:
             )
 
             if bestRunName:
-                self.bestRun = self.getRunByName(bestRunName)
+                self._bestRun = self.getRunByName(bestRunName)
 
-            print(f"Loaded summary with {len(self.runs)} run(s)")
+            print(f"Loaded summary with {len(self._runs)} run(s)")
             return True
 
         except Exception as e:
@@ -219,41 +219,41 @@ class RunsSummary:
         Returns:
             Path to the saved report file, or the report content as string
         """
-        if not self.runs:
+        if not self._runs:
             return "No optimization runs found."
 
         # Generate markdown content
         lines = [
-            f"# Optimization Runs Overview: {self.projectName}",
+            f"# Optimization Runs Overview: {self._projectName}",
             "",
-            f"**Total runs:** {len(self.runs)}",
+            f"**Total runs:** {len(self._runs)}",
             f"**Last updated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "",
         ]
 
-        if self.bestRun:
+        if self._bestRun:
             lines.extend(
                 [
                     "## Best Run",
                     "",
-                    f"- **Run name:** {self.bestRun['runName']}",
-                    f"- **Best score:** {self.bestRun['bestScore']:.6f}",
-                    f"- **Best evaluation #:** {self.bestRun['bestEvaluationNumber']}",
-                    f"- **Created:** {self.bestRun.get('createdTime', 'Unknown')}",
+                    f"- **Run name:** {self._bestRun['runName']}",
+                    f"- **Best score:** {self._bestRun['bestScore']:.6f}",
+                    f"- **Best evaluation #:** {self._bestRun['bestEvaluationNumber']}",
+                    f"- **Created:** {self._bestRun.get('createdTime', 'Unknown')}",
                     "",
                 ]
             )
 
-            if self.bestRun.get("notes"):
+            if self._bestRun.get("notes"):
                 lines.extend(
                     [
-                        f"**Notes:** {self.bestRun['notes']}",
+                        f"**Notes:** {self._bestRun['notes']}",
                         "",
                     ]
                 )
 
             lines.extend(["### Best Parameters", ""])
-            for param, value in self.bestRun["bestParameters"].items():
+            for param, value in self._bestRun["bestParameters"].items():
                 lines.append(f"- **{param}:** {value}")
             lines.append("")
 
@@ -269,7 +269,7 @@ class RunsSummary:
 
         # Sort by best score for the table
         sortedRuns = sorted(
-            [r for r in self.runs if r["bestScore"] is not None],
+            [r for r in self._runs if r["bestScore"] is not None],
             key=lambda x: x["bestScore"],
         )
 
@@ -289,7 +289,7 @@ class RunsSummary:
                     pass
 
             # Mark best run with ⭐
-            marker = " ⭐" if self.bestRun and run["runName"] == self.bestRun["runName"] else ""
+            marker = " ⭐" if self._bestRun and run["runName"] == self._bestRun["runName"] else ""
             lines.append(
                 f"| {runName}{marker} | {bestScore} | {numEvals} | {bestEvalNum} | {optimizer} | {created} |"
             )
@@ -306,26 +306,26 @@ class RunsSummary:
 
     def printSummary(self):
         """Print a formatted summary of all optimization runs to console."""
-        if not self.runs:
+        if not self._runs:
             print("No optimization runs found.")
             return
 
         print("\n" + "=" * 80)
-        print(f"Optimization Runs Overview: {self.projectName}")
+        print(f"Optimization Runs Overview: {self._projectName}")
         print("=" * 80)
-        print(f"Total runs: {len(self.runs)}")
+        print(f"Total runs: {len(self._runs)}")
 
-        if self.bestRun:
+        if self._bestRun:
             print("\n" + "-" * 80)
             print("BEST RUN")
             print("-" * 80)
-            print(f"  Run name:          {self.bestRun['runName']}")
-            print(f"  Best score:        {self.bestRun['bestScore']:.6f}")
-            print(f"  Best evaluation #: {self.bestRun['bestEvaluationNumber']}")
-            print(f"  Created:           {self.bestRun.get('createdTime', 'Unknown')}")
+            print(f"  Run name:          {self._bestRun['runName']}")
+            print(f"  Best score:        {self._bestRun['bestScore']:.6f}")
+            print(f"  Best evaluation #: {self._bestRun['bestEvaluationNumber']}")
+            print(f"  Created:           {self._bestRun.get('createdTime', 'Unknown')}")
 
-            if self.bestRun.get("notes"):
-                print(f"  Notes:             {self.bestRun['notes']}")
+            if self._bestRun.get("notes"):
+                print(f"  Notes:             {self._bestRun['notes']}")
 
         print("\n" + "-" * 80)
         print("ALL RUNS (sorted by best score)")
@@ -333,7 +333,7 @@ class RunsSummary:
 
         # Sort by best score
         sortedRuns = sorted(
-            [r for r in self.runs if r["bestScore"] is not None],
+            [r for r in self._runs if r["bestScore"] is not None],
             key=lambda x: x["bestScore"],
         )
 
@@ -344,7 +344,7 @@ class RunsSummary:
         print("-" * 80)
 
         for i, run in enumerate(sortedRuns, 1):
-            marker = "⭐" if self.bestRun and run["runName"] == self.bestRun["runName"] else ""
+            marker = "⭐" if self._bestRun and run["runName"] == self._bestRun["runName"] else ""
             runName = run["runName"][:38]  # Truncate if too long
             bestScore = f"{run['bestScore']:.6f}"
             bestEvalNum = run.get("bestEvaluationNumber", "N/A")

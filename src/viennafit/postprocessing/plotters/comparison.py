@@ -23,14 +23,14 @@ class ComparisonPlotter(BasePlotter):
         """
         super().__init__(config)
         self.run_dirs = [os.path.abspath(d) for d in run_dirs]
-        self.study_data = []
+        self._study_data = []
         
         # Load data for all runs
         for run_dir in self.run_dirs:
             try:
                 loader = ResultsLoader(run_dir)
                 data = loader.load_study_data()
-                self.study_data.append(data)
+                self._study_data.append(data)
             except Exception as e:
                 print(f"Warning: Could not load data from {run_dir}: {e}")
                 
@@ -43,7 +43,7 @@ class ComparisonPlotter(BasePlotter):
         """
         created_files = []
         
-        if len(self.study_data) < 2:
+        if len(self._study_data) < 2:
             print("Warning: Need at least 2 runs for comparison plots")
             return created_files
             
@@ -53,7 +53,7 @@ class ComparisonPlotter(BasePlotter):
             created_files.append(filepath)
             
         # Best results comparison (for optimization runs)
-        opt_studies = [d for d in self.study_data if d.study_type == 'optimization']
+        opt_studies = [d for d in self._study_data if d.study_type == 'optimization']
         if len(opt_studies) >= 2:
             filepath = self._plot_best_results_comparison(opt_studies, output_dir)
             if filepath:
@@ -65,9 +65,9 @@ class ComparisonPlotter(BasePlotter):
         """Plot convergence comparison across multiple runs."""
         self._setup_plot(figsize=(12, 8))
         
-        colors = plt.cm.tab10(np.linspace(0, 1, len(self.study_data)))
+        colors = plt.cm.tab10(np.linspace(0, 1, len(self._study_data)))
         
-        for i, (data, color) in enumerate(zip(self.study_data, colors)):
+        for i, (data, color) in enumerate(zip(self._study_data, colors)):
             if not data.progress_data or 'all' not in data.progress_data:
                 continue
                 

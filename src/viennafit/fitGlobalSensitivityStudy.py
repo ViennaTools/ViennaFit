@@ -25,8 +25,8 @@ class GlobalSensitivityStudy(Study):
     def __init__(self, name: str, project: Project):
         super().__init__(name, project, "globalSensStudies")
         # Override the progress directory name
-        self.progressDir = os.path.join(self.runDir, "evaluations")
-        os.makedirs(self.progressDir, exist_ok=True)
+        self._progressDir = os.path.join(self.runDir, "evaluations")
+        os.makedirs(self._progressDir, exist_ok=True)
 
         # Global sensitivity specific parameters
         self.numSamples = 100  # Default value
@@ -34,8 +34,8 @@ class GlobalSensitivityStudy(Study):
         self.samplingMethod = "saltelli"  # Default sampling method
 
         # Progress management
-        self.progressManager = None  # Will be initialized in apply()
-        self.storageFormat = "csv"  # Default storage format
+        self._progressManager = None  # Will be initialized in apply()
+        self._storageFormat = "csv"  # Default storage format
         self.notes = None  # Optional notes for the sensitivity study
 
     def setVariableParameters(self, varParams: Dict[str, Tuple[float, float]]):
@@ -175,7 +175,7 @@ class GlobalSensitivityStudy(Study):
         """Set the storage format for progress data (csv or numpy)"""
         if storageFormat.lower() not in ["csv", "numpy"]:
             raise ValueError(f"Unsupported storage format: {storageFormat}")
-        self.storageFormat = storageFormat.lower()
+        self._storageFormat = storageFormat.lower()
         return self
 
     def setNotes(self, notes: str):
@@ -199,7 +199,7 @@ class GlobalSensitivityStudy(Study):
         saveVisualization: bool = False,
     ):
         """Apply the global sensitivity study."""
-        if not self.applied:
+        if not self._applied:
             self.validate()
 
             # Double-check sufficient samples for second-order indices right before applying
@@ -208,8 +208,8 @@ class GlobalSensitivityStudy(Study):
 
             self.saveVisualization = saveVisualization
             self.saveAllEvaluations = saveAllEvaluations
-            self.applied = True
-            self.evalCounter = 0
+            self._applied = True
+            self._evalCounter = 0
 
             # Initialize progress manager with metadata
             if hasattr(self, "parameterNames") and self.parameterNames:
@@ -231,10 +231,10 @@ class GlobalSensitivityStudy(Study):
 
                 # Create single progress manager (like optimization)
                 progressFilepath = os.path.join(self.runDir, "progressAll")
-                self.progressManager = createProgressManager(
-                    progressFilepath, self.storageFormat, metadata
+                self._progressManager = createProgressManager(
+                    progressFilepath, self._storageFormat, metadata
                 )
-                self.progressManager.saveMetadata()
+                self._progressManager.saveMetadata()
         else:
             print("Global sensitivity study has already been applied.")
             return
@@ -473,7 +473,7 @@ class GlobalSensitivityStudy(Study):
         Returns:
             Dictionary mapping plot type names to lists of created file paths.
         """
-        if not self.applied:
+        if not self._applied:
             print("Warning: Global sensitivity study has not been applied yet. Plots may not be available.")
             
         try:
@@ -481,7 +481,7 @@ class GlobalSensitivityStudy(Study):
             results = postprocessor.generatePlots(plotTypes)
             
             totalPlots = sum(len(files) for files in results.values())
-            print(f"Generated {totalPlots} plot(s) in {postprocessor.plotsDir}")
+            print(f"Generated {totalPlots} plot(s) in {postprocessor._plotsDir}")
             
             return results
             
