@@ -37,10 +37,13 @@ class DistanceMetric:
         if multiDomain:
             if metricName == "CA+CSF":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
-                    domains1, domains2, saveVis, path,
+                    domains1,
+                    domains2,
+                    saveVis,
+                    path,
                     lambda d1, d2, sv, wp: DistanceMetric._compareAreaAndSparseField(
                         d1, d2, sv, wp, sparseFieldExpansionWidth
-                    )
+                    ),
                 )
             elif metricName == "CA":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
@@ -48,10 +51,13 @@ class DistanceMetric:
                 )
             elif metricName == "CSF":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
-                    domains1, domains2, saveVis, path,
+                    domains1,
+                    domains2,
+                    saveVis,
+                    path,
                     lambda d1, d2, sv, wp: DistanceMetric._compareSparseField(
                         d1, d2, sv, wp, sparseFieldExpansionWidth
-                    )
+                    ),
                 )
             elif metricName == "CSF-IS":
                 # Create caching wrapper for CSF-IS to expand target only once per domain
@@ -60,6 +66,7 @@ class DistanceMetric:
                 def cached_csf_is_single(d1, d2, sv, wp):
                     """Cached CSF-IS for single domain comparison."""
                     import time as time_module
+
                     cacheKey = id(d2)
 
                     if cacheKey not in expandedTargetCache:
@@ -73,7 +80,11 @@ class DistanceMetric:
 
                     # Use cached expanded target
                     return DistanceMetric._compareSparseFieldIterateSample(
-                        d1, expandedTargetCache[cacheKey], sv, wp, sparseFieldExpansionWidth
+                        d1,
+                        expandedTargetCache[cacheKey],
+                        sv,
+                        wp,
+                        sparseFieldExpansionWidth,
                     )
 
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
@@ -85,16 +96,25 @@ class DistanceMetric:
                 )
             elif metricName == "CA+CNB":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
-                    domains1, domains2, saveVis, path, DistanceMetric._compareAreaAndNarrowBand
+                    domains1,
+                    domains2,
+                    saveVis,
+                    path,
+                    DistanceMetric._compareAreaAndNarrowBand,
                 )
             elif metricName == "CCD":
                 if criticalDimensionRanges is None:
-                    raise ValueError("criticalDimensionRanges must be provided for CCD metric")
+                    raise ValueError(
+                        "criticalDimensionRanges must be provided for CCD metric"
+                    )
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
-                    domains1, domains2, saveVis, path,
+                    domains1,
+                    domains2,
+                    saveVis,
+                    path,
                     lambda d1, d2, sv, wp: DistanceMetric._compareCriticalDimensions(
                         d1, d2, sv, wp, criticalDimensionRanges
-                    )
+                    ),
                 )
             elif metricName == "CCH":
                 return lambda domains1, domains2, saveVis, path: DistanceMetric._compareMultipleDomains(
@@ -123,6 +143,7 @@ class DistanceMetric:
                 def cached_csf_is(d1, d2, sv, wp):
                     """Cached CSF-IS that expands target (d2) only once."""
                     import time as time_module
+
                     cacheKey = id(d2)
 
                     if cacheKey not in expandedTargetCache:
@@ -137,7 +158,11 @@ class DistanceMetric:
                     # Use cached expanded target
                     # Note: d1 is sample (will be iterated), cached target is expanded
                     return DistanceMetric._compareSparseFieldIterateSample(
-                        d1, expandedTargetCache[cacheKey], sv, wp, sparseFieldExpansionWidth
+                        d1,
+                        expandedTargetCache[cacheKey],
+                        sv,
+                        wp,
+                        sparseFieldExpansionWidth,
                     )
 
                 return cached_csf_is
@@ -147,7 +172,9 @@ class DistanceMetric:
                 return DistanceMetric._compareAreaAndNarrowBand
             elif metricName == "CCD":
                 if criticalDimensionRanges is None:
-                    raise ValueError("criticalDimensionRanges must be provided for CCD metric")
+                    raise ValueError(
+                        "criticalDimensionRanges must be provided for CCD metric"
+                    )
                 return lambda d1, d2, sv, wp: DistanceMetric._compareCriticalDimensions(
                     d1, d2, sv, wp, criticalDimensionRanges
                 )
@@ -363,23 +390,25 @@ class DistanceMetric:
             RMSE of the critical dimension differences
         """
         if ranges is None or len(ranges) == 0:
-            raise ValueError("At least one range must be specified for critical dimensions comparison")
+            raise ValueError(
+                "At least one range must be specified for critical dimensions comparison"
+            )
 
         ccd = vls.CompareCriticalDimensions(domain1, domain2)
 
         # Add user-specified measurement ranges
         for rangeConfig in ranges:
-            axis = rangeConfig.get('axis', '').lower()
-            minVal = rangeConfig.get('min')
-            maxVal = rangeConfig.get('max')
-            findMaximum = rangeConfig.get('findMaximum', True)
+            axis = rangeConfig.get("axis", "").lower()
+            minVal = rangeConfig.get("min")
+            maxVal = rangeConfig.get("max")
+            findMaximum = rangeConfig.get("findMaximum", True)
 
-            if axis not in ['x', 'y']:
+            if axis not in ["x", "y"]:
                 raise ValueError(f"Invalid axis '{axis}'. Must be 'x' or 'y'")
             if minVal is None or maxVal is None:
                 raise ValueError("Range must specify 'min' and 'max' values")
 
-            if axis == 'x':
+            if axis == "x":
                 ccd.addXRange(float(minVal), float(maxVal), bool(findMaximum))
             else:  # axis == 'y'
                 ccd.addYRange(float(minVal), float(maxVal), bool(findMaximum))
@@ -468,7 +497,9 @@ class DistanceMetric:
         # Ensure all result domains have corresponding target domains
         for domainName in resultDomains.keys():
             if domainName not in targetDomains:
-                raise ValueError(f"No target domain found for result domain '{domainName}'")
+                raise ValueError(
+                    f"No target domain found for result domain '{domainName}'"
+                )
 
         # Compare each domain pair
         for domainName in resultDomains.keys():

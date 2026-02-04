@@ -60,7 +60,9 @@ class BaseObjectiveWrapper:
         sparseFieldExpansionWidth = getattr(study, "sparseFieldExpansionWidth", 200)
 
         # Primary metric (for optimization)
-        primaryMetric = getattr(study, "_primaryDistanceMetric", None) or study.distanceMetric
+        primaryMetric = (
+            getattr(study, "_primaryDistanceMetric", None) or study.distanceMetric
+        )
         self._distanceMetric = DistanceMetric.create(
             primaryMetric,
             multiDomain=self._isMultiDomainProcess,
@@ -143,12 +145,16 @@ class BaseObjectiveWrapper:
                 for name, domain in self._study.project.initialDomains.items():
                     domainCopy = Domain(domain)
                     initialDomains[name] = domainCopy
-                    processedDomains[name] = domainCopy  # Same object, will be modified by process
+                    processedDomains[name] = (
+                        domainCopy  # Same object, will be modified by process
+                    )
             elif self._study.project.initialDomain is not None:
                 # Fall back to single domain as "default"
                 domainCopy = Domain(self._study.project.initialDomain)
                 initialDomains["default"] = domainCopy
-                processedDomains["default"] = domainCopy  # Same object, will be modified by process
+                processedDomains["default"] = (
+                    domainCopy  # Same object, will be modified by process
+                )
             else:
                 raise ValueError(
                     "No initial domains available for multi-domain processing"
@@ -226,7 +232,10 @@ class BaseObjectiveWrapper:
             primaryMetricTime = time.time() - primaryMetricStartTime
 
             # Store primary metric value and time for tracking
-            primaryMetricName = getattr(self._study, "_primaryDistanceMetric", None) or self._study.distanceMetric
+            primaryMetricName = (
+                getattr(self._study, "_primaryDistanceMetric", None)
+                or self._study.distanceMetric
+            )
             additionalMetricValues[primaryMetricName] = objectiveValue
             additionalMetricTimes[primaryMetricName] = primaryMetricTime
 
@@ -242,7 +251,9 @@ class BaseObjectiveWrapper:
                         f"{self._study.name}-{self._study._evalCounter}",
                     ),
                 )
-                additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
+                additionalMetricTimes[metricName] = (
+                    time.time() - additionalMetricStartTime
+                )
 
             # Only save visualization if saveAll is True or if current evaluation is better than current best
             if saveVisualization and (
@@ -261,7 +272,10 @@ class BaseObjectiveWrapper:
 
                 # Save additional metric visualizations if requested
                 if getattr(self._study, "saveAdditionalMetricVisualizations", False):
-                    for metricName, metricFunc in self._additionalDistanceMetrics.items():
+                    for (
+                        metricName,
+                        metricFunc,
+                    ) in self._additionalDistanceMetrics.items():
                         metricFunc(
                             resultDomains,
                             self._study.project.targetLevelSets,
@@ -286,7 +300,10 @@ class BaseObjectiveWrapper:
             primaryMetricTime = time.time() - primaryMetricStartTime
 
             # Store primary metric value and time for tracking
-            primaryMetricName = getattr(self._study, "_primaryDistanceMetric", None) or self._study.distanceMetric
+            primaryMetricName = (
+                getattr(self._study, "_primaryDistanceMetric", None)
+                or self._study.distanceMetric
+            )
             additionalMetricValues[primaryMetricName] = objectiveValue
             additionalMetricTimes[primaryMetricName] = primaryMetricTime
 
@@ -302,7 +319,9 @@ class BaseObjectiveWrapper:
                         f"{self._study.name}-{self._study._evalCounter}",
                     ),
                 )
-                additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
+                additionalMetricTimes[metricName] = (
+                    time.time() - additionalMetricStartTime
+                )
 
             # Only save visualization if saveAll is True or if current evaluation is better than current best
             if saveVisualization and (
@@ -321,7 +340,10 @@ class BaseObjectiveWrapper:
 
                 # Save additional metric visualizations if requested
                 if getattr(self._study, "saveAdditionalMetricVisualizations", False):
-                    for metricName, metricFunc in self._additionalDistanceMetrics.items():
+                    for (
+                        metricName,
+                        metricFunc,
+                    ) in self._additionalDistanceMetrics.items():
                         metricFunc(
                             resultDomain,
                             self._study.project.targetLevelSet,
@@ -333,12 +355,17 @@ class BaseObjectiveWrapper:
                         )
 
         # Track distance metric time (primary + all additional + post-processing)
-        distanceMetricTime = primaryMetricTime + sum(additionalMetricTimes.values()) + postProcessingTime
+        distanceMetricTime = (
+            primaryMetricTime + sum(additionalMetricTimes.values()) + postProcessingTime
+        )
         elapsedTime = time.time() - startTime
 
         # Calculate total elapsed time since optimization started
         totalElapsedTime = 0.0
-        if hasattr(self._study, 'optimizationStartTime') and self._study._optimizationStartTime is not None:
+        if (
+            hasattr(self._study, "optimizationStartTime")
+            and self._study._optimizationStartTime is not None
+        ):
             totalElapsedTime = time.time() - self._study._optimizationStartTime
 
         newBest = objectiveValue <= self._study.bestScore
@@ -377,8 +404,12 @@ class BaseObjectiveWrapper:
                 isBest=newBest,
                 simulationTime=simulationTime,
                 distanceMetricTime=distanceMetricTime,
-                additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
-                additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None,
+                additionalMetricValues=(
+                    additionalMetricValues if additionalMetricValues else None
+                ),
+                additionalMetricTimes=(
+                    additionalMetricTimes if additionalMetricTimes else None
+                ),
                 totalElapsedTime=totalElapsedTime,
             )
         else:
@@ -392,8 +423,12 @@ class BaseObjectiveWrapper:
                     isBest=True,
                     simulationTime=simulationTime,
                     distanceMetricTime=distanceMetricTime,
-                    additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
-                    additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None,
+                    additionalMetricValues=(
+                        additionalMetricValues if additionalMetricValues else None
+                    ),
+                    additionalMetricTimes=(
+                        additionalMetricTimes if additionalMetricTimes else None
+                    ),
                     totalElapsedTime=totalElapsedTime,
                 )
 
@@ -424,11 +459,16 @@ class BaseObjectiveWrapper:
         if self._shouldTriggerEarlyStopping():
             self._study.earlyStoppedAt = self._study._evalCounter
             from .fitExceptions import EarlyStoppingException
-            raise EarlyStoppingException(self._study._evalCounter, self._study.bestScore)
+
+            raise EarlyStoppingException(
+                self._study._evalCounter, self._study.bestScore
+            )
 
         return objectiveValue, elapsedTime, simulationTime, distanceMetricTime
 
-    def _generateParameterString(self, paramDict: dict[str, float], variableParamNames: set[str] = None) -> str:
+    def _generateParameterString(
+        self, paramDict: dict[str, float], variableParamNames: set[str] = None
+    ) -> str:
         """Generate a compact string representation of variable parameters for filenames."""
         if not paramDict:
             return ""
@@ -442,9 +482,9 @@ class BaseObjectiveWrapper:
         for paramName, value in paramDict.items():
             if paramName in variableParamNames:
                 # Take first 4 characters of parameter name and sanitize
-                abbrevName = paramName[:4].replace('_', '').replace('-', '').lower()
+                abbrevName = paramName[:4].replace("_", "").replace("-", "").lower()
                 # Format value to 1 decimal place and remove unnecessary zeros
-                valueStr = f"{value:.1f}".rstrip('0').rstrip('.')
+                valueStr = f"{value:.1f}".rstrip("0").rstrip(".")
                 paramStrings.append(f"{abbrevName}{valueStr}")
 
         return "_".join(paramStrings)
@@ -455,7 +495,10 @@ class BaseObjectiveWrapper:
             return False
         if self._study._evalCounter < self._study.earlyStoppingMinEvaluations:
             return False
-        return self._study._evaluationsSinceImprovement >= self._study.earlyStoppingPatience
+        return (
+            self._study._evaluationsSinceImprovement
+            >= self._study.earlyStoppingPatience
+        )
 
     def _evaluateObjectiveBatch(
         self,
@@ -522,10 +565,12 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
             paramDict[name] = value
 
         # Evaluate process
-        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
-            paramDict,
-            self._study.saveVisualization,
-            saveAll=self._study.saveAllEvaluations,
+        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = (
+            self._evaluateObjective(
+                paramDict,
+                self._study.saveVisualization,
+                saveAll=self._study.saveAllEvaluations,
+            )
         )
 
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
@@ -565,14 +610,18 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
         paramDict = self._study.fixedParameters.copy()
 
         # Add variable parameters - map array values to parameter names
-        for value, (name, _) in zip(paramValues, self._study.variableParameters.items()):
+        for value, (name, _) in zip(
+            paramValues, self._study.variableParameters.items()
+        ):
             paramDict[name] = value
 
         # Evaluate process
-        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
-            paramDict,
-            self._study.saveVisualization,
-            saveAll=self._study.saveAllEvaluations,
+        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = (
+            self._evaluateObjective(
+                paramDict,
+                self._study.saveVisualization,
+                saveAll=self._study.saveAllEvaluations,
+            )
         )
 
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
@@ -599,7 +648,9 @@ class AxObjectiveWrapper(BaseObjectiveWrapper):
         # Track trial index for Ax integration
         self._currentTrialIndex = None
 
-    def evaluateTrial(self, parameterization: dict[str, float]) -> dict[str, tuple[float, float]]:
+    def evaluateTrial(
+        self, parameterization: dict[str, float]
+    ) -> dict[str, tuple[float, float]]:
         """
         Evaluate a single trial for Ax optimizer.
 
@@ -615,19 +666,26 @@ class AxObjectiveWrapper(BaseObjectiveWrapper):
         paramDict.update(parameterization)
 
         # Evaluate process
-        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = self._evaluateObjective(
-            paramDict,
-            self._study.saveVisualization,
-            saveAll=self._study.saveAllEvaluations,
+        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = (
+            self._evaluateObjective(
+                paramDict,
+                self._study.saveVisualization,
+                saveAll=self._study.saveAllEvaluations,
+            )
         )
 
         # Ax expects metrics as dict[metric_name, (mean, sem)]
         # For deterministic simulations, SEM is 0
         # Return metric with its plain name (Ax handles minimization via objective config)
-        primaryMetricName = getattr(self._study, "_primaryDistanceMetric", None) or self._study.distanceMetric
+        primaryMetricName = (
+            getattr(self._study, "_primaryDistanceMetric", None)
+            or self._study.distanceMetric
+        )
         return {primaryMetricName: (objectiveValue, 0.0)}
 
-    def evaluateBatch(self, parameterizationList: list[dict[str, float]]) -> list[dict[str, tuple[float, float]]]:
+    def evaluateBatch(
+        self, parameterizationList: list[dict[str, float]]
+    ) -> list[dict[str, tuple[float, float]]]:
         """
         Evaluate a batch of trials for Ax optimizer.
 

@@ -94,10 +94,10 @@ class GlobalSensitivityStudy(Study):
 
         self.numSamples = numSamples
         self.secondOrder = secondOrder
-        
+
         # Validate samples for second-order indices
         self._validateSecondOrderSamples()
-        
+
         return self
 
     def _validateSecondOrderSamples(self):
@@ -111,7 +111,7 @@ class GlobalSensitivityStudy(Study):
                 "1. Set secondOrder=False to use FAST method with first-order indices only\n"
                 "2. Use samplingMethod='saltelli' to compute second-order indices"
             )
-        
+
         if (
             self.secondOrder
             and self.samplingMethod == "saltelli"
@@ -461,57 +461,62 @@ class GlobalSensitivityStudy(Study):
             print(f"Global sensitivity study failed with error: {str(e)}")
             raise
 
-    
-    def generatePlots(self, plotTypes: Optional[List[str]] = None) -> Dict[str, List[str]]:
+    def generatePlots(
+        self, plotTypes: Optional[List[str]] = None
+    ) -> Dict[str, List[str]]:
         """
         Generate plots using the unified postprocessing framework.
-        
+
         Args:
             plotTypes: List of plot types to generate. Options include:
                        'convergence', 'parameter', 'sensitivity'. If None, generates all available plots.
-                       
+
         Returns:
             Dictionary mapping plot type names to lists of created file paths.
         """
         if not self._applied:
-            print("Warning: Global sensitivity study has not been applied yet. Plots may not be available.")
-            
+            print(
+                "Warning: Global sensitivity study has not been applied yet. Plots may not be available."
+            )
+
         try:
             postprocessor = GSSPostprocessor(self.runDir)
             results = postprocessor.generatePlots(plotTypes)
-            
+
             totalPlots = sum(len(files) for files in results.values())
             print(f"Generated {totalPlots} plot(s) in {postprocessor._plotsDir}")
-            
+
             return results
-            
+
         except Exception as e:
             print(f"Error generating plots: {e}")
             return {}
-    
+
     def generateSensitivitySummary(self, outputFile: Optional[str] = None) -> str:
         """
         Generate a sensitivity analysis summary report.
-        
+
         Args:
             outputFile: Optional output file path. If None, saves to run directory.
-            
+
         Returns:
             Path to the generated report file.
         """
         try:
             postprocessor = GSSPostprocessor(self.runDir)
             summaryContent = postprocessor.generateSensitivitySummary()
-            
+
             if outputFile is None:
-                outputFile = os.path.join(self.runDir, f"{self.name}-sensitivity-summary.md")
-                
-            with open(outputFile, 'w') as f:
+                outputFile = os.path.join(
+                    self.runDir, f"{self.name}-sensitivity-summary.md"
+                )
+
+            with open(outputFile, "w") as f:
                 f.write(summaryContent)
-                
+
             print(f"Sensitivity summary report generated: {outputFile}")
             return outputFile
-            
+
         except Exception as e:
             print(f"Error generating sensitivity summary: {e}")
             return ""

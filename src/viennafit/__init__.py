@@ -9,9 +9,12 @@ from .fitLocalSensitivityStudy import LocalSensitivityStudy
 from .fitGlobalSensitivityStudy import GlobalSensitivityStudy
 from .fitCustomEvaluator import CustomEvaluator
 
-from .fitUtilities import readPointsFromFile, plotParameterProgression, plotParameterPositions
+from .fitUtilities import (
+    readPointsFromFile,
+    plotParameterProgression,
+    plotParameterPositions,
+)
 
 from .fitExceptions import EarlyStoppingException
-
 
 __version__ = "2.0.0"
