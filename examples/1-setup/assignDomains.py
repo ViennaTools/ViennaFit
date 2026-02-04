@@ -31,8 +31,12 @@ p1.load(projectPath)
 # Define the paths to the annotation files
 # These .dat files contain x y coordinates (in nm) extracted from experimental images
 # Annotations are loaded from the project's annotations folder (copied during initialization)
-annotationBottom = os.path.join(projectPath, "domains", "annotations", "regular-cropped-SiO2.dat")
-annotationTarget = os.path.join(projectPath, "domains", "annotations", "regular-cropped-Nitride.dat")
+annotationBottom = os.path.join(
+    projectPath, "domains", "annotations", "regular-cropped-SiO2.dat"
+)
+annotationTarget = os.path.join(
+    projectPath, "domains", "annotations", "regular-cropped-Nitride.dat"
+)
 
 # Grid resolution for level set representation
 gridDelta = 3  # nm
@@ -45,7 +49,7 @@ extentBottom = fit.readPointsFromFile(
     annotationBottom,
     meshBottom,
     gridDelta,
-    mode="2D"  # 2D mode expects "x y" per line; 3D mode expects "x y z"
+    mode="2D",  # 2D mode expects "x y" per line; 3D mode expects "x y z"
 )
 
 # Read target domain points using the same process
@@ -65,7 +69,7 @@ domainBottom = vls.Domain(
     [10, 410, 200, -450],  # [minX, maxX, minY, maxY] in nm
     [
         vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,  # X: symmetric (half-domain)
-        vls.BoundaryConditionEnum.INFINITE_BOUNDARY,    # Y: infinite depth
+        vls.BoundaryConditionEnum.INFINITE_BOUNDARY,  # Y: infinite depth
     ],
     gridDelta,
 )
@@ -108,7 +112,7 @@ domainInitial.insertNextLevelSetAsMaterial(domainBottom, vps.Material.SiO2)
 
 # Assign the initial and target domains to the project
 # The domains along with visualization meshes are stored in project/domains
-p1.setInitialDomain(domainInitial) # ViennaPS initial domain
-p1.setTargetLevelSet(domainTarget) # ViennaLS target domain
+p1.setInitialDomain(domainInitial)  # ViennaPS initial domain
+p1.setTargetLevelSet(domainTarget)  # ViennaLS target domain
 
 # The project is now ready for optimization / sensitivity analysis

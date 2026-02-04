@@ -10,5 +10,9 @@ import viennafit as fit
 p1 = fit.Project()
 # Path to the example project created by setup scripts
 scriptDir = os.path.dirname(os.path.abspath(__file__))
-projectToLoad = os.path.abspath(os.path.join(scriptDir, "../../projects/exampleProject"))
-p1.finalizeOptimizationRun("run1")  # Specify the name of the optimization run to finalize
+projectToLoad = os.path.abspath(
+    os.path.join(scriptDir, "../../projects/exampleProject")
+)
+p1.finalizeOptimizationRun(
+    "run1"
+)  # Specify the name of the optimization run to finalize

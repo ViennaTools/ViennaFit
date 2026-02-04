@@ -11,7 +11,9 @@ vls.setDimension(2)
 p1 = fit.Project()
 # Path to the example project created by setup scripts
 scriptDir = os.path.dirname(os.path.abspath(__file__))
-projectToLoad = os.path.abspath(os.path.join(scriptDir, "../../projects/exampleProject"))
+projectToLoad = os.path.abspath(
+    os.path.join(scriptDir, "../../projects/exampleProject")
+)
 p1.load(projectToLoad)
 
 opt1 = fit.Optimization(p1)

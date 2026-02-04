@@ -47,9 +47,7 @@ twoParamValues = {
 }
 
 evaluator2.setVariableValues(twoParamValues)
-results2 = evaluator2.apply(
-    evaluationName="twoParameterStudy", saveVisualization=False
-)
+results2 = evaluator2.apply(evaluationName="twoParameterStudy", saveVisualization=False)
 
 print(f"Evaluated {len(results2)} parameter combinations")
 bestResult2 = evaluator2.getBestResult()
