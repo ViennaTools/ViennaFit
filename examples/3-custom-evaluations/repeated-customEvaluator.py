@@ -5,7 +5,9 @@ import os
 p1 = fit.Project()
 # Path to the example project created by setup scripts
 scriptDir = os.path.dirname(os.path.abspath(__file__))
-projectToLoad = os.path.abspath(os.path.join(scriptDir, "../../projects/exampleProject"))
+projectToLoad = os.path.abspath(
+    os.path.join(scriptDir, "../../projects/exampleProject")
+)
 p1.load(projectToLoad)
 
 # Create a custom evaluator instance
@@ -31,6 +33,4 @@ evaluator.setDistanceMetric("CCH")
 
 # Run the repeated evaluation
 # Uses the same process sequence as the loaded optimization run
-results = evaluator.apply(
-    evaluationName="repeatedEvaluation", saveVisualization=True
-)
+results = evaluator.apply(evaluationName="repeatedEvaluation", saveVisualization=True)

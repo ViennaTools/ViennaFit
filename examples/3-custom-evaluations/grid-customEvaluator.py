@@ -5,7 +5,9 @@ import os
 p1 = fit.Project()
 # Path to the example project created by setup scripts
 scriptDir = os.path.dirname(os.path.abspath(__file__))
-projectToLoad = os.path.abspath(os.path.join(scriptDir, "../../projects/exampleProject"))
+projectToLoad = os.path.abspath(
+    os.path.join(scriptDir, "../../projects/exampleProject")
+)
 p1.load(projectToLoad)
 
 # Create a custom evaluator instance
@@ -39,9 +41,7 @@ for paramName, value in optimalParams.items():
 # Run the grid evaluation
 # This will evaluate all combinations of the variable parameters
 # while keeping other parameters at their optimal values
-results = evaluator.apply(
-    evaluationName="parameterSweep1", saveVisualization=True
-)
+results = evaluator.apply(evaluationName="parameterSweep1", saveVisualization=True)
 
 # Get and display the best result from the grid
 bestResult = evaluator.getBestResult()
