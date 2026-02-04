@@ -40,20 +40,22 @@ class ProgressPlotter:
         """
         return self._columns
 
-    def plot(self,
-             columns: Optional[List[str]] = None,
-             xColumn: str = 'evaluationNumber',
-             logScale: Union[bool, List[str]] = False,
-             figsize: Optional[Tuple[float, float]] = None,
-             title: Optional[str] = None,
-             savePath: Optional[str] = None,
-             dpi: int = 300,
-             showGrid: bool = True,
-             lineWidth: float = 1.5,
-             markerSize: float = 15,
-             fontSize: float = 1.0,
-             shareX: bool = True,
-             colors: Optional[List[str]] = None) -> None:
+    def plot(
+        self,
+        columns: Optional[List[str]] = None,
+        xColumn: str = "evaluationNumber",
+        logScale: Union[bool, List[str]] = False,
+        figsize: Optional[Tuple[float, float]] = None,
+        title: Optional[str] = None,
+        savePath: Optional[str] = None,
+        dpi: int = 300,
+        showGrid: bool = True,
+        lineWidth: float = 1.5,
+        markerSize: float = 15,
+        fontSize: float = 1.0,
+        shareX: bool = True,
+        colors: Optional[List[str]] = None,
+    ) -> None:
         """
         Plot selected columns from the progress file.
 
@@ -82,13 +84,15 @@ class ProgressPlotter:
         if columns is None:
             # Plot all numeric columns except standard metadata
             numericCols = self._data.select_dtypes(include=[np.number]).columns
-            excludeCols = ['evaluationNumber', 'elapsedTime']
+            excludeCols = ["evaluationNumber", "elapsedTime"]
             columns = [col for col in numericCols if col not in excludeCols]
 
         # Validate columns
         invalidCols = [col for col in columns if col not in self._columns]
         if invalidCols:
-            raise ValueError(f"Invalid columns: {invalidCols}. Available: {self._columns}")
+            raise ValueError(
+                f"Invalid columns: {invalidCols}. Available: {self._columns}"
+            )
 
         # Validate x column
         if xColumn not in self._columns:
@@ -116,10 +120,7 @@ class ProgressPlotter:
         try:
             # Create figure and subplots
             fig, axs = plt.subplots(
-                numPlots, 1,
-                figsize=figsize,
-                dpi=dpi,
-                sharex=shareX
+                numPlots, 1, figsize=figsize, dpi=dpi, sharex=shareX
             )
 
             # Ensure axs is always a list
@@ -128,8 +129,18 @@ class ProgressPlotter:
 
             # Setup default colors if not provided
             if colors is None:
-                colors = ['blue', 'green', 'red', 'orange', 'purple',
-                         'brown', 'pink', 'gray', 'olive', 'cyan']
+                colors = [
+                    "blue",
+                    "green",
+                    "red",
+                    "orange",
+                    "purple",
+                    "brown",
+                    "pink",
+                    "gray",
+                    "olive",
+                    "cyan",
+                ]
 
             # Get x data
             xData = self._data[xColumn].values
@@ -164,8 +175,9 @@ class ProgressPlotter:
                     ax.locator_params(axis="y", nbins=4)
 
             # Set x-label on bottom subplot
-            axs[-1].set_xlabel(self._formatColumnName(xColumn),
-                              fontsize=plt.rcParams["font.size"])
+            axs[-1].set_xlabel(
+                self._formatColumnName(xColumn), fontsize=plt.rcParams["font.size"]
+            )
             axs[-1].locator_params(axis="x", nbins=6)
 
             # Set title
@@ -178,7 +190,7 @@ class ProgressPlotter:
 
             # Save or show
             if savePath:
-                plt.savefig(savePath, dpi=dpi, bbox_inches='tight')
+                plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
                 print(f"Plot saved to: {savePath}")
             else:
                 plt.show()
@@ -188,34 +200,36 @@ class ProgressPlotter:
             plt.rcParams["font.size"] = originalFontSize
             plt.close(fig)
 
-    def plotMultiAxis(self,
-                      columns: Optional[List[str]] = None,
-                      xColumn: str = 'evaluationNumber',
-                      individualScale: bool = False,
-                      scaleMethod: str = 'minmax',
-                      logScale: bool = False,
-                      logBeforeScale: bool = False,
-                      figsize: Tuple[float, float] = (10, 6),
-                      title: Optional[str] = None,
-                      savePath: Optional[str] = None,
-                      dpi: int = 300,
-                      showGrid: bool = True,
-                      lineWidth: float = 1.5,
-                      markerSize: float = 4,
-                      fontSize: float = 1.0,
-                      colors: Optional[List[str]] = None,
-                      showLegend: bool = True,
-                      showMarkers: bool = True,
-                      highlightNonImproving: bool = False,
-                      highlightColor: str = 'red',
-                      highlightMarker: str = 'x',
-                      highlightSize: float = 8,
-                      markMinimum: bool = False,
-                      minimumMarker: str = '*',
-                      minimumColor: Optional[str] = None,
-                      minimumSize: float = 15,
-                      minimumEdgeColor: str = 'black',
-                      minimumEdgeWidth: float = 1.5) -> None:
+    def plotMultiAxis(
+        self,
+        columns: Optional[List[str]] = None,
+        xColumn: str = "evaluationNumber",
+        individualScale: bool = False,
+        scaleMethod: str = "minmax",
+        logScale: bool = False,
+        logBeforeScale: bool = False,
+        figsize: Tuple[float, float] = (10, 6),
+        title: Optional[str] = None,
+        savePath: Optional[str] = None,
+        dpi: int = 300,
+        showGrid: bool = True,
+        lineWidth: float = 1.5,
+        markerSize: float = 4,
+        fontSize: float = 1.0,
+        colors: Optional[List[str]] = None,
+        showLegend: bool = True,
+        showMarkers: bool = True,
+        highlightNonImproving: bool = False,
+        highlightColor: str = "red",
+        highlightMarker: str = "x",
+        highlightSize: float = 8,
+        markMinimum: bool = False,
+        minimumMarker: str = "*",
+        minimumColor: Optional[str] = None,
+        minimumSize: float = 15,
+        minimumEdgeColor: str = "black",
+        minimumEdgeWidth: float = 1.5,
+    ) -> None:
         """
         Plot multiple columns on a single axis with shared x-axis.
 
@@ -257,21 +271,24 @@ class ProgressPlotter:
         # Determine which columns to plot
         if columns is None:
             numericCols = self._data.select_dtypes(include=[np.number]).columns
-            excludeCols = ['evaluationNumber', 'elapsedTime']
+            excludeCols = ["evaluationNumber", "elapsedTime"]
             columns = [col for col in numericCols if col not in excludeCols]
 
         # Validate columns
         invalidCols = [col for col in columns if col not in self._columns]
         if invalidCols:
-            raise ValueError(f"Invalid columns: {invalidCols}. Available: {self._columns}")
+            raise ValueError(
+                f"Invalid columns: {invalidCols}. Available: {self._columns}"
+            )
 
         # Validate conflicting options
         if logScale and individualScale:
             import warnings
+
             warnings.warn(
                 "Using logScale=True with individualScale=True may produce confusing results. "
                 "Consider using logBeforeScale=True instead to apply log transformation before normalization.",
-                UserWarning
+                UserWarning,
             )
 
         # Setup matplotlib style
@@ -313,8 +330,15 @@ class ProgressPlotter:
 
                 # Plot with or without markers
                 if showMarkers:
-                    ax.plot(xData, yData, linewidth=lineWidth, color=color, label=label,
-                           marker='o', markersize=markerSize)
+                    ax.plot(
+                        xData,
+                        yData,
+                        linewidth=lineWidth,
+                        color=color,
+                        label=label,
+                        marker="o",
+                        markersize=markerSize,
+                    )
                 else:
                     ax.plot(xData, yData, linewidth=lineWidth, color=color, label=label)
 
@@ -328,9 +352,15 @@ class ProgressPlotter:
                         yDataHighlight = self._scaleData(yDataHighlight, scaleMethod)
 
                     # Plot highlighted markers
-                    ax.scatter(xData[nonImprovingMask], yDataHighlight[nonImprovingMask],
-                              marker=highlightMarker, s=highlightSize**2, color=highlightColor,
-                              zorder=5, alpha=0.7)
+                    ax.scatter(
+                        xData[nonImprovingMask],
+                        yDataHighlight[nonImprovingMask],
+                        marker=highlightMarker,
+                        s=highlightSize**2,
+                        color=highlightColor,
+                        zorder=5,
+                        alpha=0.7,
+                    )
 
                 # Mark minimum value if requested
                 if markMinimum:
@@ -351,23 +381,40 @@ class ProgressPlotter:
                     markerColor = minimumColor if minimumColor is not None else color
 
                     # Plot minimum marker
-                    ax.scatter(minX, minY, marker=minimumMarker, s=minimumSize**2,
-                              color=markerColor, edgecolors=minimumEdgeColor,
-                              linewidths=minimumEdgeWidth,
-                              zorder=10, label=f'Min: {label}')
+                    ax.scatter(
+                        minX,
+                        minY,
+                        marker=minimumMarker,
+                        s=minimumSize**2,
+                        color=markerColor,
+                        edgecolors=minimumEdgeColor,
+                        linewidths=minimumEdgeWidth,
+                        zorder=10,
+                        label=f"Min: {label}",
+                    )
 
             # Configure axes
-            ax.set_xlabel(self._formatColumnName(xColumn),
-                         fontsize=plt.rcParams["font.size"])
+            ax.set_xlabel(
+                self._formatColumnName(xColumn), fontsize=plt.rcParams["font.size"]
+            )
 
             if individualScale:
                 logPrefix = "Log-Scaled + " if logBeforeScale else ""
-                if scaleMethod == 'minmax':
-                    ax.set_ylabel(f"{logPrefix}Normalized Value [0, 1]", fontsize=plt.rcParams["font.size"])
-                elif scaleMethod == 'symmetric':
-                    ax.set_ylabel(f"{logPrefix}Normalized Value [-1, 1]", fontsize=plt.rcParams["font.size"])
+                if scaleMethod == "minmax":
+                    ax.set_ylabel(
+                        f"{logPrefix}Normalized Value [0, 1]",
+                        fontsize=plt.rcParams["font.size"],
+                    )
+                elif scaleMethod == "symmetric":
+                    ax.set_ylabel(
+                        f"{logPrefix}Normalized Value [-1, 1]",
+                        fontsize=plt.rcParams["font.size"],
+                    )
                 else:
-                    ax.set_ylabel(f"{logPrefix}Standardized Value", fontsize=plt.rcParams["font.size"])
+                    ax.set_ylabel(
+                        f"{logPrefix}Standardized Value",
+                        fontsize=plt.rcParams["font.size"],
+                    )
             else:
                 ax.set_ylabel("Value", fontsize=plt.rcParams["font.size"])
 
@@ -379,7 +426,7 @@ class ProgressPlotter:
             if showGrid:
                 ax.grid(True, alpha=0.3)
             if showLegend:
-                ax.legend(fontsize=plt.rcParams["font.size"] * 0.8, loc='best')
+                ax.legend(fontsize=plt.rcParams["font.size"] * 0.8, loc="best")
 
             # Configure ticks
             ax.tick_params(axis="both", labelsize=plt.rcParams["font.size"] * 0.8)
@@ -394,7 +441,7 @@ class ProgressPlotter:
 
             # Save or show
             if savePath:
-                plt.savefig(savePath, dpi=dpi, bbox_inches='tight')
+                plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
                 print(f"Plot saved to: {savePath}")
             else:
                 plt.show()
@@ -424,7 +471,7 @@ class ProgressPlotter:
         # Apply log10 transformation
         return np.log10(data)
 
-    def _scaleData(self, data: np.ndarray, method: str = 'minmax') -> np.ndarray:
+    def _scaleData(self, data: np.ndarray, method: str = "minmax") -> np.ndarray:
         """
         Scale data using specified method.
 
@@ -435,7 +482,7 @@ class ProgressPlotter:
         Returns:
             Scaled data array
         """
-        if method == 'minmax':
+        if method == "minmax":
             # Scale to [0, 1]
             minVal = np.min(data)
             maxVal = np.max(data)
@@ -443,7 +490,7 @@ class ProgressPlotter:
                 return np.zeros_like(data)
             return (data - minVal) / (maxVal - minVal)
 
-        elif method == 'symmetric':
+        elif method == "symmetric":
             # Scale to [-1, 1]
             minVal = np.min(data)
             maxVal = np.max(data)
@@ -451,7 +498,7 @@ class ProgressPlotter:
                 return np.zeros_like(data)
             return 2 * (data - minVal) / (maxVal - minVal) - 1
 
-        elif method == 'standard':
+        elif method == "standard":
             # Standardize (mean=0, std=1)
             mean = np.mean(data)
             std = np.std(data)
@@ -460,7 +507,9 @@ class ProgressPlotter:
             return (data - mean) / std
 
         else:
-            raise ValueError(f"Unknown scaling method: {method}. Use 'minmax', 'symmetric', or 'standard'")
+            raise ValueError(
+                f"Unknown scaling method: {method}. Use 'minmax', 'symmetric', or 'standard'"
+            )
 
     def _findNonImprovingPoints(self, data: np.ndarray) -> np.ndarray:
         """
@@ -473,7 +522,7 @@ class ProgressPlotter:
             Boolean mask where True indicates non-improving points
         """
         nonImprovingMask = np.zeros(len(data), dtype=bool)
-        currentMin = float('inf')
+        currentMin = float("inf")
 
         for i, value in enumerate(data):
             if value < currentMin:
@@ -498,19 +547,21 @@ class ProgressPlotter:
         """
         # Handle special cases
         replacements = {
-            'objectiveValue': 'Objective Value',
-            'evaluationNumber': 'Evaluation Number',
-            'elapsedTime': 'Elapsed Time (s)',
+            "objectiveValue": "Objective Value",
+            "evaluationNumber": "Evaluation Number",
+            "elapsedTime": "Elapsed Time (s)",
         }
 
         if columnName in replacements:
             return replacements[columnName]
 
         # Insert spaces before capital letters and numbers
-        formatted = ''
+        formatted = ""
         for i, char in enumerate(columnName):
-            if i > 0 and (char.isupper() or (char.isdigit() and not columnName[i-1].isdigit())):
-                formatted += ' '
+            if i > 0 and (
+                char.isupper() or (char.isdigit() and not columnName[i - 1].isdigit())
+            ):
+                formatted += " "
             formatted += char
 
         # Capitalize first letter
@@ -519,11 +570,13 @@ class ProgressPlotter:
         return formatted
 
 
-def plotProgressFile(csvPath: str,
-                     columns: Optional[List[str]] = None,
-                     xColumn: str = 'evaluationNumber',
-                     multiAxis: bool = False,
-                     **kwargs) -> None:
+def plotProgressFile(
+    csvPath: str,
+    columns: Optional[List[str]] = None,
+    xColumn: str = "evaluationNumber",
+    multiAxis: bool = False,
+    **kwargs,
+) -> None:
     """
     Convenience function to quickly plot a progress file.
 
@@ -571,11 +624,15 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python plotProgressColumns.py <path_to_csv> [column1] [column2] ...")
+        print(
+            "Usage: python plotProgressColumns.py <path_to_csv> [column1] [column2] ..."
+        )
         print("\nExamples:")
         print("  python plotProgressColumns.py progressAll.csv")
         print("  python plotProgressColumns.py progressBest.csv objectiveValue")
-        print("  python plotProgressColumns.py progressAll.csv param1 param2 objectiveValue")
+        print(
+            "  python plotProgressColumns.py progressAll.csv param1 param2 objectiveValue"
+        )
         sys.exit(1)
 
     csvPath = sys.argv[1]

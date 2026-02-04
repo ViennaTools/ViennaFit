@@ -278,8 +278,10 @@ class LocalSensitivityStudy(Study):
 
             # Single evaluation with clean state
             objValue, execTime = objectiveWrapper._evaluateObjective(
-                paramSet, self.saveVisualization, saveAll=self.saveAllEvaluations,
-                variableParamNames=variableParamNames
+                paramSet,
+                self.saveVisualization,
+                saveAll=self.saveAllEvaluations,
+                variableParamNames=variableParamNames,
             )
 
             result = {
@@ -298,7 +300,7 @@ class LocalSensitivityStudy(Study):
                     list(paramSet.values()),
                     execTime,
                     objValue,
-                    saveAll=True
+                    saveAll=True,
                 )
 
         except Exception as e:
@@ -319,7 +321,7 @@ class LocalSensitivityStudy(Study):
                     list(paramSet.values()),
                     time.time() - startTime,
                     float("inf"),
-                    saveAll=True
+                    saveAll=True,
                 )
 
         return result

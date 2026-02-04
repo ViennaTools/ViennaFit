@@ -8,8 +8,8 @@ from .sensitivity import SensitivityPlotter
 from .comparison import ComparisonPlotter
 
 __all__ = [
-    'ConvergencePlotter',
-    'ParameterPlotter',
-    'SensitivityPlotter',
-    'ComparisonPlotter'
+    "ConvergencePlotter",
+    "ParameterPlotter",
+    "SensitivityPlotter",
+    "ComparisonPlotter",
 ]

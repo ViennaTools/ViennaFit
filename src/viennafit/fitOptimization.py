@@ -30,7 +30,9 @@ class Optimization(Study):
         self.notes = None  # Optional notes for the optimization run
         # Ax/BoTorch specific configuration
         self.batchSize = 4  # Default batch size for Ax/BoTorch
-        self.numBatches = None  # Number of batches for Ax/BoTorch (alternative to numEvaluations)
+        self.numBatches = (
+            None  # Number of batches for Ax/BoTorch (alternative to numEvaluations)
+        )
         self.initialSamples = None  # Will default to 2*numParams if not set
 
     def setParameterNames(self, paramNames: List[str]):
@@ -138,7 +140,9 @@ class Optimization(Study):
             for filename in copiedFiles:
                 print(f"  - {filename}")
         else:
-            print(f"Warning: No domain files found matching pattern '{basePattern}*.vtp' in progress directory")
+            print(
+                f"Warning: No domain files found matching pattern '{basePattern}*.vtp' in progress directory"
+            )
 
         print(f"Results saved to {filepath}")
 
@@ -203,7 +207,9 @@ class Optimization(Study):
             "numEvaluations": self.numEvaluations,
             "notes": self.notes,
             "earlyStoppingPatience": getattr(self, "earlyStoppingPatience", None),
-            "earlyStoppingMinEvaluations": getattr(self, "earlyStoppingMinEvaluations", 0),
+            "earlyStoppingMinEvaluations": getattr(
+                self, "earlyStoppingMinEvaluations", 0
+            ),
         }
 
         configFile = os.path.join(
@@ -213,6 +219,7 @@ class Optimization(Study):
             json.dump(config, f, indent=4)
 
         print(f"Starting configuration saved to {configFile}")
+
     def setOptimizer(self, optimizer: str):
         """Set the optimizer to be used"""
         self.optimizer = optimizer
@@ -308,7 +315,9 @@ class Optimization(Study):
         self.numBatches = numBatches
         return self
 
-    def setEarlyStopping(self, patienceEvaluations: int = None, minEvaluations: int = 0):
+    def setEarlyStopping(
+        self, patienceEvaluations: int = None, minEvaluations: int = 0
+    ):
         """
         Configure early stopping criterion.
 
@@ -409,8 +418,14 @@ class Optimization(Study):
                         "  opt.apply()            # No numEvaluations needed"
                     )
                 # Calculate actual evaluations for saving in config
-                initialSamples = self.initialSamples if self.initialSamples else max(5, 2 * len(self.variableParameters))
-                self.numEvaluations = initialSamples + (self.numBatches * self.batchSize)
+                initialSamples = (
+                    self.initialSamples
+                    if self.initialSamples
+                    else max(5, 2 * len(self.variableParameters))
+                )
+                self.numEvaluations = initialSamples + (
+                    self.numBatches * self.batchSize
+                )
             else:
                 # For dlib/nevergrad, numEvaluations must be provided
                 if numEvaluations is None:
@@ -496,8 +511,12 @@ class Optimization(Study):
                 print(f" Best evaluation #: {self.bestEvaluationNumber}")
 
                 if result.get("earlyStopped", False):
-                    print(f"  Optimization stopped early at evaluation {self.earlyStoppedAt}")
-                    print(f"    (No improvement for {self.earlyStoppingPatience} evaluations)")
+                    print(
+                        f"  Optimization stopped early at evaluation {self.earlyStoppedAt}"
+                    )
+                    print(
+                        f"    (No improvement for {self.earlyStoppingPatience} evaluations)"
+                    )
 
                 # Save final results
                 self.saveResults(self.name + "-final-results.json")

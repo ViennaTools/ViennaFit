@@ -29,11 +29,11 @@ class Project:
         self._initialDomainPath = None
         self.targetLevelSet = None
         self._targetLevelSetPath = None
-        
+
         # Multi-domain support (dictionary-based)
         self.initialDomains = {}  # {name: domain}
         self._initialDomainPaths = {}  # {name: path}
-        
+
         # Multi-target support (dictionary-based)
         self.targetLevelSets = {}  # {name: levelSet}
         self._targetLevelSetPaths = {}  # {name: path}
@@ -149,7 +149,7 @@ class Project:
         self.mode = projectInfo["mode"]
         self._initialDomainPath = projectInfo["initialDomainPath"]
         self._targetLevelSetPath = projectInfo["targetLevelSetPath"]
-        
+
         # Load multi-domain paths (new format) with backward compatibility
         if "initialDomainPaths" in projectInfo:
             self._initialDomainPaths = projectInfo["initialDomainPaths"]
@@ -158,7 +158,7 @@ class Project:
             self._initialDomainPaths = {}
             if self._initialDomainPath != "":
                 self._initialDomainPaths["default"] = self._initialDomainPath
-        
+
         # Load multi-target paths (new format) with backward compatibility
         if "targetLevelSetPaths" in projectInfo:
             self._targetLevelSetPaths = projectInfo["targetLevelSetPaths"]
@@ -181,7 +181,7 @@ class Project:
                     "domains",
                     "initialDomain",
                     f"{self.projectName}-initialDomain.vpsd",
-                )
+                ),
             ).apply()
 
         # Load single target (backward compatibility)
@@ -210,7 +210,7 @@ class Project:
                 targetDomain = lsDomain(dimension)
                 lsReader(targetDomain, targetPath).apply()
                 self.targetLevelSets[targetName] = targetDomain
-                
+
                 # If this is the default target and we don't have a single target loaded, use it
                 if targetName == "default" and self.targetLevelSet is None:
                     self.targetLevelSet = targetDomain
@@ -222,7 +222,7 @@ class Project:
                 domain = psDomain()
                 Reader(domain, domainPath).apply()
                 self.initialDomains[domainName] = domain
-                
+
                 # If this is the default domain and we don't have a single domain loaded, use it
                 if domainName == "default" and self.initialDomain is None:
                     self.initialDomain = domain
@@ -242,7 +242,7 @@ class Project:
         """Set the initial domain for the project (backward compatibility method)."""
         # Maintain backward compatibility by using a default domain name
         defaultDomainName = "default"
-        
+
         # Store in both old and new format for compatibility
         self.initialDomain = domain
         self.initialDomains[defaultDomainName] = domain
@@ -259,6 +259,7 @@ class Project:
         if self.mode == "2D":
             import viennaps as vps
             import viennals as vls
+
             vps.setDimension(2)
             vls.setDimension(2)
 
@@ -266,13 +267,20 @@ class Project:
             vps.Writer(domain, domainPath).apply()
 
             # Save the surface mesh
-            domain.saveSurfaceMesh(os.path.join(
-                initialDomainDir, f"{self.projectName}-initialDomain-surfaceMesh.vtp"
-            ), True)
+            domain.saveSurfaceMesh(
+                os.path.join(
+                    initialDomainDir,
+                    f"{self.projectName}-initialDomain-surfaceMesh.vtp",
+                ),
+                True,
+            )
 
-            domain.saveVolumeMesh(os.path.join(
-                initialDomainDir, f"{self.projectName}-initialDomain-volumeMesh"
-            ), True)
+            domain.saveVolumeMesh(
+                os.path.join(
+                    initialDomainDir, f"{self.projectName}-initialDomain-volumeMesh"
+                ),
+                True,
+            )
 
             # Extract and visualize only the last level set (index -1)
             if domain.getLevelSets():
@@ -297,6 +305,7 @@ class Project:
         elif self.mode == "3D":
             import viennaps as vps
             import viennals as vls
+
             vps.setDimension(3)
             vls.setDimension(3)
 
@@ -327,7 +336,7 @@ class Project:
         # Store in both old and new format for compatibility
         self._initialDomainPath = domainPath
         self._initialDomainPaths[defaultDomainName] = domainPath
-        
+
         # Update project info with both old and new format
         self.updateProjectInfo("initialDomainPath", domainPath)
         self.updateProjectInfo("initialDomainPaths", self._initialDomainPaths)
@@ -338,7 +347,7 @@ class Project:
         """Set the target level set for the project (backward compatibility method)."""
         # Maintain backward compatibility by using a default target name
         defaultTargetName = "default"
-        
+
         # Store in both old and new format for compatibility
         self.targetLevelSet = levelSet
         self.targetLevelSets[defaultTargetName] = levelSet
@@ -354,6 +363,7 @@ class Project:
 
         # ViennaLS target domains are always 2D
         import viennals as vls
+
         vls.setDimension(2)
 
         # Save the level set
@@ -378,7 +388,7 @@ class Project:
         # Store in both old and new format for compatibility
         self._targetLevelSetPath = domainPath
         self._targetLevelSetPaths[defaultTargetName] = domainPath
-        
+
         # Update project info with both old and new format
         self.updateProjectInfo("targetLevelSetPath", domainPath)
         self.updateProjectInfo("targetLevelSetPaths", self._targetLevelSetPaths)
@@ -393,22 +403,22 @@ class Project:
             hasInitialDomains = True
         elif len(self.initialDomains) > 0:
             hasInitialDomains = True
-            
+
         if not hasInitialDomains:
             print("No initial domains are set.")
             return False
-            
+
         # Check for targets - support both single and multi-target scenarios
         hasTargets = False
         if self.targetLevelSet is not None:
             hasTargets = True
         elif len(self.targetLevelSets) > 0:
             hasTargets = True
-            
+
         if not hasTargets:
             print("No target level sets are set.")
             return False
-            
+
         return True
 
     def isReadyForMultiTarget(self):
@@ -419,11 +429,11 @@ class Project:
             hasInitialDomains = True
         elif len(self.initialDomains) > 0:
             hasInitialDomains = True
-            
+
         if not hasInitialDomains:
             print("No initial domains are set.")
             return False
-            
+
         if len(self.targetLevelSets) == 0:
             print("No target level sets are set.")
             return False
@@ -434,18 +444,18 @@ class Project:
         if len(self.initialDomains) == 0:
             print("No initial domains are set.")
             return False
-            
+
         # Check for targets
         hasTargets = False
         if self.targetLevelSet is not None:
             hasTargets = True
         elif len(self.targetLevelSets) > 0:
             hasTargets = True
-            
+
         if not hasTargets:
             print("No target level sets are set.")
             return False
-            
+
         return True
 
     def updateProjectInfo(self, field: str, value):
@@ -540,7 +550,7 @@ class Project:
         """Add a named target level set to the project."""
         if name in self.targetLevelSets:
             print(f"Warning: Target '{name}' already exists. Overwriting.")
-        
+
         self.targetLevelSets[name] = levelSet
 
         # Create directories if needed
@@ -554,6 +564,7 @@ class Project:
 
         # ViennaLS target domains are always 2D
         import viennals as vls
+
         vls.setDimension(2)
 
         # Save the level set
@@ -576,10 +587,12 @@ class Project:
         vls.VTKWriter(meshSurface, surfacePath).apply()
 
         self._targetLevelSetPaths[name] = domainPath
-        
+
         # Update project info with the multi-target paths
         self.updateProjectInfo("targetLevelSetPaths", self._targetLevelSetPaths)
-        print(f"Target level set '{name}' and visualization meshes saved to {targetDomainDir}")
+        print(
+            f"Target level set '{name}' and visualization meshes saved to {targetDomainDir}"
+        )
         return self
 
     def getTargetLevelSet(self, name: str):
@@ -598,10 +611,10 @@ class Project:
         """Remove a named target level set from the project."""
         if name not in self.targetLevelSets:
             raise KeyError(f"Target level set '{name}' not found.")
-        
+
         # Remove from memory
         del self.targetLevelSets[name]
-        
+
         # Remove file path reference
         if name in self._targetLevelSetPaths:
             # Optionally remove the actual files
@@ -609,7 +622,7 @@ class Project:
             if os.path.exists(filePath):
                 os.remove(filePath)
             del self._targetLevelSetPaths[name]
-        
+
         # Update project info
         self.updateProjectInfo("targetLevelSetPaths", self._targetLevelSetPaths)
         print(f"Target level set '{name}' removed from project")
@@ -645,7 +658,7 @@ class Project:
         """Add a named initial domain to the project."""
         if name in self.initialDomains:
             print(f"Warning: Initial domain '{name}' already exists. Overwriting.")
-        
+
         self.initialDomains[name] = domain
 
         # Create directories if needed
@@ -660,6 +673,7 @@ class Project:
         if self.mode == "2D":
             import viennaps as vps
             import viennals as vls
+
             vps.setDimension(2)
             vls.setDimension(2)
 
@@ -682,13 +696,15 @@ class Project:
                 meshSurface = vls.Mesh()
                 vls.ToSurfaceMesh(lastLevelSet, meshSurface).apply()
                 surfacePath = os.path.join(
-                    initialDomainDir, f"{self.projectName}-initialDomain-{name}-surface.vtp"
+                    initialDomainDir,
+                    f"{self.projectName}-initialDomain-{name}-surface.vtp",
                 )
                 vls.VTKWriter(meshSurface, surfacePath).apply()
 
         elif self.mode == "3D":
             import viennaps as vps
             import viennals as vls
+
             vps.setDimension(3)
             vls.setDimension(3)
 
@@ -710,17 +726,20 @@ class Project:
                 meshSurface = vls.Mesh()
                 vls.ToSurfaceMesh(lastLevelSet, meshSurface).apply()
                 surfacePath = os.path.join(
-                    initialDomainDir, f"{self.projectName}-initialDomain-{name}-surface.vtp"
+                    initialDomainDir,
+                    f"{self.projectName}-initialDomain-{name}-surface.vtp",
                 )
                 vls.VTKWriter(meshSurface, surfacePath).apply()
         else:
             raise ValueError("Invalid mode. Only '2D' and '3D' are supported.")
 
         self._initialDomainPaths[name] = domainPath
-        
+
         # Update project info with the multi-domain paths
         self.updateProjectInfo("initialDomainPaths", self._initialDomainPaths)
-        print(f"Initial domain '{name}' and visualization meshes saved to {initialDomainDir}")
+        print(
+            f"Initial domain '{name}' and visualization meshes saved to {initialDomainDir}"
+        )
         return self
 
     def getInitialDomain(self, name: str):
@@ -739,10 +758,10 @@ class Project:
         """Remove a named initial domain from the project."""
         if name not in self.initialDomains:
             raise KeyError(f"Initial domain '{name}' not found.")
-        
+
         # Remove from memory
         del self.initialDomains[name]
-        
+
         # Remove file path reference
         if name in self._initialDomainPaths:
             # Optionally remove the actual files
@@ -750,7 +769,7 @@ class Project:
             if os.path.exists(filePath):
                 os.remove(filePath)
             del self._initialDomainPaths[name]
-        
+
         # Update project info
         self.updateProjectInfo("initialDomainPaths", self._initialDomainPaths)
         print(f"Initial domain '{name}' removed from project")
@@ -784,64 +803,80 @@ class Project:
     def isMultiDomainReady(self) -> bool:
         """Check if project is ready for multi-domain optimization."""
         # Must have at least one initial domain and one target domain
-        hasInitialDomains = len(self.initialDomains) > 0 or self.initialDomain is not None
-        hasTargetDomains = len(self.targetLevelSets) > 0 or self.targetLevelSet is not None
-        
+        hasInitialDomains = (
+            len(self.initialDomains) > 0 or self.initialDomain is not None
+        )
+        hasTargetDomains = (
+            len(self.targetLevelSets) > 0 or self.targetLevelSet is not None
+        )
+
         if not hasInitialDomains:
             return False
         if not hasTargetDomains:
             return False
-            
+
         # For multi-domain, check that all initial domains have corresponding targets
         if len(self.initialDomains) > 0 and len(self.targetLevelSets) > 0:
             initialNames = set(self.initialDomains.keys())
             targetNames = set(self.targetLevelSets.keys())
-            
+
             # All initial domains must have corresponding targets
             if not initialNames.issubset(targetNames):
                 missingTargets = initialNames - targetNames
                 print(f"Missing target domains for: {', '.join(missingTargets)}")
                 return False
-                
+
         return True
-    
+
     def validateMultiDomainSetup(self) -> List[str]:
         """Validate multi-domain setup and return list of issues."""
         issues = []
-        
+
         # Check initial domains
         if len(self.initialDomains) == 0 and self.initialDomain is None:
             issues.append("No initial domains are set")
-        
+
         # Check target domains
         if len(self.targetLevelSets) == 0 and self.targetLevelSet is None:
             issues.append("No target domains are set")
-        
+
         # Check name matching for multi-domain case
         if len(self.initialDomains) > 0 and len(self.targetLevelSets) > 0:
             initialNames = set(self.initialDomains.keys())
             targetNames = set(self.targetLevelSets.keys())
-            
+
             # Check for missing targets
             missingTargets = initialNames - targetNames
             if missingTargets:
-                issues.append(f"Missing target domains for initial domains: {', '.join(missingTargets)}")
-            
+                issues.append(
+                    f"Missing target domains for initial domains: {', '.join(missingTargets)}"
+                )
+
             # Check for extra targets (not necessarily an error, but worth noting)
             extraTargets = targetNames - initialNames
             if extraTargets:
-                issues.append(f"Extra target domains without corresponding initial domains: {', '.join(extraTargets)}")
-        
+                issues.append(
+                    f"Extra target domains without corresponding initial domains: {', '.join(extraTargets)}"
+                )
+
         return issues
-    
+
     def printMultiDomainStatus(self):
         """Print status of multi-domain setup."""
         print("Multi-Domain Setup Status:")
-        print(f"  Initial domains: {len(self.initialDomains)} ({', '.join(self.initialDomains.keys()) if self.initialDomains else 'none'})")
-        print(f"  Target domains: {len(self.targetLevelSets)} ({', '.join(self.targetLevelSets.keys()) if self.targetLevelSets else 'none'})")
-        print(f"  Backward compatibility - Single initial domain: {'Yes' if self.initialDomain is not None else 'No'}")
-        print(f"  Backward compatibility - Single target domain: {'Yes' if self.targetLevelSet is not None else 'No'}")
-        
+        print(
+            f"  Initial domains: {len(self.initialDomains)} ({', '.join(self.initialDomains.keys()) if self.initialDomains else 'none'})"
+        )
+        print(
+            f"  Target domains: {len(self.targetLevelSets)} ({', '.join(self.targetLevelSets.keys()) if self.targetLevelSets else 'none'})"
+        )
+        print(
+            f"  Backward compatibility - Single initial domain: {'Yes' if self.initialDomain is not None else 'No'}"
+        )
+        print(
+            f"  Backward compatibility - Single target domain: {'Yes' if self.targetLevelSet is not None else 'No'}"
+        )
+
         issues = self.validateMultiDomainSetup()
         if issues:
             print("  Issues found:")
@@ -849,9 +884,9 @@ class Project:
                 print(f"    - {issue}")
         else:
             print("  ✓ Multi-domain setup is valid")
-            
+
         print(f"  Multi-domain ready: {'Yes' if self.isMultiDomainReady() else 'No'}")
-    
+
     def getDomainPairings(self) -> Dict[str, Tuple[str, str]]:
         """Get dictionary of domain name -> (initial_path, target_path) pairings."""
         pairings = {}
@@ -866,7 +901,10 @@ class Project:
         else:
             # Single domain case (backward compatibility)
             if self.initialDomain is not None and self.targetLevelSet is not None:
-                pairings["default"] = (self._initialDomainPath, self._targetLevelSetPath)
+                pairings["default"] = (
+                    self._initialDomainPath,
+                    self._targetLevelSetPath,
+                )
 
         return pairings
 
@@ -972,9 +1010,11 @@ class Project:
                 # Extract parameters (all columns except reserved ones)
                 bestParameters = {}
                 for key, value in lastRow.items():
-                    if key not in reservedColumns and not key.endswith(
-                        "_value"
-                    ) and not key.endswith("_time"):
+                    if (
+                        key not in reservedColumns
+                        and not key.endswith("_value")
+                        and not key.endswith("_time")
+                    ):
                         try:
                             bestParameters[key] = float(value)
                         except (ValueError, TypeError):
@@ -1113,9 +1153,7 @@ class Project:
 
         # Check if any evaluations were completed
         if runData["actualNumEvaluations"] == 0:
-            print(
-                f"Error: Cannot finalize run '{runName}' - no evaluations completed."
-            )
+            print(f"Error: Cannot finalize run '{runName}' - no evaluations completed.")
             return False
 
         # Results Creation Phase
@@ -1132,14 +1170,18 @@ class Project:
         try:
             with open(finalResultsPath, "w") as f:
                 json.dump(result, f, indent=4)
-            print(f"Created final-results.json with {runData['actualNumEvaluations']} evaluations")
+            print(
+                f"Created final-results.json with {runData['actualNumEvaluations']} evaluations"
+            )
         except Exception as e:
             print(f"Error: Failed to create final-results.json: {e}")
             return False
 
         # Domain File Copy Phase
         if copyDomainFiles:
-            projectDomainDir = os.path.join(self.projectAbsPath, "domains", "optimalDomains")
+            projectDomainDir = os.path.join(
+                self.projectAbsPath, "domains", "optimalDomains"
+            )
             os.makedirs(projectDomainDir, exist_ok=True)
 
             # Pattern matches both single and multi-domain files:
@@ -1161,7 +1203,9 @@ class Project:
                             print(f"Warning: Failed to copy {filename}: {e}")
 
             if copiedFiles:
-                print(f"Copied {len(copiedFiles)} domain file(s) to {projectDomainDir}:")
+                print(
+                    f"Copied {len(copiedFiles)} domain file(s) to {projectDomainDir}:"
+                )
                 for filename in copiedFiles:
                     print(f"  - {filename}")
             else:

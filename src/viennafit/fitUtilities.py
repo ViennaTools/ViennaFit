@@ -40,6 +40,7 @@ def getViennaVersionInfo() -> Dict[str, Optional[str]]:
     except importlib_metadata.PackageNotFoundError:
         try:
             import viennaps as vps
+
             result["viennapsVersion"] = getattr(vps, "__version__", "unknown")
         except ImportError:
             pass
@@ -50,16 +51,22 @@ def getViennaVersionInfo() -> Dict[str, Optional[str]]:
     except importlib_metadata.PackageNotFoundError:
         try:
             import viennals as vls
+
             result["viennalsVersion"] = getattr(vls, "__version__", "unknown")
         except ImportError:
             pass
 
     # Try to get git commit hashes from source directories
-    for pkg_name, commit_key in [("viennaps", "viennapsCommit"), ("viennals", "viennalsCommit")]:
+    for pkg_name, commit_key in [
+        ("viennaps", "viennapsCommit"),
+        ("viennals", "viennalsCommit"),
+    ]:
         try:
             dist = importlib_metadata.distribution(pkg_name)
             # Check for direct_url.json which contains source directory info
-            direct_url_files = [f for f in dist.files or [] if f.name == "direct_url.json"]
+            direct_url_files = [
+                f for f in dist.files or [] if f.name == "direct_url.json"
+            ]
             if direct_url_files:
                 direct_url_path = direct_url_files[0].locate()
                 if os.path.exists(direct_url_path):
@@ -79,14 +86,16 @@ def getViennaVersionInfo() -> Dict[str, Optional[str]]:
                             parsed = urlparse(url)
                             source_dir = parsed.path
                             # Check if this directory exists and is a git repo
-                            if os.path.isdir(source_dir) and os.path.isdir(os.path.join(source_dir, ".git")):
+                            if os.path.isdir(source_dir) and os.path.isdir(
+                                os.path.join(source_dir, ".git")
+                            ):
                                 try:
                                     git_result = subprocess.run(
                                         ["git", "rev-parse", "HEAD"],
                                         cwd=source_dir,
                                         capture_output=True,
                                         text=True,
-                                        timeout=5
+                                        timeout=5,
                                     )
                                     if git_result.returncode == 0:
                                         result[commit_key] = git_result.stdout.strip()
@@ -244,7 +253,7 @@ def saveEvalToProgressFile(evaluation, filepath):
 
 
 def saveEvalToProgressManager(
-    progressManager: 'ProgressDataManager',
+    progressManager: "ProgressDataManager",
     evaluationNumber: int,
     parameterValues: List[float],
     elapsedTime: float,
@@ -255,7 +264,7 @@ def saveEvalToProgressManager(
     distanceMetricTime: float = 0.0,
     totalElapsedTime: float = 0.0,
     additionalMetricValues: Optional[Dict[str, float]] = None,
-    additionalMetricTimes: Optional[Dict[str, float]] = None
+    additionalMetricTimes: Optional[Dict[str, float]] = None,
 ) -> None:
     """Save evaluation using the new progress manager system"""
     record = EvaluationRecord(
@@ -268,7 +277,7 @@ def saveEvalToProgressManager(
         distanceMetricTime=distanceMetricTime,
         totalElapsedTime=totalElapsedTime,
         additionalMetricValues=additionalMetricValues,
-        additionalMetricTimes=additionalMetricTimes
+        additionalMetricTimes=additionalMetricTimes,
     )
 
     progressManager.saveEvaluation(record, saveAll=saveAll)
@@ -379,6 +388,7 @@ def getOptimumScore(filename):
 @dataclass
 class ProgressMetadata:
     """Metadata for progress tracking"""
+
     runName: str
     parameterNames: List[str]
     parameterBounds: Dict[str, Tuple[float, float]]
@@ -401,7 +411,7 @@ class ProgressMetadata:
             "fixedParameters": self.fixedParameters,
             "optimizer": self.optimizer,
             "createdTime": self.createdTime,
-            "description": self.description
+            "description": self.description,
         }
         # Include numEvaluations and notes if available
         if self.numEvaluations is not None:
@@ -420,12 +430,22 @@ class ProgressMetadata:
         return result
 
     @classmethod
-    def fromDict(cls, data: Dict[str, Any]) -> 'ProgressMetadata':
+    def fromDict(cls, data: Dict[str, Any]) -> "ProgressMetadata":
         # Handle backward compatibility - filter to only known fields
         known_fields = {
-            "runName", "parameterNames", "parameterBounds", "fixedParameters",
-            "optimizer", "createdTime", "description", "numEvaluations", "notes",
-            "viennapsVersion", "viennalsVersion", "viennapsCommit", "viennalsCommit"
+            "runName",
+            "parameterNames",
+            "parameterBounds",
+            "fixedParameters",
+            "optimizer",
+            "createdTime",
+            "description",
+            "numEvaluations",
+            "notes",
+            "viennapsVersion",
+            "viennalsVersion",
+            "viennapsCommit",
+            "viennalsCommit",
         }
         filtered_data = {k: v for k, v in data.items() if k in known_fields}
         return cls(**filtered_data)
@@ -434,6 +454,7 @@ class ProgressMetadata:
 @dataclass
 class EvaluationRecord:
     """Single evaluation record"""
+
     evaluationNumber: int
     parameterValues: List[float]
     elapsedTime: float
@@ -454,7 +475,7 @@ class EvaluationRecord:
             "isBest": self.isBest,
             "simulationTime": self.simulationTime,
             "distanceMetricTime": self.distanceMetricTime,
-            "totalElapsedTime": self.totalElapsedTime
+            "totalElapsedTime": self.totalElapsedTime,
         }
         if self.additionalMetricValues:
             result["additionalMetricValues"] = self.additionalMetricValues
@@ -465,117 +486,150 @@ class EvaluationRecord:
 
 class ProgressDataManager(ABC):
     """Abstract base class for progress data storage"""
-    
+
     def __init__(self, filepath: str, metadata: Optional[ProgressMetadata] = None):
         self._filepath = filepath
         self.metadata = metadata
         self._bestRecords: List[EvaluationRecord] = []
         self._allRecords: List[EvaluationRecord] = []
-    
+
     @abstractmethod
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:
         """Save a single evaluation record"""
         pass
-    
+
     @abstractmethod
-    def loadData(self) -> Tuple[List[EvaluationRecord], List[EvaluationRecord], ProgressMetadata]:
+    def loadData(
+        self,
+    ) -> Tuple[List[EvaluationRecord], List[EvaluationRecord], ProgressMetadata]:
         """Load all data and return (bestRecords, allRecords, metadata)"""
         pass
-    
+
     @abstractmethod
     def saveMetadata(self) -> None:
         """Save metadata to file"""
         pass
-    
+
     def getBestRecords(self) -> List[EvaluationRecord]:
         """Get all best evaluation records"""
         return self._bestRecords
-    
+
     def getAllRecords(self) -> List[EvaluationRecord]:
         """Get all evaluation records"""
         return self._allRecords
-    
+
     def getConvergenceData(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get convergence data as (evaluationNumbers, objectiveValues)"""
         if not self._bestRecords:
             return np.array([]), np.array([])
-        
+
         evalNums = np.array([r.evaluationNumber for r in self._bestRecords])
         objVals = np.array([r.objectiveValue for r in self._bestRecords])
         return evalNums, objVals
-    
+
     def getAllConvergenceData(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get all evaluations convergence data"""
         if not self._allRecords:
             return np.array([]), np.array([])
-        
+
         evalNums = np.array([r.evaluationNumber for r in self._allRecords])
         objVals = np.array([r.objectiveValue for r in self._allRecords])
         return evalNums, objVals
-    
+
     def getParameterData(self) -> Tuple[np.ndarray, Dict[str, float]]:
         """Get parameter data for best solution"""
         if not self._bestRecords:
             return np.array([]), {}
-        
+
         bestRecord = min(self._bestRecords, key=lambda r: r.objectiveValue)
         paramArray = np.array(bestRecord.parameterValues)
-        
+
         if self.metadata:
-            paramDict = dict(zip(self.metadata.parameterNames, bestRecord.parameterValues))
+            paramDict = dict(
+                zip(self.metadata.parameterNames, bestRecord.parameterValues)
+            )
         else:
-            paramDict = {f"param_{i}": val for i, val in enumerate(bestRecord.parameterValues)}
-        
+            paramDict = {
+                f"param_{i}": val for i, val in enumerate(bestRecord.parameterValues)
+            }
+
         return paramArray, paramDict
 
 
 class CSVProgressStorage(ProgressDataManager):
     """CSV-based progress storage with metadata support"""
-    
+
     def __init__(self, filepath: str, metadata: Optional[ProgressMetadata] = None):
-        if not filepath.endswith('.csv'):
+        if not filepath.endswith(".csv"):
             # If filepath is a directory or doesn't have extension, add .csv
             if os.path.isdir(filepath) or not os.path.splitext(filepath)[1]:
-                filepath = os.path.join(filepath, 'progressAll.csv') if os.path.isdir(filepath) else filepath + '.csv'
+                filepath = (
+                    os.path.join(filepath, "progressAll.csv")
+                    if os.path.isdir(filepath)
+                    else filepath + ".csv"
+                )
             else:
-                filepath = filepath.replace('.txt', '.csv')
+                filepath = filepath.replace(".txt", ".csv")
         super().__init__(filepath, metadata)
         # Generate progressBest.csv instead of progressAll_best.csv for cleaner naming
         base_dir = os.path.dirname(filepath)
-        self._bestFilepath = os.path.join(base_dir, 'progressBest.csv')
-        self._metadataFilepath = filepath.replace('.csv', '_metadata.json')
-    
+        self._bestFilepath = os.path.join(base_dir, "progressBest.csv")
+        self._metadataFilepath = filepath.replace(".csv", "_metadata.json")
+
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:
         """Save evaluation record to CSV files"""
         # Save to all evaluations file
         if saveAll:
             self._saveRecordToCsv(record, self._filepath)
             self._allRecords.append(record)
-        
+
         # Save to best evaluations file if it's a best record
         if record.isBest:
             self._saveRecordToCsv(record, self._bestFilepath)
             self._bestRecords.append(record)
-    
+
     def _saveRecordToCsv(self, record: EvaluationRecord, filepath: str) -> None:
         """Save a single record to CSV file"""
         fileExists = os.path.exists(filepath)
 
-        with open(filepath, 'a', newline='') as csvfile:
+        with open(filepath, "a", newline="") as csvfile:
             # Use actual parameter count instead of metadata names to avoid index errors
             actualParamCount = len(record.parameterValues)
 
             if self.metadata and len(self.metadata.parameterNames) == actualParamCount:
-                fieldnames = ['evaluationNumber'] + self.metadata.parameterNames + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'totalElapsedTime', 'objectiveValue']
+                fieldnames = (
+                    ["evaluationNumber"]
+                    + self.metadata.parameterNames
+                    + [
+                        "elapsedTime",
+                        "simulationTime",
+                        "distanceMetricTime",
+                        "totalElapsedTime",
+                        "objectiveValue",
+                    ]
+                )
             else:
-                fieldnames = ['evaluationNumber'] + [f'param_{i}' for i in range(actualParamCount)] + ['elapsedTime', 'simulationTime', 'distanceMetricTime', 'totalElapsedTime', 'objectiveValue']
+                fieldnames = (
+                    ["evaluationNumber"]
+                    + [f"param_{i}" for i in range(actualParamCount)]
+                    + [
+                        "elapsedTime",
+                        "simulationTime",
+                        "distanceMetricTime",
+                        "totalElapsedTime",
+                        "objectiveValue",
+                    ]
+                )
 
             # Add additional metric columns if present
             if record.additionalMetricValues:
                 for metricName in sorted(record.additionalMetricValues.keys()):
-                    fieldnames.append(f'{metricName}_value')
-                    if record.additionalMetricTimes and metricName in record.additionalMetricTimes:
-                        fieldnames.append(f'{metricName}_time')
+                    fieldnames.append(f"{metricName}_value")
+                    if (
+                        record.additionalMetricTimes
+                        and metricName in record.additionalMetricTimes
+                    ):
+                        fieldnames.append(f"{metricName}_time")
 
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -584,80 +638,96 @@ class CSVProgressStorage(ProgressDataManager):
                 writer.writeheader()
 
             # Write data row
-            row = {'evaluationNumber': record.evaluationNumber}
-            paramFieldnames = fieldnames[1:1+actualParamCount]  # Parameter columns
+            row = {"evaluationNumber": record.evaluationNumber}
+            paramFieldnames = fieldnames[1 : 1 + actualParamCount]  # Parameter columns
             for i, paramName in enumerate(paramFieldnames):
                 if i < len(record.parameterValues):
                     row[paramName] = record.parameterValues[i]
                 else:
                     row[paramName] = 0.0  # Default value if not enough parameters
-            row['elapsedTime'] = record.elapsedTime
-            row['simulationTime'] = record.simulationTime
-            row['distanceMetricTime'] = record.distanceMetricTime
-            row['totalElapsedTime'] = record.totalElapsedTime
-            row['objectiveValue'] = record.objectiveValue
+            row["elapsedTime"] = record.elapsedTime
+            row["simulationTime"] = record.simulationTime
+            row["distanceMetricTime"] = record.distanceMetricTime
+            row["totalElapsedTime"] = record.totalElapsedTime
+            row["objectiveValue"] = record.objectiveValue
 
             # Add additional metric values and times
             if record.additionalMetricValues:
                 for metricName in sorted(record.additionalMetricValues.keys()):
-                    row[f'{metricName}_value'] = record.additionalMetricValues[metricName]
-                    if record.additionalMetricTimes and metricName in record.additionalMetricTimes:
-                        row[f'{metricName}_time'] = record.additionalMetricTimes[metricName]
+                    row[f"{metricName}_value"] = record.additionalMetricValues[
+                        metricName
+                    ]
+                    if (
+                        record.additionalMetricTimes
+                        and metricName in record.additionalMetricTimes
+                    ):
+                        row[f"{metricName}_time"] = record.additionalMetricTimes[
+                            metricName
+                        ]
 
             writer.writerow(row)
-    
-    def loadData(self) -> Tuple[List[EvaluationRecord], List[EvaluationRecord], ProgressMetadata]:
+
+    def loadData(
+        self,
+    ) -> Tuple[List[EvaluationRecord], List[EvaluationRecord], ProgressMetadata]:
         """Load data from CSV files"""
         # Load metadata
         metadata = self._loadMetadata()
-        
+
         # Load all records
         allRecords = []
         if os.path.exists(self._filepath):
             allRecords = self._loadRecordsFromCsv(self._filepath)
-        
+
         # Load best records
         bestRecords = []
         if os.path.exists(self._bestFilepath):
             bestRecords = self._loadRecordsFromCsv(self._bestFilepath)
-        
+
         self._allRecords = allRecords
         self._bestRecords = bestRecords
         self.metadata = metadata
-        
+
         return bestRecords, allRecords, metadata
-    
+
     def _loadRecordsFromCsv(self, filepath: str) -> List[EvaluationRecord]:
         """Load records from a CSV file"""
         records = []
 
-        with open(filepath, 'r') as csvfile:
+        with open(filepath, "r") as csvfile:
             reader = csv.DictReader(csvfile)
 
             for row in reader:
-                evalNum = int(row['evaluationNumber'])
-                elapsedTime = float(row['elapsedTime'])
-                objectiveValue = float(row['objectiveValue'])
+                evalNum = int(row["evaluationNumber"])
+                elapsedTime = float(row["elapsedTime"])
+                objectiveValue = float(row["objectiveValue"])
 
                 # Read new timing fields if available (backward compatibility)
-                simulationTime = float(row.get('simulationTime', 0.0))
-                distanceMetricTime = float(row.get('distanceMetricTime', 0.0))
-                totalElapsedTime = float(row.get('totalElapsedTime', 0.0))
+                simulationTime = float(row.get("simulationTime", 0.0))
+                distanceMetricTime = float(row.get("distanceMetricTime", 0.0))
+                totalElapsedTime = float(row.get("totalElapsedTime", 0.0))
 
                 # Extract parameter values and additional metrics
                 paramValues = []
                 additionalMetricValues = {}
                 additionalMetricTimes = {}
 
-                excludeKeys = ['evaluationNumber', 'elapsedTime', 'simulationTime', 'distanceMetricTime', 'totalElapsedTime', 'objectiveValue']
+                excludeKeys = [
+                    "evaluationNumber",
+                    "elapsedTime",
+                    "simulationTime",
+                    "distanceMetricTime",
+                    "totalElapsedTime",
+                    "objectiveValue",
+                ]
 
                 for key, value in row.items():
                     if key not in excludeKeys:
-                        if key.endswith('_value'):
+                        if key.endswith("_value"):
                             # Additional metric value
                             metricName = key[:-6]  # Remove '_value' suffix
                             additionalMetricValues[metricName] = float(value)
-                        elif key.endswith('_time'):
+                        elif key.endswith("_time"):
                             # Additional metric timing
                             metricName = key[:-5]  # Remove '_time' suffix
                             additionalMetricTimes[metricName] = float(value)
@@ -674,23 +744,27 @@ class CSVProgressStorage(ProgressDataManager):
                     simulationTime=simulationTime,
                     distanceMetricTime=distanceMetricTime,
                     totalElapsedTime=totalElapsedTime,
-                    additionalMetricValues=additionalMetricValues if additionalMetricValues else None,
-                    additionalMetricTimes=additionalMetricTimes if additionalMetricTimes else None
+                    additionalMetricValues=(
+                        additionalMetricValues if additionalMetricValues else None
+                    ),
+                    additionalMetricTimes=(
+                        additionalMetricTimes if additionalMetricTimes else None
+                    ),
                 )
                 records.append(record)
 
         return records
-    
+
     def saveMetadata(self) -> None:
         """Save metadata to JSON file"""
         if self.metadata:
-            with open(self._metadataFilepath, 'w') as f:
+            with open(self._metadataFilepath, "w") as f:
                 json.dump(self.metadata.toDict(), f, indent=2)
-    
+
     def _loadMetadata(self) -> Optional[ProgressMetadata]:
         """Load metadata from JSON file"""
         if os.path.exists(self._metadataFilepath):
-            with open(self._metadataFilepath, 'r') as f:
+            with open(self._metadataFilepath, "r") as f:
                 data = json.load(f)
                 return ProgressMetadata.fromDict(data)
         return None
@@ -698,30 +772,34 @@ class CSVProgressStorage(ProgressDataManager):
 
 class NumpyProgressStorage(ProgressDataManager):
     """NumPy-based progress storage for binary format"""
-    
+
     def __init__(self, filepath: str, metadata: Optional[ProgressMetadata] = None):
-        if not filepath.endswith('.npz'):
+        if not filepath.endswith(".npz"):
             # If filepath is a directory or doesn't have extension, add .npz
             if os.path.isdir(filepath) or not os.path.splitext(filepath)[1]:
-                filepath = os.path.join(filepath, 'progressAll.npz') if os.path.isdir(filepath) else filepath + '.npz'
+                filepath = (
+                    os.path.join(filepath, "progressAll.npz")
+                    if os.path.isdir(filepath)
+                    else filepath + ".npz"
+                )
             else:
-                filepath = filepath.replace('.txt', '.npz')
+                filepath = filepath.replace(".txt", ".npz")
         super().__init__(filepath, metadata)
         # Generate progressBest.npz instead of progressAll_best.npz for cleaner naming
         base_dir = os.path.dirname(filepath)
-        self._bestFilepath = os.path.join(base_dir, 'progressBest.npz')
-        self._metadataFilepath = filepath.replace('.npz', '_metadata.json')
-    
+        self._bestFilepath = os.path.join(base_dir, "progressBest.npz")
+        self._metadataFilepath = filepath.replace(".npz", "_metadata.json")
+
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:
         """Save evaluation record to NumPy files"""
         if saveAll:
             self._allRecords.append(record)
             self._saveRecordsToNpz(self._allRecords, self._filepath)
-        
+
         if record.isBest:
             self._bestRecords.append(record)
             self._saveRecordsToNpz(self._bestRecords, self._bestFilepath)
-    
+
     def _saveRecordsToNpz(self, records: List[EvaluationRecord], filepath: str) -> None:
         """Save records to NumPy compressed archive"""
         if not records:
@@ -741,43 +819,49 @@ class NumpyProgressStorage(ProgressDataManager):
             elapsedTimes=elapsedTimes,
             simulationTimes=simulationTimes,
             distanceMetricTimes=distanceMetricTimes,
-            objectiveValues=objectiveValues
+            objectiveValues=objectiveValues,
         )
-    
-    def loadData(self) -> Tuple[List[EvaluationRecord], List[EvaluationRecord], ProgressMetadata]:
+
+    def loadData(
+        self,
+    ) -> Tuple[List[EvaluationRecord], List[EvaluationRecord], ProgressMetadata]:
         """Load data from NumPy files"""
         # Load metadata
         metadata = self._loadMetadata()
-        
+
         # Load all records
         allRecords = []
         if os.path.exists(self._filepath):
             allRecords = self._loadRecordsFromNpz(self._filepath)
-        
+
         # Load best records
         bestRecords = []
         if os.path.exists(self._bestFilepath):
             bestRecords = self._loadRecordsFromNpz(self._bestFilepath, isBest=True)
-        
+
         self._allRecords = allRecords
         self._bestRecords = bestRecords
         self.metadata = metadata
-        
+
         return bestRecords, allRecords, metadata
-    
-    def _loadRecordsFromNpz(self, filepath: str, isBest: bool = False) -> List[EvaluationRecord]:
+
+    def _loadRecordsFromNpz(
+        self, filepath: str, isBest: bool = False
+    ) -> List[EvaluationRecord]:
         """Load records from NumPy compressed archive"""
         records = []
 
         with np.load(filepath) as data:
-            evalNumbers = data['evaluationNumbers']
-            paramValues = data['parameterValues']
-            elapsedTimes = data['elapsedTimes']
-            objectiveValues = data['objectiveValues']
+            evalNumbers = data["evaluationNumbers"]
+            paramValues = data["parameterValues"]
+            elapsedTimes = data["elapsedTimes"]
+            objectiveValues = data["objectiveValues"]
 
             # Load new timing fields if available (backward compatibility)
-            simulationTimes = data.get('simulationTimes', np.zeros(len(evalNumbers)))
-            distanceMetricTimes = data.get('distanceMetricTimes', np.zeros(len(evalNumbers)))
+            simulationTimes = data.get("simulationTimes", np.zeros(len(evalNumbers)))
+            distanceMetricTimes = data.get(
+                "distanceMetricTimes", np.zeros(len(evalNumbers))
+            )
 
             for i in range(len(evalNumbers)):
                 record = EvaluationRecord(
@@ -787,31 +871,31 @@ class NumpyProgressStorage(ProgressDataManager):
                     objectiveValue=float(objectiveValues[i]),
                     isBest=isBest,
                     simulationTime=float(simulationTimes[i]),
-                    distanceMetricTime=float(distanceMetricTimes[i])
+                    distanceMetricTime=float(distanceMetricTimes[i]),
                 )
                 records.append(record)
 
         return records
-    
+
     def saveMetadata(self) -> None:
         """Save metadata to JSON file"""
         if self.metadata:
-            with open(self._metadataFilepath, 'w') as f:
+            with open(self._metadataFilepath, "w") as f:
                 json.dump(self.metadata.toDict(), f, indent=2)
-    
+
     def _loadMetadata(self) -> Optional[ProgressMetadata]:
         """Load metadata from JSON file"""
         if os.path.exists(self._metadataFilepath):
-            with open(self._metadataFilepath, 'r') as f:
+            with open(self._metadataFilepath, "r") as f:
                 data = json.load(f)
                 return ProgressMetadata.fromDict(data)
         return None
 
 
 def createProgressManager(
-    filepath: str, 
-    storageFormat: str = "csv", 
-    metadata: Optional[ProgressMetadata] = None
+    filepath: str,
+    storageFormat: str = "csv",
+    metadata: Optional[ProgressMetadata] = None,
 ) -> ProgressDataManager:
     """Factory function to create progress data manager"""
     if storageFormat.lower() == "csv":
@@ -823,30 +907,30 @@ def createProgressManager(
 
 
 def migrateLegacyProgressFile(
-    legacyFilepath: str, 
+    legacyFilepath: str,
     newFilepath: str,
     storageFormat: str = "csv",
-    metadata: Optional[ProgressMetadata] = None
+    metadata: Optional[ProgressMetadata] = None,
 ) -> None:
     """Migrate legacy progress.txt file to new format"""
     if not os.path.exists(legacyFilepath):
         return
-    
+
     # Parse legacy file using existing parser
     import ast
-    
+
     records = []
-    with open(legacyFilepath, 'r') as f:
+    with open(legacyFilepath, "r") as f:
         lines = f.readlines()
-    
+
     for i, line in enumerate(lines):
         line = line.strip()
-        if line and not line.startswith('#'):
+        if line and not line.startswith("#"):
             try:
                 dataList = ast.literal_eval(line)
                 if isinstance(dataList, list):
                     dataRow = [float(x) for x in dataList]
-                    
+
                     # Assume structure: [evalNum, param1, param2, ..., elapsedTime, objectiveValue]
                     # or: [param1, param2, ..., elapsedTime, objectiveValue]
                     if len(dataRow) >= 3:
@@ -861,25 +945,26 @@ def migrateLegacyProgressFile(
                             paramValues = dataRow[:-2]
                             elapsedTime = dataRow[-2]
                             objectiveValue = dataRow[-1]
-                        
+
                         record = EvaluationRecord(
                             evaluationNumber=evalNum,
                             parameterValues=paramValues,
                             elapsedTime=elapsedTime,
                             objectiveValue=objectiveValue,
-                            isBest="progress.txt" in legacyFilepath  # Best if from progress.txt
+                            isBest="progress.txt"
+                            in legacyFilepath,  # Best if from progress.txt
                         )
                         records.append(record)
             except (ValueError, SyntaxError):
                 continue
-    
+
     # Save to new format
     manager = createProgressManager(newFilepath, storageFormat, metadata)
     manager.saveMetadata()
-    
+
     for record in records:
         manager.saveEvaluation(record, saveAll=True)
-    
+
     print(f"Migrated {len(records)} records from {legacyFilepath} to {newFilepath}")
 
 
@@ -980,7 +1065,9 @@ def plotParameterProgression(
                 currentValue = row[-1]  # Objective value is last column
                 if currentValue < lastValue:
                     filteredData.append(row)
-                    filteredIndices.append(i + 1)  # +1 because plot indices start from 1
+                    filteredIndices.append(
+                        i + 1
+                    )  # +1 because plot indices start from 1
                     lastValue = currentValue
 
             progressData = np.array(filteredData) if filteredData else progressData
@@ -999,9 +1086,7 @@ def plotParameterProgression(
         numSubplots = numParams + 1  # +1 for objective function
 
         fig, axs = plt.subplots(
-            numSubplots, 1,
-            figsize=(3.5, max(7.5, numSubplots * 1.2)),
-            dpi=dpi
+            numSubplots, 1, figsize=(3.5, max(7.5, numSubplots * 1.2)), dpi=dpi
         )
 
         # Ensure axs is always a list
@@ -1019,7 +1104,7 @@ def plotParameterProgression(
             axs[0].set_yscale("log")
 
         # Plot each parameter
-        colors = ['blue', 'green', 'orange', 'cyan', 'brown', 'purple', 'pink', 'gray']
+        colors = ["blue", "green", "orange", "cyan", "brown", "purple", "pink", "gray"]
         for i, paramName in enumerate(paramNames):
             paramValues = [float(row[i]) for row in progressData]
             ax = axs[i + 1]
@@ -1105,17 +1190,17 @@ def _readProgressFile(fileName):
         raise FileNotFoundError(f"Progress file not found: {fileName}")
 
     # Try CSV format first
-    if fileName.endswith('.csv'):
+    if fileName.endswith(".csv"):
         try:
             df = pd.read_csv(fileName)
             # Extract parameter names (exclude non-parameter columns)
-            excludeCols = ['evaluationNumber', 'elapsedTime', 'objectiveValue']
+            excludeCols = ["evaluationNumber", "elapsedTime", "objectiveValue"]
             paramNames = [col for col in df.columns if col not in excludeCols]
 
             # Construct data array: [param1, param2, ..., objectiveValue]
             paramData = df[paramNames].values if paramNames else np.array([])
-            if 'objectiveValue' in df.columns:
-                objData = df['objectiveValue'].values.reshape(-1, 1)
+            if "objectiveValue" in df.columns:
+                objData = df["objectiveValue"].values.reshape(-1, 1)
                 if paramData.size > 0:
                     progressData = np.column_stack([paramData, objData])
                 else:
@@ -1130,13 +1215,13 @@ def _readProgressFile(fileName):
 
     # Try legacy TXT format
     try:
-        with open(fileName, 'r') as f:
+        with open(fileName, "r") as f:
             lines = f.readlines()
 
         dataRows = []
         for line in lines:
             line = line.strip()
-            if line and not line.startswith('#'):
+            if line and not line.startswith("#"):
                 try:
                     dataList = ast.literal_eval(line)
                     if isinstance(dataList, list):
@@ -1218,23 +1303,30 @@ def plotParameterPositions(
         if not os.path.exists(resultsFile):
             raise FileNotFoundError(f"Results file not found: {resultsFile}")
 
-        with open(resultsFile, 'r') as f:
+        with open(resultsFile, "r") as f:
             results = json.load(f)
 
         if bestParameters is None:
-            bestParameters = results.get('bestParameters', {})
+            bestParameters = results.get("bestParameters", {})
         if parameterBounds is None:
-            parameterBounds = results.get('variableParameters', results.get('parameterBounds', {}))
+            parameterBounds = results.get(
+                "variableParameters", results.get("parameterBounds", {})
+            )
 
     # Validate inputs
     if not bestParameters:
-        raise ValueError("No best parameters provided. Either specify resultsFile or bestParameters.")
+        raise ValueError(
+            "No best parameters provided. Either specify resultsFile or bestParameters."
+        )
     if not parameterBounds:
-        raise ValueError("No parameter bounds provided. Either specify resultsFile or parameterBounds.")
+        raise ValueError(
+            "No parameter bounds provided. Either specify resultsFile or parameterBounds."
+        )
 
     # Filter parameters based on skipParameters
     filteredParams = {
-        name: value for name, value in bestParameters.items()
+        name: value
+        for name, value in bestParameters.items()
         if name not in skipParameters and name in parameterBounds
     }
 
@@ -1273,8 +1365,12 @@ def plotParameterPositions(
 
         # Create horizontal bar chart with normalized x-axis
         numParams = len(paramNames)
-        figHeight = max(3.5, numParams * 0.8 + 1.5)  # Slightly more space for annotations
-        fig, ax = plt.subplots(figsize=(10, figHeight), dpi=dpi)  # Wider for bounds annotations
+        figHeight = max(
+            3.5, numParams * 0.8 + 1.5
+        )  # Slightly more space for annotations
+        fig, ax = plt.subplots(
+            figsize=(10, figHeight), dpi=dpi
+        )  # Wider for bounds annotations
 
         # Create normalized horizontal bars (all parameters from 0 to 1)
         for i, (name, value) in enumerate(filteredParams.items()):
@@ -1293,67 +1389,68 @@ def plotParameterPositions(
                 1.0,  # Full width = 100% of range
                 left=0.0,
                 height=0.6,
-                color='lightblue',
+                color="lightblue",
                 alpha=0.7,
-                edgecolor='navy',
-                linewidth=1
+                edgecolor="navy",
+                linewidth=1,
             )
 
             # Add optimal value marker at normalized position
             ax.scatter(
-                normalizedValue, y_pos,
-                color='red',
+                normalizedValue,
+                y_pos,
+                color="red",
                 s=80,
                 zorder=5,
-                marker='o',
-                edgecolor='darkred',
-                linewidth=1.5
+                marker="o",
+                edgecolor="darkred",
+                linewidth=1.5,
             )
 
             # Add bounds annotations at bar edges
             # Left bound (minimum)
             ax.annotate(
-                f'{minBound:.3g}',
+                f"{minBound:.3g}",
                 xy=(0.0, y_pos),
                 xytext=(-5, 0),
-                textcoords='offset points',
-                va='center',
-                ha='right',
+                textcoords="offset points",
+                va="center",
+                ha="right",
                 fontsize=plt.rcParams["font.size"] * 0.8,
-                color='navy',
-                fontweight='bold'
+                color="navy",
+                fontweight="bold",
             )
 
             # Right bound (maximum)
             ax.annotate(
-                f'{maxBound:.3g}',
+                f"{maxBound:.3g}",
                 xy=(1.0, y_pos),
                 xytext=(5, 0),
-                textcoords='offset points',
-                va='center',
-                ha='left',
+                textcoords="offset points",
+                va="center",
+                ha="left",
                 fontsize=plt.rcParams["font.size"] * 0.8,
-                color='navy',
-                fontweight='bold'
+                color="navy",
+                fontweight="bold",
             )
 
             # Add optimal value and percentage annotation above the marker
             percentage = normalizedValue * 100
             ax.annotate(
-                f'{value:.3g} ({percentage:.1f}%)',
+                f"{value:.3g} ({percentage:.1f}%)",
                 xy=(normalizedValue, y_pos),
                 xytext=(0, 15),
-                textcoords='offset points',
-                va='bottom',
-                ha='center',
+                textcoords="offset points",
+                va="bottom",
+                ha="center",
                 fontsize=plt.rcParams["font.size"] * 0.85,
-                fontweight='bold',
+                fontweight="bold",
                 bbox=dict(
-                    boxstyle='round,pad=0.3',
-                    facecolor='white',
+                    boxstyle="round,pad=0.3",
+                    facecolor="white",
                     alpha=0.9,
-                    edgecolor='gray'
-                )
+                    edgecolor="gray",
+                ),
             )
 
         # Format axes with normalized scale
@@ -1362,18 +1459,21 @@ def plotParameterPositions(
         ax.set_yticklabels([paramNames[numParams - 1 - i] for i in range(numParams)])
 
         # Set up normalized x-axis
-        ax.set_xlabel('Normalized Position within Parameter Bounds', fontsize=plt.rcParams["font.size"])
+        ax.set_xlabel(
+            "Normalized Position within Parameter Bounds",
+            fontsize=plt.rcParams["font.size"],
+        )
         ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
-        ax.set_xticklabels(['0%', '25%', '50%', '75%', '100%'])
+        ax.set_xticklabels(["0%", "25%", "50%", "75%", "100%"])
         ax.set_title(plotTitle, fontsize=plt.rcParams["font.size"] * 1.1, pad=20)
 
         # Add grid for easier reading
-        ax.grid(True, alpha=0.3, axis='x')
+        ax.grid(True, alpha=0.3, axis="x")
         ax.set_axisbelow(True)
 
         # Add vertical reference lines at quartiles
         for pos in [0.25, 0.5, 0.75]:
-            ax.axvline(x=pos, color='gray', linestyle='--', alpha=0.3, zorder=1)
+            ax.axvline(x=pos, color="gray", linestyle="--", alpha=0.3, zorder=1)
 
         # Adjust layout to accommodate external legend
         plt.tight_layout()
@@ -1384,20 +1484,40 @@ def plotParameterPositions(
         from matplotlib.lines import Line2D
 
         legendElements = [
-            Patch(facecolor='lightblue', alpha=0.7, edgecolor='navy', label='Normalized Parameter Range (0-100%)'),
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='red',
-                   markersize=8, markeredgecolor='darkred', label='Optimal Value Position'),
-            Line2D([0], [0], color='gray', linestyle='--', alpha=0.5, label='Reference Lines (25%, 50%, 75%)')
+            Patch(
+                facecolor="lightblue",
+                alpha=0.7,
+                edgecolor="navy",
+                label="Normalized Parameter Range (0-100%)",
+            ),
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor="red",
+                markersize=8,
+                markeredgecolor="darkred",
+                label="Optimal Value Position",
+            ),
+            Line2D(
+                [0],
+                [0],
+                color="gray",
+                linestyle="--",
+                alpha=0.5,
+                label="Reference Lines (25%, 50%, 75%)",
+            ),
         ]
 
         ax.legend(
             handles=legendElements,
             bbox_to_anchor=(1.05, 1),  # Outside plot area, top-right
-            loc='upper left',           # Anchor point on legend
+            loc="upper left",  # Anchor point on legend
             frameon=True,
             fancybox=True,
             shadow=True,
-            fontsize=plt.rcParams["font.size"] * 0.8
+            fontsize=plt.rcParams["font.size"] * 0.8,
         )
 
         # Generate output path
@@ -1409,7 +1529,7 @@ def plotParameterPositions(
                 outputPath = "parameter_positions.png"
 
         # Save plot
-        plt.savefig(outputPath, bbox_inches='tight', dpi=dpi)
+        plt.savefig(outputPath, bbox_inches="tight", dpi=dpi)
         plt.close()
 
         print(f"Parameter positions plot saved to: {outputPath}")

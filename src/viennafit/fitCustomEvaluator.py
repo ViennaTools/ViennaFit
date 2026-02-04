@@ -41,7 +41,9 @@ class CustomEvaluator:
         self.variableValues = (
             {}
         )  # Dict[str, List[float]] - parameter name to list of values
-        self.pairedVariableValues = None  # List[Dict[str, float]] - specific parameter combinations (not grid)
+        self.pairedVariableValues = (
+            None  # List[Dict[str, float]] - specific parameter combinations (not grid)
+        )
         self.distanceMetric = None
         self._distanceMetricFunction = None
         self.additionalDistanceMetrics = []  # List of additional metric names
@@ -49,7 +51,9 @@ class CustomEvaluator:
         self._isMultiDomainProcess = False
         self._gridResults = []  # List of evaluation results
         self._evaluationName = None
-        self._savedProcessSequencePath = None  # Path to saved process sequence in customEvaluations
+        self._savedProcessSequencePath = (
+            None  # Path to saved process sequence in customEvaluations
+        )
         self._isCompleteRun = None  # True if loaded from complete run, False if incomplete, None if not loaded
 
         # Check project readiness
@@ -252,9 +256,7 @@ class CustomEvaluator:
             # Load fixed parameters from metadata
             try:
                 metadata = self._loadMetadataFile(runDir, runName)
-                self._fixedParameters = deepcopy(
-                    metadata.get("fixedParameters", {})
-                )
+                self._fixedParameters = deepcopy(metadata.get("fixedParameters", {}))
             except FileNotFoundError as e:
                 print(f"  Warning: Could not load metadata file: {e}")
                 print("  Proceeding with no fixed parameters")
@@ -446,7 +448,9 @@ class CustomEvaluator:
 
         print(f"Loaded process sequence from: {os.path.basename(filePath)}")
         print(f"  Function: {self._processSequence.__name__}")
-        print(f"  Multi-domain support: {'Yes' if self._isMultiDomainProcess else 'No'}")
+        print(
+            f"  Multi-domain support: {'Yes' if self._isMultiDomainProcess else 'No'}"
+        )
 
         return self
 
@@ -526,7 +530,9 @@ class CustomEvaluator:
         self._isMultiDomainProcess = self._detectMultiDomainProcess()
 
         print(f"Set process sequence: {processSequence.__name__}")
-        print(f"  Multi-domain support: {'Yes' if self._isMultiDomainProcess else 'No'}")
+        print(
+            f"  Multi-domain support: {'Yes' if self._isMultiDomainProcess else 'No'}"
+        )
 
         return self
 
@@ -708,7 +714,9 @@ class CustomEvaluator:
                 sparseFieldExpansionWidth=sparseFieldExpansionWidth,
             )
 
-        print(f"Set {len(self.additionalDistanceMetrics)} additional metrics: {', '.join(self.additionalDistanceMetrics)}")
+        print(
+            f"Set {len(self.additionalDistanceMetrics)} additional metrics: {', '.join(self.additionalDistanceMetrics)}"
+        )
         return self
 
     def setVariableValues(
@@ -836,9 +844,7 @@ class CustomEvaluator:
         # Use existing paired values method
         self.setVariableValuesPaired(repeatedParams)
 
-        print(
-            f"Set {numRepeats} identical evaluations for repeatability testing"
-        )
+        print(f"Set {numRepeats} identical evaluations for repeatability testing")
         print(f"Parameters held constant: {', '.join(sorted(parameters.keys()))}")
 
         return self
@@ -894,7 +900,9 @@ class CustomEvaluator:
             )
 
         if not self.variableValues and not self.pairedVariableValues:
-            raise ValueError("No variable values set. Call setVariableValues() or setVariableValuesPaired() first.")
+            raise ValueError(
+                "No variable values set. Call setVariableValues() or setVariableValuesPaired() first."
+            )
 
         # Validate multi-domain setup
         validationIssues = self.validateMultiDomainSetup()
@@ -1071,7 +1079,10 @@ class CustomEvaluator:
                     # Calculate additional metrics
                     additionalMetricValues = {}
                     additionalMetricTimes = {}
-                    for metricName, metricFunc in self._additionalDistanceMetricFunctions.items():
+                    for (
+                        metricName,
+                        metricFunc,
+                    ) in self._additionalDistanceMetricFunctions.items():
                         additionalMetricStartTime = time.time()
                         additionalMetricValues[metricName] = metricFunc(
                             resultLevelSets,
@@ -1079,7 +1090,9 @@ class CustomEvaluator:
                             saveAllMetricVisualizations,  # Save visualization if requested
                             writePath,
                         )
-                        additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
+                        additionalMetricTimes[metricName] = (
+                            time.time() - additionalMetricStartTime
+                        )
 
                 else:
                     # Single-domain processing (backward compatibility)
@@ -1122,7 +1135,10 @@ class CustomEvaluator:
                     # Calculate additional metrics
                     additionalMetricValues = {}
                     additionalMetricTimes = {}
-                    for metricName, metricFunc in self._additionalDistanceMetricFunctions.items():
+                    for (
+                        metricName,
+                        metricFunc,
+                    ) in self._additionalDistanceMetricFunctions.items():
                         additionalMetricStartTime = time.time()
                         additionalMetricValues[metricName] = metricFunc(
                             resultDomain,
@@ -1130,7 +1146,9 @@ class CustomEvaluator:
                             saveAllMetricVisualizations,  # Save visualization if requested
                             writePath,
                         )
-                        additionalMetricTimes[metricName] = time.time() - additionalMetricStartTime
+                        additionalMetricTimes[metricName] = (
+                            time.time() - additionalMetricStartTime
+                        )
 
                 executionTime = time.time() - startTime
 
@@ -1254,7 +1272,8 @@ class CustomEvaluator:
                     if self._savedProcessSequencePath
                     else None
                 ),
-                "processSequenceSavedSuccessfully": self._savedProcessSequencePath is not None,
+                "processSequenceSavedSuccessfully": self._savedProcessSequencePath
+                is not None,
                 "distanceMetric": self.distanceMetric,
                 "additionalDistanceMetrics": self.additionalDistanceMetrics,
                 "totalEvaluations": len(self._gridResults),
@@ -1318,7 +1337,9 @@ class CustomEvaluator:
 
                 # Add primary metric columns
                 if self.distanceMetric:
-                    headers.extend([f"{self.distanceMetric}_value", f"{self.distanceMetric}_time"])
+                    headers.extend(
+                        [f"{self.distanceMetric}_value", f"{self.distanceMetric}_time"]
+                    )
                 else:
                     headers.extend(["objectiveValue", "primaryMetricTime"])
 

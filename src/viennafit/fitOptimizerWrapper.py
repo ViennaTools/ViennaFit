@@ -168,11 +168,19 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
         """Check if early stopping criterion is met."""
         if self._optimization.earlyStoppingPatience is None:
             return False
-        if self._optimization._evalCounter < self._optimization.earlyStoppingMinEvaluations:
+        if (
+            self._optimization._evalCounter
+            < self._optimization.earlyStoppingMinEvaluations
+        ):
             return False
-        return self._optimization._evaluationsSinceImprovement >= self._optimization.earlyStoppingPatience
+        return (
+            self._optimization._evaluationsSinceImprovement
+            >= self._optimization.earlyStoppingPatience
+        )
 
-    def optimize(self, numEvaluations: int) -> Dict[str, Any]:  # numEvaluations is validated in apply(), unused here
+    def optimize(
+        self, numEvaluations: int
+    ) -> Dict[str, Any]:  # numEvaluations is validated in apply(), unused here
         """Run Bayesian optimization using Ax with BoTorch qEI acquisition function."""
         from ax import Client, RangeParameterConfig
         from .fitExceptions import EarlyStoppingException
@@ -183,8 +191,12 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
 
         # Get batch configuration (already validated in apply())
         batchSize = getattr(self._optimization, "batchSize", 4)
-        initialSamples = getattr(self._optimization, "initialSamples", max(5, 2 * len(parameterNames)))
-        numBatches = self._optimization.numBatches  # Guaranteed to be set by apply() validation
+        initialSamples = getattr(
+            self._optimization, "initialSamples", max(5, 2 * len(parameterNames))
+        )
+        numBatches = (
+            self._optimization.numBatches
+        )  # Guaranteed to be set by apply() validation
 
         # Calculate total evaluations
         totalEvaluations = initialSamples + (numBatches * batchSize)
@@ -193,17 +205,24 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
         print(f"  Initial samples (Sobol): {initialSamples}")
         print(f"  Batch size: {batchSize}")
         print(f"  Number of batches: {numBatches}")
-        print(f"  Total evaluations: {totalEvaluations} = {initialSamples} + ({numBatches} × {batchSize})")
+        print(
+            f"  Total evaluations: {totalEvaluations} = {initialSamples} + ({numBatches} × {batchSize})"
+        )
 
         # Get primary metric name for objective
-        primaryMetricName = getattr(self._optimization, "_primaryDistanceMetric", None) or self._optimization.distanceMetric
+        primaryMetricName = (
+            getattr(self._optimization, "_primaryDistanceMetric", None)
+            or self._optimization.distanceMetric
+        )
 
         # Create Ax client
         axClient = Client(random_seed=None)
 
         # Configure experiment with parameter space
         parameters = []
-        for paramName, (lower, upper) in zip(parameterNames, zip(lowerBounds, upperBounds)):
+        for paramName, (lower, upper) in zip(
+            parameterNames, zip(lowerBounds, upperBounds)
+        ):
             parameters.append(
                 RangeParameterConfig(
                     name=paramName,
@@ -291,7 +310,7 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
         print(f"Primary metric name: {primaryMetricName}")
 
         # Extract objective value
-        bestObjective = float('inf')
+        bestObjective = float("inf")
 
         # The metric is stored with the plain metric name
         print(f"Looking for metric key: '{primaryMetricName}'")

@@ -100,9 +100,7 @@ class RunsSummary:
                 print(f"Warning: Could not load results from {resultsFile}: {e}")
 
         # Sort runs by creation time (most recent first)
-        self._runs.sort(
-            key=lambda x: x.get("createdTime", ""), reverse=True
-        )
+        self._runs.sort(key=lambda x: x.get("createdTime", ""), reverse=True)
 
         # Identify best run (lowest bestScore)
         if self._runs:
@@ -156,14 +154,16 @@ class RunsSummary:
             "projectName": self._projectName,
             "projectPath": self._projectPath,
             "totalRuns": len(self._runs),
-            "bestRun": {
-                "runName": self._bestRun["runName"],
-                "bestScore": self._bestRun["bestScore"],
-                "bestEvaluationNumber": self._bestRun["bestEvaluationNumber"],
-                "createdTime": self._bestRun.get("createdTime", None),
-            }
-            if self._bestRun
-            else None,
+            "bestRun": (
+                {
+                    "runName": self._bestRun["runName"],
+                    "bestScore": self._bestRun["bestScore"],
+                    "bestEvaluationNumber": self._bestRun["bestEvaluationNumber"],
+                    "createdTime": self._bestRun.get("createdTime", None),
+                }
+                if self._bestRun
+                else None
+            ),
             "lastUpdated": datetime.now().isoformat(),
             "runs": self._runs,
         }
@@ -289,7 +289,11 @@ class RunsSummary:
                     pass
 
             # Mark best run with ⭐
-            marker = " ⭐" if self._bestRun and run["runName"] == self._bestRun["runName"] else ""
+            marker = (
+                " ⭐"
+                if self._bestRun and run["runName"] == self._bestRun["runName"]
+                else ""
+            )
             lines.append(
                 f"| {runName}{marker} | {bestScore} | {numEvals} | {bestEvalNum} | {optimizer} | {created} |"
             )
@@ -338,13 +342,15 @@ class RunsSummary:
         )
 
         # Print table header
-        print(
-            f"{'Rank':<6} {'Run Name':<40} {'Best Score':<15} {'Best Eval #':<12}"
-        )
+        print(f"{'Rank':<6} {'Run Name':<40} {'Best Score':<15} {'Best Eval #':<12}")
         print("-" * 80)
 
         for i, run in enumerate(sortedRuns, 1):
-            marker = "⭐" if self._bestRun and run["runName"] == self._bestRun["runName"] else ""
+            marker = (
+                "⭐"
+                if self._bestRun and run["runName"] == self._bestRun["runName"]
+                else ""
+            )
             runName = run["runName"][:38]  # Truncate if too long
             bestScore = f"{run['bestScore']:.6f}"
             bestEvalNum = run.get("bestEvaluationNumber", "N/A")
