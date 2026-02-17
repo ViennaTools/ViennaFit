@@ -55,6 +55,7 @@ class CustomEvaluator:
             None  # Path to saved process sequence in customEvaluations
         )
         self._isCompleteRun = None  # True if loaded from complete run, False if incomplete, None if not loaded
+        self._evaluationNames = None  # Optional list of custom names for each evaluation
 
         # Check project readiness
         if not project.isReady:
@@ -809,6 +810,39 @@ class CustomEvaluator:
         print(f"Parameters: {', '.join(sorted(firstKeys))}")
         return self
 
+    def setEvaluationNames(self, names: List[str]) -> "CustomEvaluator":
+        """
+        Set custom names for each evaluation output.
+
+        If not called, names are auto-generated from parameter values
+        (e.g., "kSigma-500" or "kSigma-500_ionFlux-25" for multiple parameters).
+
+        Args:
+            names: List of names, one per evaluation combination
+
+        Returns:
+            self: For method chaining
+        """
+        self._evaluationNames = names
+        return self
+
+    def _generateOutputName(
+        self, index: int, paramNames: list, combination: tuple
+    ) -> str:
+        """Generate output name for an evaluation based on parameter values."""
+        if self._evaluationNames is not None and index - 1 < len(self._evaluationNames):
+            return self._evaluationNames[index - 1]
+
+        parts = []
+        for paramName, value in zip(paramNames, combination):
+            if isinstance(value, float) and value == int(value):
+                valueStr = str(int(value))
+            else:
+                valueStr = f"{value:g}"
+            parts.append(f"{paramName}-{valueStr}")
+
+        return "_".join(parts)
+
     def setConstantParametersWithRepeats(
         self, parameters: Dict[str, float], numRepeats: int = 10
     ) -> "CustomEvaluator":
@@ -1019,7 +1053,7 @@ class CustomEvaluator:
 
             try:
                 # Generate output name for this evaluation
-                outputName = f"eval_{i:04d}"
+                outputName = self._generateOutputName(i, paramNames, combination)
                 writePath = None
                 if saveVisualization:
                     writePath = os.path.join(outputDir, outputName)
