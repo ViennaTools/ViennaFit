@@ -14,7 +14,7 @@ def openInParaview(
 
     Launches the ParaView GUI with a script that loads .vtp files found in
     the given folder. Each source is renamed to its filename stem in the Pipeline
-    Browser, and a single text annotation summarizes the loaded files.
+    Browser, and each file gets a movable text annotation in the render view.
 
     Parameters
     ----------
@@ -68,7 +68,6 @@ def openInParaview(
     labels = [os.path.splitext(os.path.basename(f))[0] for f in vtp_files]
     labels_repr = repr(labels)
     translations_repr = repr(file_translations)
-    summary_text = f"Folder: {folder}\\nFiles: {len(vtp_files)}"
 
     script_content = f"""\
 from paraview.simple import *
@@ -92,10 +91,15 @@ for filepath, label in zip(files, labels):
     else:
         Show(source, view)
 
-# Add a single summary annotation
-text = Text(Text="{summary_text}")
-textDisplay = Show(text, view)
-textDisplay.WindowLocation = 'Upper Left Corner'
+    # Per-file movable text annotation
+    text = Text(Text=label)
+    textDisplay = Show(text, view)
+    textDisplay.FontFamily = 'Arial'
+    textDisplay.FontSize = 20
+    textDisplay.Color = [0, 0, 0]
+    textDisplay.WindowLocation = 'Any Location'
+    textDisplay.Position = [0.3, 0.5]
+    RenameSource(label + " (label)", text)
 
 ResetCamera()
 Render()
