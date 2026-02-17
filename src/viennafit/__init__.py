@@ -15,6 +15,8 @@ from .fitUtilities import (
     plotParameterPositions,
 )
 
+from .fitParaviewViewer import openInParaview
+
 from .fitExceptions import EarlyStoppingException
 
 __version__ = "2.0.0"
