@@ -55,7 +55,9 @@ class CustomEvaluator:
             None  # Path to saved process sequence in customEvaluations
         )
         self._isCompleteRun = None  # True if loaded from complete run, False if incomplete, None if not loaded
-        self._evaluationNames = None  # Optional list of custom names for each evaluation
+        self._evaluationNames = (
+            None  # Optional list of custom names for each evaluation
+        )
 
         # Check project readiness
         if not project.isReady:

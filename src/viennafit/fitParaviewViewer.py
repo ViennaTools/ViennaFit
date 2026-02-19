@@ -12,7 +12,7 @@ def openInParaview(
     patterns=None,
     translations=None,
     labels=True,
-    label_anchor='y',
+    label_anchor="y",
     mode="2D",
     paraview_executable="paraview",
 ):
@@ -84,9 +84,9 @@ def openInParaview(
     translations_repr = repr(file_translations)
     show_labels = labels
 
-    use_bounds_anchor = label_anchor in ('x', 'y', 'z')
+    use_bounds_anchor = label_anchor in ("x", "y", "z")
     if use_bounds_anchor:
-        _axis_map = {'x': (0, 0), 'y': (2, 1), 'z': (4, 2)}
+        _axis_map = {"x": (0, 0), "y": (2, 1), "z": (4, 2)}
         bounds_min_idx, world_idx = _axis_map[label_anchor]
     else:
         bounds_min_idx, world_idx = 2, 1  # unused placeholders
