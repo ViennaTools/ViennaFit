@@ -232,7 +232,7 @@ class DistanceMetric:
             )
             vls.VTKWriter(mesh, csfPath).apply()
 
-        return csf.getSumSquaredDifferences()
+        return csf.getRMSE()
 
     @staticmethod
     def _compareSparseFieldIterateSample(
@@ -277,7 +277,7 @@ class DistanceMetric:
             )
             vls.VTKWriter(mesh, csfPath).apply()
 
-        return csf.getSumSquaredDifferences()
+        return csf.getRMSE()
 
     @staticmethod
     def _compareAreaAndSparseField(
