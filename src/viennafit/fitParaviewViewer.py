@@ -8,7 +8,13 @@ import tempfile
 
 
 def openInParaview(
-    folder, patterns=None, translations=None, paraview_executable="paraview"
+    folder,
+    patterns=None,
+    translations=None,
+    labels=True,
+    label_anchor='y',
+    mode="2D",
+    paraview_executable="paraview",
 ):
     """Open .vtp files in a folder in ParaView with filename annotations.
 
@@ -34,6 +40,14 @@ def openInParaview(
                 "*wider.vtp": (100, 0, 0),
             }
 
+    labels : bool, optional
+        Whether to show a movable text annotation for each file. Defaults to True.
+    label_anchor : {'x', 'y', 'z', None}, optional
+        Axis whose minimum is used as the world-space anchor for each file's text
+        annotation. Defaults to ``'y'`` (bottom edge of geometry). Pass ``None``
+        to use the file's translation offset instead.
+    mode : {'2D', '3D'}, optional
+        Interaction mode for the ParaView render view. Defaults to ``'2D'``.
     paraview_executable : str, optional
         Path to the ParaView executable. Defaults to "paraview".
     """
@@ -65,9 +79,17 @@ def openInParaview(
 
     # Build lists for the ParaView script
     filepaths_repr = repr(vtp_files)
-    labels = [os.path.splitext(os.path.basename(f))[0] for f in vtp_files]
-    labels_repr = repr(labels)
+    stems = [os.path.splitext(os.path.basename(f))[0] for f in vtp_files]
+    labels_repr = repr(stems)
     translations_repr = repr(file_translations)
+    show_labels = labels
+
+    use_bounds_anchor = label_anchor in ('x', 'y', 'z')
+    if use_bounds_anchor:
+        _axis_map = {'x': (0, 0), 'y': (2, 1), 'z': (4, 2)}
+        bounds_min_idx, world_idx = _axis_map[label_anchor]
+    else:
+        bounds_min_idx, world_idx = 2, 1  # unused placeholders
 
     script_content = f"""\
 from paraview.simple import *
@@ -77,6 +99,9 @@ labels = {labels_repr}
 translations = {translations_repr}
 
 view = GetActiveViewOrCreate('RenderView')
+view.InteractionMode = '{mode}'
+
+text_displays = []
 
 for filepath, label in zip(files, labels):
     source = OpenDataFile(filepath)
@@ -92,16 +117,39 @@ for filepath, label in zip(files, labels):
         Show(source, view)
 
     # Per-file movable text annotation
-    text = Text(Text=label)
-    textDisplay = Show(text, view)
-    textDisplay.FontFamily = 'Arial'
-    textDisplay.FontSize = 20
-    textDisplay.Color = [0, 0, 0]
-    textDisplay.WindowLocation = 'Any Location'
-    textDisplay.Position = [0.3, 0.5]
-    RenameSource(label + " (label)", text)
+    if {show_labels}:
+        text = Text(Text=label)
+        textDisplay = Show(text, view)
+        textDisplay.FontFamily = 'Arial'
+        textDisplay.FontSize = 20
+        textDisplay.Color = [0, 0, 0]
+        textDisplay.WindowLocation = 'Any Location'
+        if {use_bounds_anchor}:
+            bounds = source.GetDataInformation().GetBounds()
+            translation = translations.get(filepath, (0, 0, 0))
+            world_pos = [
+                (bounds[0] + bounds[1]) / 2 + translation[0],
+                (bounds[2] + bounds[3]) / 2 + translation[1],
+                (bounds[4] + bounds[5]) / 2 + translation[2],
+            ]
+            world_pos[{world_idx}] = bounds[{bounds_min_idx}] + translation[{world_idx}]
+        else:
+            world_pos = translations.get(filepath, (0, 0, 0))
+        text_displays.append((textDisplay, world_pos))
+        RenameSource(label + " (label)", text)
 
 ResetCamera()
+Render()
+
+# Place each annotation at the screen position of its file's world-space origin
+renderer = view.GetRenderer()
+size = view.ViewSize
+for textDisplay, world_pos in text_displays:
+    renderer.SetWorldPoint(world_pos[0], world_pos[1], world_pos[2], 1.0)
+    renderer.WorldToDisplay()
+    d = renderer.GetDisplayPoint()
+    textDisplay.Position = [d[0] / size[0], d[1] / size[1]]
+
 Render()
 """
 
