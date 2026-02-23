@@ -31,6 +31,12 @@ class ParameterPlotter(BasePlotter):
             filepaths = self._plotParameterSpaceFromProgress(data, outputDir)
             createdFiles.extend(filepaths)
 
+        # Parameter development over evaluations
+        if data.progressData and "best" in data.progressData and data.metadata:
+            filepath = self._plotParameterDevelopment(data, outputDir)
+            if filepath:
+                createdFiles.append(filepath)
+
         return createdFiles
 
     def _plotParameterPositions(
@@ -361,3 +367,69 @@ class ParameterPlotter(BasePlotter):
         # Implementation would extract parameter values from progress data if available
         # For now, return empty list as this is a lower priority feature
         return []
+
+    def _plotParameterDevelopment(
+        self, data: StudyData, outputDir: str
+    ) -> Optional[str]:
+        """Plot how each variable parameter evolves across all evaluations."""
+        paramBounds = data.metadata.get("parameterBounds")
+        if not paramBounds:
+            return None
+
+        progressBest = data.progressData.get("best")
+        if progressBest is None or not hasattr(progressBest, "values"):
+            return None
+
+        varParamNames = list(paramBounds.keys())
+        # Only keep parameters that actually have columns in the DataFrame
+        varParamNames = [n for n in varParamNames if n in progressBest.columns]
+        if not varParamNames:
+            return None
+
+        evalNumbers = progressBest["evaluationNumber"].values
+
+        n = len(varParamNames)
+        colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+        fig, axes = plt.subplots(
+            n, 1, figsize=(10, max(6, n * 2.5)), sharex=True, squeeze=False
+        )
+        plt.subplots_adjust(hspace=0.35)
+
+        for i, paramName in enumerate(varParamNames):
+            ax = axes[i, 0]
+            paramValues = progressBest[paramName].values
+            color = colors[i % len(colors)]
+
+            # Plot only improvement evaluations (convergence-best style)
+            ax.plot(evalNumbers, paramValues, color=color, linewidth=2)
+            ax.scatter(evalNumbers, paramValues, color=color, s=30, alpha=0.7)
+
+            # Bound reference lines
+            lo, hi = paramBounds[paramName]
+            ax.axhline(lo, color="grey", linestyle="--", linewidth=1, alpha=0.7)
+            ax.axhline(hi, color="grey", linestyle="--", linewidth=1, alpha=0.7)
+            ax.annotate(
+                f"{lo:.3g}",
+                xy=(evalNumbers[0], lo),
+                xytext=(4, 4),
+                textcoords="offset points",
+                fontsize=7,
+                color="grey",
+            )
+            ax.annotate(
+                f"{hi:.3g}",
+                xy=(evalNumbers[0], hi),
+                xytext=(4, 4),
+                textcoords="offset points",
+                fontsize=7,
+                color="grey",
+            )
+
+            ax.set_ylabel(self._formatParameterName(paramName), fontsize=9)
+            ax.grid(True, alpha=0.3)
+
+        axes[-1, 0].set_xlabel("Evaluation Number")
+        fig.suptitle("Variable Parameter Development")
+
+        filename = f"{data.studyName}-parameter-development"
+        return self._savePlot(outputDir, filename)
