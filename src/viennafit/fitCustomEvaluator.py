@@ -1047,8 +1047,11 @@ class CustomEvaluator:
             print(f"\nEvaluation {i}/{len(combinations)}:")
             print("  Variable parameters:")
             for paramName, value in zip(paramNames, combination):
-                optimal = self._optimalParameters[paramName]
-                print(f"    {paramName}: {value:.6f} (optimal: {optimal:.6f})")
+                if paramName in self._optimalParameters:
+                    optimal = self._optimalParameters[paramName]
+                    print(f"    {paramName}: {value:.6f} (optimal: {optimal:.6f})")
+                else:
+                    print(f"    {paramName}: {value:.6f}")
 
             # Execute process sequence
             startTime = time.time()
