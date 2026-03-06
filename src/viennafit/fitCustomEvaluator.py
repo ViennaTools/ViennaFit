@@ -880,6 +880,33 @@ class CustomEvaluator:
         # Use existing paired values method
         self.setVariableValuesPaired(repeatedParams)
 
+        # Build a prefix from parameters that differ from the optimal baseline,
+        # so each evaluation filename encodes what was varied (e.g. "numRays-100_repeat-01")
+        optimalBaseline = {**self._fixedParameters, **self._optimalParameters}
+        variedParams = {
+            k: v
+            for k, v in parameters.items()
+            if k not in optimalBaseline or optimalBaseline[k] != v
+        }
+
+        if variedParams:
+            parts = []
+            for k, v in variedParams.items():
+                if isinstance(v, float) and v == int(v):
+                    valueStr = str(int(v))
+                else:
+                    valueStr = f"{v:g}"
+                parts.append(f"{k}-{valueStr}")
+            prefix = "_".join(parts) + "_"
+        else:
+            prefix = ""
+
+        # Assign zero-padded repeat names so each evaluation gets a unique filename
+        width = len(str(numRepeats))
+        self.setEvaluationNames(
+            [f"{prefix}repeat-{i:0{width}d}" for i in range(1, numRepeats + 1)]
+        )
+
         print(f"Set {numRepeats} identical evaluations for repeatability testing")
         print(f"Parameters held constant: {', '.join(sorted(parameters.keys()))}")
 
