@@ -256,9 +256,7 @@ class BaseObjectiveWrapper:
                 )
 
             # Save comparison files if saveComparison is True and eval is best or saveAll
-            if saveComparison and (
-                saveAll or objectiveValue <= self._study.bestScore
-            ):
+            if saveComparison and (saveAll or objectiveValue <= self._study.bestScore):
                 # Save primary metric visualization
                 self._distanceMetric(
                     resultDomains,
@@ -324,9 +322,7 @@ class BaseObjectiveWrapper:
                 )
 
             # Save comparison files if saveComparison is True and eval is best or saveAll
-            if saveComparison and (
-                saveAll or objectiveValue <= self._study.bestScore
-            ):
+            if saveComparison and (saveAll or objectiveValue <= self._study.bestScore):
                 # Save primary metric visualization
                 self._distanceMetric(
                     resultDomain,

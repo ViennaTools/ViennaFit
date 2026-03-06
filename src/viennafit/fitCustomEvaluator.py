@@ -58,7 +58,9 @@ class CustomEvaluator:
         self._evaluationNames = (
             None  # Optional list of custom names for each evaluation
         )
-        self._isRepeatEvaluation = False  # True when setConstantParametersWithRepeats is used
+        self._isRepeatEvaluation = (
+            False  # True when setConstantParametersWithRepeats is used
+        )
 
         # Check project readiness
         if not project.isReady:
@@ -926,7 +928,9 @@ class CustomEvaluator:
         import numpy as np
 
         n = len(resultDomains)
-        print(f"\nComputing repeatability statistics ({n*(n-1)//2} pairwise comparisons)...")
+        print(
+            f"\nComputing repeatability statistics ({n*(n-1)//2} pairwise comparisons)..."
+        )
 
         distanceFunction = self._distanceMetricFunction
         pairwiseDistances = []
@@ -940,8 +944,8 @@ class CustomEvaluator:
                     dist = distanceFunction(
                         resultDomains[i],
                         resultDomains[j],
-                        False,   # saveComparison — no files written
-                        None,    # writePath
+                        False,  # saveComparison — no files written
+                        None,  # writePath
                     )
                     pairwiseDistances.append(float(dist))
                     pairIndices.append([i + 1, j + 1])
