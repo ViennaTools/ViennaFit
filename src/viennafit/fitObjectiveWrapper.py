@@ -123,7 +123,7 @@ class BaseObjectiveWrapper:
     def _evaluateObjective(
         self,
         paramDict: dict[str, float],
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         saveAll: bool = False,
         variableParamNames: set[str] = None,
     ) -> Tuple[float, float, float, float]:
@@ -255,8 +255,8 @@ class BaseObjectiveWrapper:
                     time.time() - additionalMetricStartTime
                 )
 
-            # Only save visualization if saveAll is True or if current evaluation is better than current best
-            if saveVisualization and (
+            # Save comparison files if saveComparison is True and eval is best or saveAll
+            if saveComparison and (
                 saveAll or objectiveValue <= self._study.bestScore
             ):
                 # Save primary metric visualization
@@ -323,8 +323,8 @@ class BaseObjectiveWrapper:
                     time.time() - additionalMetricStartTime
                 )
 
-            # Only save visualization if saveAll is True or if current evaluation is better than current best
-            if saveVisualization and (
+            # Save comparison files if saveComparison is True and eval is best or saveAll
+            if saveComparison and (
                 saveAll or objectiveValue <= self._study.bestScore
             ):
                 # Save primary metric visualization
@@ -363,7 +363,7 @@ class BaseObjectiveWrapper:
         # Calculate total elapsed time since optimization started
         totalElapsedTime = 0.0
         if (
-            hasattr(self._study, "optimizationStartTime")
+            hasattr(self._study, "_optimizationStartTime")
             and self._study._optimizationStartTime is not None
         ):
             totalElapsedTime = time.time() - self._study._optimizationStartTime
@@ -503,7 +503,7 @@ class BaseObjectiveWrapper:
     def _evaluateObjectiveBatch(
         self,
         paramDictList: list[dict[str, float]],
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         saveAll: bool = False,
     ) -> list[Tuple[float, float, float, float]]:
         """Run process sequence for multiple parameter sets and evaluate results.
@@ -513,7 +513,7 @@ class BaseObjectiveWrapper:
 
         Args:
             paramDictList: List of parameter dictionaries to evaluate
-            saveVisualization: Whether to save visualizations for each evaluation
+            saveComparison: Whether to save comparison metric files for each evaluation
             saveAll: Whether to save all evaluations or only best
 
         Returns:
@@ -523,7 +523,7 @@ class BaseObjectiveWrapper:
         for paramDict in paramDictList:
             result = self._evaluateObjective(
                 paramDict,
-                saveVisualization=saveVisualization,
+                saveComparison=saveComparison,
                 saveAll=saveAll,
             )
             results.append(result)
@@ -568,7 +568,7 @@ class DlibObjectiveWrapper(BaseObjectiveWrapper):
         objectiveValue, elapsedTime, simulationTime, distanceMetricTime = (
             self._evaluateObjective(
                 paramDict,
-                self._study.saveVisualization,
+                self._study.saveComparison,
                 saveAll=self._study.saveAllEvaluations,
             )
         )
@@ -619,7 +619,7 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
         objectiveValue, elapsedTime, simulationTime, distanceMetricTime = (
             self._evaluateObjective(
                 paramDict,
-                self._study.saveVisualization,
+                self._study.saveComparison,
                 saveAll=self._study.saveAllEvaluations,
             )
         )
@@ -669,7 +669,7 @@ class AxObjectiveWrapper(BaseObjectiveWrapper):
         objectiveValue, elapsedTime, simulationTime, distanceMetricTime = (
             self._evaluateObjective(
                 paramDict,
-                self._study.saveVisualization,
+                self._study.saveComparison,
                 saveAll=self._study.saveAllEvaluations,
             )
         )

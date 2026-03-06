@@ -389,7 +389,7 @@ class Optimization(Study):
         self,
         numEvaluations: int = None,
         saveAllEvaluations: bool = False,
-        saveVisualization: bool = True,
+        saveComparison: bool = True,
         saveAdditionalMetricVisualizations: bool = False,
     ):
         """
@@ -399,9 +399,10 @@ class Optimization(Study):
             numEvaluations: Number of evaluations to run (required for dlib/nevergrad, ignored for ax/botorch).
                            For Ax/BoTorch, use setNumBatches() instead.
             saveAllEvaluations: Whether to save all evaluations (not just best)
-            saveVisualization: Whether to save visualization meshes for the primary metric
+            saveComparison: Whether to save comparison metric .vtp files for the primary metric.
+                Convergence/parameter plots are always generated regardless of this flag.
             saveAdditionalMetricVisualizations: Whether to save visualization meshes for additional metrics.
-                Only applies when saveVisualization=True and for best/all evaluations.
+                Only applies when saveComparison=True and for best/all evaluations.
                 Default: False (only primary metric visualizations are saved).
         """
         if not self._applied:
@@ -436,7 +437,7 @@ class Optimization(Study):
                     )
                 self.numEvaluations = numEvaluations
 
-            self.saveVisualization = saveVisualization
+            self.saveComparison = saveComparison
             self.saveAllEvaluations = saveAllEvaluations
             self.saveAdditionalMetricVisualizations = saveAdditionalMetricVisualizations
 
@@ -521,9 +522,8 @@ class Optimization(Study):
                 # Save final results
                 self.saveResults(self.name + "-final-results.json")
 
-                # Save visualization plots if requested
-                if self.saveVisualization:
-                    self.generatePlots()
+                # Always generate convergence/parameter plots
+                self.generatePlots()
 
             else:
                 print("Optimization failed to converge")

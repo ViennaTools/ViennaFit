@@ -279,7 +279,7 @@ class LocalSensitivityStudy(Study):
             # Single evaluation with clean state
             objValue, execTime = objectiveWrapper._evaluateObjective(
                 paramSet,
-                self.saveVisualization,
+                self.saveComparison,
                 saveAll=self.saveAllEvaluations,
                 variableParamNames=variableParamNames,
             )
@@ -365,12 +365,12 @@ class LocalSensitivityStudy(Study):
     def apply(
         self,
         saveAllEvaluations: bool = True,
-        saveVisualization: bool = True,
+        saveComparison: bool = True,
     ):
         """Apply the sensitivity study."""
         if not self._applied:
             self.validate()
-            self.saveVisualization = saveVisualization
+            self.saveComparison = saveComparison
             self.saveAllEvaluations = saveAllEvaluations
 
             # Create directories (similar to fitOptimization.py)

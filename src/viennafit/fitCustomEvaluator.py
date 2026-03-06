@@ -58,6 +58,7 @@ class CustomEvaluator:
         self._evaluationNames = (
             None  # Optional list of custom names for each evaluation
         )
+        self._isRepeatEvaluation = False  # True when setConstantParametersWithRepeats is used
 
         # Check project readiness
         if not project.isReady:
@@ -880,10 +881,102 @@ class CustomEvaluator:
         # Use existing paired values method
         self.setVariableValuesPaired(repeatedParams)
 
+        # Build a prefix from parameters that differ from the optimal baseline,
+        # so each evaluation filename encodes what was varied (e.g. "numRays-100_repeat-01")
+        optimalBaseline = {**self._fixedParameters, **self._optimalParameters}
+        variedParams = {
+            k: v
+            for k, v in parameters.items()
+            if k not in optimalBaseline or optimalBaseline[k] != v
+        }
+
+        if variedParams:
+            parts = []
+            for k, v in variedParams.items():
+                if isinstance(v, float) and v == int(v):
+                    valueStr = str(int(v))
+                else:
+                    valueStr = f"{v:g}"
+                parts.append(f"{k}-{valueStr}")
+            prefix = "_".join(parts) + "_"
+        else:
+            prefix = ""
+
+        # Assign zero-padded repeat names so each evaluation gets a unique filename
+        width = len(str(numRepeats))
+        self.setEvaluationNames(
+            [f"{prefix}repeat-{i:0{width}d}" for i in range(1, numRepeats + 1)]
+        )
+
+        self._isRepeatEvaluation = True
+
         print(f"Set {numRepeats} identical evaluations for repeatability testing")
         print(f"Parameters held constant: {', '.join(sorted(parameters.keys()))}")
 
         return self
+
+    def _computeRepeatabilityStats(self, resultDomains: list, outputDir: str):
+        """
+        Compute pairwise distances between repeat evaluation result domains and save stats.
+
+        For N repeats, computes all N*(N-1)/2 pairwise distances using the chosen distance
+        metric, then saves mean, std, min, max and the full pairwise matrix to
+        repeatability_stats.json in the evaluation output directory.
+        """
+        import numpy as np
+
+        n = len(resultDomains)
+        print(f"\nComputing repeatability statistics ({n*(n-1)//2} pairwise comparisons)...")
+
+        distanceFunction = self._distanceMetricFunction
+        pairwiseDistances = []
+        pairIndices = []
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                if resultDomains[i] is None or resultDomains[j] is None:
+                    continue
+                try:
+                    dist = distanceFunction(
+                        resultDomains[i],
+                        resultDomains[j],
+                        False,   # saveComparison — no files written
+                        None,    # writePath
+                    )
+                    pairwiseDistances.append(float(dist))
+                    pairIndices.append([i + 1, j + 1])
+                except Exception as e:
+                    print(f"  Warning: failed to compare repeats {i+1} and {j+1}: {e}")
+
+        if not pairwiseDistances:
+            print("  No valid pairwise comparisons could be computed.")
+            return
+
+        arr = np.array(pairwiseDistances)
+        stats = {
+            "distanceMetric": self.distanceMetric,
+            "numRepeats": n,
+            "numPairs": len(pairwiseDistances),
+            "mean": float(np.mean(arr)),
+            "std": float(np.std(arr)),
+            "min": float(np.min(arr)),
+            "max": float(np.max(arr)),
+            "pairwiseDistances": [
+                {"pair": idx, "distance": d}
+                for idx, d in zip(pairIndices, pairwiseDistances)
+            ],
+        }
+
+        print(
+            f"  Pairwise {self.distanceMetric}: "
+            f"mean={stats['mean']:.6f}, std={stats['std']:.6f}, "
+            f"min={stats['min']:.6f}, max={stats['max']:.6f}"
+        )
+
+        statsPath = os.path.join(outputDir, "repeatability_stats.json")
+        with open(statsPath, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"  Repeatability stats saved to: {statsPath}")
 
     def getOptimalParameters(self) -> Dict[str, float]:
         """
@@ -899,7 +992,8 @@ class CustomEvaluator:
     def apply(
         self,
         evaluationName: str,
-        saveVisualization: bool = True,
+        saveResultMesh: bool = True,
+        saveComparison: bool = True,
         initialDomainName: str = None,
         saveAllMetricVisualizations: bool = False,
     ) -> List[Dict[str, Any]]:
@@ -908,7 +1002,8 @@ class CustomEvaluator:
 
         Args:
             evaluationName: Name for this custom evaluation run
-            saveVisualization: Whether to save visualization files for primary metric
+            saveResultMesh: Whether to save result domain mesh files (*-result.vtp)
+            saveComparison: Whether to save comparison metric files (*-CA.vtu, *-CCH*.vtp, etc.)
             initialDomainName: Name of the initial domain to use (default uses single domain)
             saveAllMetricVisualizations: Whether to save visualization files for all additional metrics
 
@@ -1034,6 +1129,7 @@ class CustomEvaluator:
             )
 
         distanceFunction = self._distanceMetricFunction
+        _repeatResultDomains = [] if self._isRepeatEvaluation else None
 
         for i, combination in enumerate(combinations, 1):
             # Create parameter set for this combination
@@ -1047,8 +1143,11 @@ class CustomEvaluator:
             print(f"\nEvaluation {i}/{len(combinations)}:")
             print("  Variable parameters:")
             for paramName, value in zip(paramNames, combination):
-                optimal = self._optimalParameters[paramName]
-                print(f"    {paramName}: {value:.6f} (optimal: {optimal:.6f})")
+                if paramName in self._optimalParameters:
+                    optimal = self._optimalParameters[paramName]
+                    print(f"    {paramName}: {value:.6f} (optimal: {optimal:.6f})")
+                else:
+                    print(f"    {paramName}: {value:.6f}")
 
             # Execute process sequence
             startTime = time.time()
@@ -1057,7 +1156,7 @@ class CustomEvaluator:
                 # Generate output name for this evaluation
                 outputName = self._generateOutputName(i, paramNames, combination)
                 writePath = None
-                if saveVisualization:
+                if saveResultMesh or saveComparison:
                     writePath = os.path.join(outputDir, outputName)
 
                 if self._isMultiDomainProcess:
@@ -1091,10 +1190,13 @@ class CustomEvaluator:
                     # Result domains are ViennaLS level sets - use directly
                     resultLevelSets = resultDomains
 
-                    # Save visualization if requested
+                    if _repeatResultDomains is not None:
+                        _repeatResultDomains.append(resultLevelSets)
+
+                    # Save result domain meshes if requested
                     resultPaths = {}
                     resultPath = None
-                    if saveVisualization:
+                    if saveResultMesh:
                         for name, levelSet in resultLevelSets.items():
                             resultPath = f"{writePath}-result-{name}.vtp"
                             resultMesh = vls.Mesh()
@@ -1107,7 +1209,7 @@ class CustomEvaluator:
                     objectiveValue = distanceFunction(
                         resultLevelSets,
                         self.project.targetLevelSets,
-                        saveVisualization,
+                        saveComparison,
                         writePath,
                     )
                     primaryMetricTime = time.time() - primaryMetricStartTime
@@ -1148,11 +1250,13 @@ class CustomEvaluator:
                     # Run process sequence with current parameters on the copy
                     resultDomain = self._processSequence(domainCopy, evalParams)
 
-                    # Save visualization if requested
+                    if _repeatResultDomains is not None:
+                        _repeatResultDomains.append(resultDomain)
+
+                    # Save result domain mesh if requested
                     resultPath = None
                     resultPaths = None
-                    if saveVisualization:
-                        # Save result domain
+                    if saveResultMesh:
                         resultPath = f"{writePath}-result.vtp"
                         resultMesh = vls.Mesh()
                         vls.ToSurfaceMesh(resultDomain, resultMesh).apply()
@@ -1163,7 +1267,7 @@ class CustomEvaluator:
                     objectiveValue = distanceFunction(
                         resultDomain,
                         self.project.targetLevelSet,
-                        saveVisualization,
+                        saveComparison,
                         writePath,
                     )
                     primaryMetricTime = time.time() - primaryMetricStartTime
@@ -1229,6 +1333,10 @@ class CustomEvaluator:
 
         # Save grid results
         self.saveGridReport(outputDir)
+
+        # Pairwise repeatability comparison (only when setConstantParametersWithRepeats was used)
+        if _repeatResultDomains and len(_repeatResultDomains) >= 2:
+            self._computeRepeatabilityStats(_repeatResultDomains, outputDir)
 
         print(f"\nGrid evaluation completed: {len(self._gridResults)} evaluations")
         print(f"Results saved to: {outputDir}")

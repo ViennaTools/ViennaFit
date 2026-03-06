@@ -190,17 +190,17 @@ class DistanceMetric:
     def _compareArea(
         domain1: vls.Domain,
         domain2: vls.Domain,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
     ) -> float:
         """Compare domains using area mismatch."""
         ca = vls.CompareArea(domain1, domain2)
-        if saveVisualization:
+        if saveComparison:
             mesh = vls.Mesh()
             ca.setOutputMesh(mesh)
         ca.apply()
 
-        if saveVisualization:
+        if saveComparison:
             # Save mesh to progress directory with evaluation counter
             caPath = os.path.join(
                 f"{writePath}-CA.vtu",
@@ -213,19 +213,19 @@ class DistanceMetric:
     def _compareSparseField(
         domain1: vls.Domain,
         domain2: vls.Domain,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
         expansionWidth: int = 200,
     ) -> float:
         """Compare domains using sparse field difference."""
         csf = vls.CompareSparseField(domain1, domain2)
         csf.setExpandedLevelSetWidth(expansionWidth)
-        if saveVisualization:
+        if saveComparison:
             mesh = vls.Mesh()
             csf.setOutputMesh(mesh)
         csf.apply()
 
-        if saveVisualization:
+        if saveComparison:
             # Save mesh to progress directory with evaluation counter
             csfPath = os.path.join(
                 f"{writePath}-CSF.vtp",
@@ -238,7 +238,7 @@ class DistanceMetric:
     def _compareSparseFieldIterateSample(
         domain1: vls.Domain,
         domain2: vls.Domain,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
         expansionWidth: int = 200,
     ) -> float:
@@ -255,7 +255,7 @@ class DistanceMetric:
         Args:
             domain1: Sample domain (will be iterated - reduced to sparse field)
             domain2: Target domain (will be expanded as reference)
-            saveVisualization: Whether to save visualization files
+            saveComparison: Whether to save visualization files
             writePath: Path for saving visualization files
             expansionWidth: Expansion width for target domain (default: 200)
 
@@ -265,12 +265,12 @@ class DistanceMetric:
         # SWAP: Pass domain2 as expanded, domain1 as iterated
         csf = vls.CompareSparseField(domain2, domain1)
         csf.setExpandedLevelSetWidth(expansionWidth)
-        if saveVisualization:
+        if saveComparison:
             mesh = vls.Mesh()
             csf.setOutputMesh(mesh)
         csf.apply()
 
-        if saveVisualization:
+        if saveComparison:
             # Save mesh to progress directory with evaluation counter
             csfPath = os.path.join(
                 f"{writePath}-CSF-IS.vtp",
@@ -283,7 +283,7 @@ class DistanceMetric:
     def _compareAreaAndSparseField(
         domain1: vls.Domain,
         domain2: vls.Domain,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
         expansionWidth: int = 200,
     ) -> float:
@@ -292,7 +292,7 @@ class DistanceMetric:
         csf = vls.CompareSparseField(domain1, domain2)
         csf.setExpandedLevelSetWidth(expansionWidth)
 
-        if saveVisualization:
+        if saveComparison:
             caMesh = vls.Mesh()
             csfMesh = vls.Mesh()
             ca.setOutputMesh(caMesh)
@@ -301,7 +301,7 @@ class DistanceMetric:
         ca.apply()
         csf.apply()
 
-        if saveVisualization:
+        if saveComparison:
             # Save meshes to progress directory with evaluation counter
             caPath = os.path.join(
                 f"{writePath}-CA.vtu",
@@ -318,17 +318,17 @@ class DistanceMetric:
     def _compareNarrowBand(
         domain1: vls.Domain,
         domain2: vls.Domain,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
     ) -> float:
         """Compare domains using narrow band difference."""
         cnb = vls.CompareNarrowBand(domain1, domain2)
-        if saveVisualization:
+        if saveComparison:
             mesh = vls.Mesh()
             cnb.setOutputMesh(mesh)
         cnb.apply()
 
-        if saveVisualization:
+        if saveComparison:
             # Save mesh to progress directory with evaluation counter
             cnbPath = f"{writePath}-CNB.vtp"
             vls.VTKWriter(mesh, cnbPath).apply()
@@ -339,14 +339,14 @@ class DistanceMetric:
     def _compareAreaAndNarrowBand(
         domain1: vls.Domain,
         domain2: vls.Domain,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
     ) -> float:
         """Compare domains using both area and narrow band metrics."""
         ca = vls.CompareArea(domain1, domain2)
         cnb = vls.CompareNarrowBand(domain1, domain2)
 
-        if saveVisualization:
+        if saveComparison:
             caMesh = vls.Mesh()
             cnbMesh = vls.Mesh()
             ca.setOutputMesh(caMesh)
@@ -355,7 +355,7 @@ class DistanceMetric:
         ca.apply()
         cnb.apply()
 
-        if saveVisualization:
+        if saveComparison:
             # Save meshes to progress directory with evaluation counter
             caPath = f"{writePath}-CA.vtu"
             cnbPath = f"{writePath}-CNB.vtp"
@@ -368,7 +368,7 @@ class DistanceMetric:
     def _compareCriticalDimensions(
         domain1: vls.Domain,
         domain2: vls.Domain,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
         ranges: list[dict] = None,
     ) -> float:
@@ -378,7 +378,7 @@ class DistanceMetric:
         Args:
             domain1: First domain to compare
             domain2: Second domain to compare
-            saveVisualization: Whether to save visualization files
+            saveComparison: Whether to save visualization files
             writePath: Path for saving visualization files
             ranges: List of range configurations. Each dict should have:
                 - 'axis': 'x' or 'y' (the axis to scan along)
@@ -413,13 +413,13 @@ class DistanceMetric:
             else:  # axis == 'y'
                 ccd.addYRange(float(minVal), float(maxVal), bool(findMaximum))
 
-        if saveVisualization:
+        if saveComparison:
             mesh = vls.Mesh()
             ccd.setOutputMesh(mesh)
 
         ccd.apply()
 
-        if saveVisualization:
+        if saveComparison:
             # Save mesh to progress directory with evaluation counter
             ccdPath = f"{writePath}-CCD.vtp"
             vls.VTKWriter(mesh, ccdPath).apply()
@@ -430,7 +430,7 @@ class DistanceMetric:
     def _compareChamfer(
         domain1: vls.Domain,
         domain2: vls.Domain,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
     ) -> float:
         """
@@ -443,7 +443,7 @@ class DistanceMetric:
         Args:
             domain1: Target domain (reference)
             domain2: Sample domain (to compare)
-            saveVisualization: Whether to save visualization files
+            saveComparison: Whether to save visualization files
             writePath: Path for saving visualization files
 
         Returns:
@@ -451,7 +451,7 @@ class DistanceMetric:
         """
         cch = vls.CompareChamfer(domain1, domain2)
 
-        if saveVisualization:
+        if saveComparison:
             targetMesh = vls.Mesh()
             sampleMesh = vls.Mesh()
             cch.setOutputMeshTarget(targetMesh)
@@ -459,7 +459,7 @@ class DistanceMetric:
 
         cch.apply()
 
-        if saveVisualization:
+        if saveComparison:
             # Save meshes to show distance distributions on both surfaces
             targetPath = f"{writePath}-CCH-target.vtp"
             samplePath = f"{writePath}-CCH-sample.vtp"
@@ -472,7 +472,7 @@ class DistanceMetric:
     def _compareMultipleDomains(
         resultDomains: dict[str, vls.Domain],
         targetDomains: dict[str, vls.Domain],
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
         writePath: str = None,
         singleDomainMetric: Callable = None,
     ) -> float:
@@ -482,7 +482,7 @@ class DistanceMetric:
         Args:
             resultDomains: Dictionary of result domains keyed by domain name
             targetDomains: Dictionary of target domains keyed by domain name
-            saveVisualization: Whether to save visualization files
+            saveComparison: Whether to save visualization files
             writePath: Base path for saving visualization files
             singleDomainMetric: Single domain comparison function to use
 
@@ -508,12 +508,12 @@ class DistanceMetric:
 
             # Create domain-specific write path if visualization is enabled
             domainWritePath = None
-            if saveVisualization and writePath:
+            if saveComparison and writePath:
                 domainWritePath = f"{writePath}-{domainName}"
 
             # Calculate distance for this domain pair
             distance = singleDomainMetric(
-                resultDomain, targetDomain, saveVisualization, domainWritePath
+                resultDomain, targetDomain, saveComparison, domainWritePath
             )
 
             totalDistance += distance

@@ -70,7 +70,7 @@ class Study:
         self.criticalDimensionRanges = None
         self.sparseFieldExpansionWidth = 200
         self._evalCounter = 0
-        self.saveVisualization = True
+        self.saveComparison = True
         self.saveAllEvaluations = False
         self.saveAdditionalMetricVisualizations = False
 
@@ -328,7 +328,7 @@ class Study:
             sparseFieldExpansionWidth: Expansion width for CSF metric (default: 200).
                     Applied to all CSF-based metrics to ensure sufficient overlap.
             saveAdditionalMetricVisualizations: Whether to save visualization meshes for additional metrics.
-                    Only applies when saveVisualization=True in apply() and for best/all evaluations.
+                    Only applies when saveComparison=True in apply() and for best/all evaluations.
                     Default: False (only primary metric visualizations are saved).
         """
         availableMetrics = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD", "CCH"]
