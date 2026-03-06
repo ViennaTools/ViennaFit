@@ -926,7 +926,8 @@ class CustomEvaluator:
     def apply(
         self,
         evaluationName: str,
-        saveVisualization: bool = True,
+        saveResultMesh: bool = True,
+        saveComparison: bool = True,
         initialDomainName: str = None,
         saveAllMetricVisualizations: bool = False,
     ) -> List[Dict[str, Any]]:
@@ -935,7 +936,8 @@ class CustomEvaluator:
 
         Args:
             evaluationName: Name for this custom evaluation run
-            saveVisualization: Whether to save visualization files for primary metric
+            saveResultMesh: Whether to save result domain mesh files (*-result.vtp)
+            saveComparison: Whether to save comparison metric files (*-CA.vtu, *-CCH*.vtp, etc.)
             initialDomainName: Name of the initial domain to use (default uses single domain)
             saveAllMetricVisualizations: Whether to save visualization files for all additional metrics
 
@@ -1087,7 +1089,7 @@ class CustomEvaluator:
                 # Generate output name for this evaluation
                 outputName = self._generateOutputName(i, paramNames, combination)
                 writePath = None
-                if saveVisualization:
+                if saveResultMesh or saveComparison:
                     writePath = os.path.join(outputDir, outputName)
 
                 if self._isMultiDomainProcess:
@@ -1121,10 +1123,10 @@ class CustomEvaluator:
                     # Result domains are ViennaLS level sets - use directly
                     resultLevelSets = resultDomains
 
-                    # Save visualization if requested
+                    # Save result domain meshes if requested
                     resultPaths = {}
                     resultPath = None
-                    if saveVisualization:
+                    if saveResultMesh:
                         for name, levelSet in resultLevelSets.items():
                             resultPath = f"{writePath}-result-{name}.vtp"
                             resultMesh = vls.Mesh()
@@ -1137,7 +1139,7 @@ class CustomEvaluator:
                     objectiveValue = distanceFunction(
                         resultLevelSets,
                         self.project.targetLevelSets,
-                        saveVisualization,
+                        saveComparison,
                         writePath,
                     )
                     primaryMetricTime = time.time() - primaryMetricStartTime
@@ -1178,11 +1180,10 @@ class CustomEvaluator:
                     # Run process sequence with current parameters on the copy
                     resultDomain = self._processSequence(domainCopy, evalParams)
 
-                    # Save visualization if requested
+                    # Save result domain mesh if requested
                     resultPath = None
                     resultPaths = None
-                    if saveVisualization:
-                        # Save result domain
+                    if saveResultMesh:
                         resultPath = f"{writePath}-result.vtp"
                         resultMesh = vls.Mesh()
                         vls.ToSurfaceMesh(resultDomain, resultMesh).apply()
@@ -1193,7 +1194,7 @@ class CustomEvaluator:
                     objectiveValue = distanceFunction(
                         resultDomain,
                         self.project.targetLevelSet,
-                        saveVisualization,
+                        saveComparison,
                         writePath,
                     )
                     primaryMetricTime = time.time() - primaryMetricStartTime

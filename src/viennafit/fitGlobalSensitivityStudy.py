@@ -196,7 +196,7 @@ class GlobalSensitivityStudy(Study):
     def apply(
         self,
         saveAllEvaluations: bool = False,
-        saveVisualization: bool = False,
+        saveComparison: bool = False,
     ):
         """Apply the global sensitivity study."""
         if not self._applied:
@@ -206,7 +206,7 @@ class GlobalSensitivityStudy(Study):
             # This catches cases where parameters were set after setSamplingOptions
             self._validateSecondOrderSamples()
 
-            self.saveVisualization = saveVisualization
+            self.saveComparison = saveComparison
             self.saveAllEvaluations = saveAllEvaluations
             self._applied = True
             self._evalCounter = 0
@@ -292,7 +292,7 @@ class GlobalSensitivityStudy(Study):
 
                 # Evaluate
                 objectiveValue, elapsedTime = objectiveWrapper._evaluateObjective(
-                    paramDict, self.saveVisualization
+                    paramDict, self.saveComparison
                 )
 
                 Y[i] = objectiveValue
