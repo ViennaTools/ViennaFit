@@ -363,7 +363,7 @@ class BaseObjectiveWrapper:
         # Calculate total elapsed time since optimization started
         totalElapsedTime = 0.0
         if (
-            hasattr(self._study, "optimizationStartTime")
+            hasattr(self._study, "_optimizationStartTime")
             and self._study._optimizationStartTime is not None
         ):
             totalElapsedTime = time.time() - self._study._optimizationStartTime
