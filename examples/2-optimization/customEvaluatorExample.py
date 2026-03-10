@@ -39,7 +39,7 @@ for paramName, value in optimalParams.items():
 # Run the grid evaluation
 # This will evaluate all combinations of the variable parameters
 # while keeping other parameters at their optimal values
-results = evaluator.apply(evaluationName="parameterSweep1", saveVisualization=True)
+results = evaluator.apply(evaluationName="parameterSweep1", saveComparison=True)
 
 # Get and display the best result from the grid
 bestResult = evaluator.getBestResult()

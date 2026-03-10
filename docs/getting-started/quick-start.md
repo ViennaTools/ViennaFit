@@ -196,7 +196,7 @@ Execute the optimization:
 print("Starting optimization...")
 opt.apply(
     numEvaluations=50,        # Try 50 parameter combinations
-    saveVisualization=True     # Save domain visualizations
+    saveComparison=True     # Save domain visualizations
 )
 print("Optimization complete!")
 ```
@@ -261,7 +261,7 @@ for param, value in results['bestParameters'].items():
 
 ### Visualize Convergence
 
-If `saveVisualization=True`, convergence plots are in the `plots/` directory:
+If `saveComparison=True`, convergence plots are in the `plots/` directory:
 
 - `convergence_plot.png` - Objective value vs evaluation number
 - `parameter_evolution.png` - How parameters changed during optimization
@@ -334,7 +334,7 @@ opt.setVariableParameters({
 })
 opt.setDistanceMetrics(primaryMetric="CA")
 opt.setName("run1")
-opt.apply(numEvaluations=50, saveVisualization=True)
+opt.apply(numEvaluations=50, saveComparison=True)
 
 # View results
 results_dir = os.path.join(project.projectPath, "optimizationRuns", "run1")

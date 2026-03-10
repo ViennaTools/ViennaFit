@@ -33,4 +33,4 @@ evaluator.setDistanceMetric("CCH")
 
 # Run the repeated evaluation
 # Uses the same process sequence as the loaded optimization run
-results = evaluator.apply(evaluationName="repeatedEvaluation", saveVisualization=True)
+results = evaluator.apply(evaluationName="repeatedEvaluation", saveComparison=True)
