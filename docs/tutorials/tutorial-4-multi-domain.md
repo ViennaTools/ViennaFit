@@ -389,7 +389,7 @@ print("Note: Twice as many simulations per evaluation!")
 
 opt.apply(
     numEvaluations=100,
-    saveVisualization=True
+    saveComparison=True
 )
 
 print("\n" + "="*60)
@@ -591,7 +591,7 @@ opt.setDistanceMetrics(primaryMetric="CCH")
 opt.setName("run1_multiDomain")
 
 # Run
-opt.apply(numEvaluations=100, saveVisualization=True)
+opt.apply(numEvaluations=100, saveComparison=True)
 ```
 
 ## Key Takeaways

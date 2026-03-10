@@ -103,4 +103,4 @@ opt1.setName("run1")
 
 opt1.setNotes("Basic optimization of the multiparticle process for deposition.")
 
-opt1.apply(numEvaluations=100, saveVisualization=True)
+opt1.apply(numEvaluations=100, saveComparison=True)

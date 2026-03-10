@@ -1,6 +1,6 @@
 # ViennaFit
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 A Python package for parameter optimization and calibration of ViennaPS process simulation models. ViennaFit automates the fitting of simulation parameters to match experimental data through various optimization algorithms and distance metrics.
@@ -138,7 +138,7 @@ If you use ViennaFit in your research, please cite:
 
 ## License
 
-ViennaFit is released under the MIT License. See [LICENSE](LICENSE) for details.
+ViennaFit is released under the GNU General Public License v3. See [LICENSE](LICENSE) for details.
 
 ## Support
 

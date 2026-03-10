@@ -118,7 +118,7 @@ print(f"\nGrid defined: 5 × 5 = 25 evaluations")
 # Execute grid evaluation
 results = evaluator.apply(
     evaluationName="parameterGrid_ionAndEtchant",
-    saveVisualization=False  # Don't save all 25 VTP files
+    saveComparison=False  # Don't save all 25 VTP files
 )
 
 print(f"\nGrid evaluation complete!")
@@ -223,7 +223,7 @@ evaluator.setDistanceMetric("CCH")
 # Run evaluation
 specific_results = evaluator.apply(
     evaluationName="specificCombinations",
-    saveVisualization=True  # Save these for detailed analysis
+    saveComparison=True  # Save these for detailed analysis
 )
 
 # Analyze
@@ -264,7 +264,7 @@ evaluator.setDistanceMetric("CCH")
 # Execute
 repeat_results = evaluator.apply(
     evaluationName="repeatabilityTest",
-    saveVisualization=False
+    saveComparison=False
 )
 
 print(f"\nRepeatability test complete: {len(repeat_results)} runs")

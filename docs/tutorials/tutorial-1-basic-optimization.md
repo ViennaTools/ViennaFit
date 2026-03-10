@@ -348,7 +348,7 @@ print("="*60)
 
 opt.apply(
     numEvaluations=100,         # Try 100 parameter combinations
-    saveVisualization=True      # Save intermediate results
+    saveComparison=True      # Save intermediate results
 )
 
 print("\n" + "="*60)
@@ -551,7 +551,7 @@ opt2 = fit.Optimization(project)
 # ... configure same as before ...
 opt.setName("run2_continued")
 # Use run1 results as starting point
-opt.apply(numEvaluations=50, saveVisualization=True)
+opt.apply(numEvaluations=50, saveComparison=True)
 ```
 
 **Option 2: Narrow Bounds**
@@ -619,7 +619,7 @@ opt.setDistanceMetrics(primaryMetric="CCH", additionalMetrics=["CA"])
 opt.setName("run1_initialCalibration")
 
 # Run
-opt.apply(numEvaluations=100, saveVisualization=True)
+opt.apply(numEvaluations=100, saveComparison=True)
 
 # Analyze
 results_dir = os.path.join(project.projectPath, "optimizationRuns", "run1_initialCalibration")

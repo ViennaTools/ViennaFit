@@ -24,9 +24,7 @@ singleParamValues = {
 }
 
 evaluator.setVariableValues(singleParamValues)
-results = evaluator.apply(
-    evaluationName="singleParameterSweep", saveVisualization=False
-)
+results = evaluator.apply(evaluationName="singleParameterSweep", saveComparison=False)
 
 print(f"Evaluated {len(results)} parameter combinations")
 bestResult = evaluator.getBestResult()
@@ -47,7 +45,7 @@ twoParamValues = {
 }
 
 evaluator2.setVariableValues(twoParamValues)
-results2 = evaluator2.apply(evaluationName="twoParameterStudy", saveVisualization=False)
+results2 = evaluator2.apply(evaluationName="twoParameterStudy", saveComparison=False)
 
 print(f"Evaluated {len(results2)} parameter combinations")
 bestResult2 = evaluator2.getBestResult()

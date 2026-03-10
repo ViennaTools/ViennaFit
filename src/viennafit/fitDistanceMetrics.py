@@ -441,15 +441,15 @@ class DistanceMetric:
         the RMS Chamfer distance which provides a robust measure of shape similarity.
 
         Args:
-            domain1: Target domain (reference)
-            domain2: Sample domain (to compare)
+            domain1: Sample domain (result to compare)
+            domain2: Target domain (reference)
             saveComparison: Whether to save visualization files
             writePath: Path for saving visualization files
 
         Returns:
             RMS Chamfer distance between the two surfaces
         """
-        cch = vls.CompareChamfer(domain1, domain2)
+        cch = vls.CompareChamfer(domain2, domain1)
 
         if saveComparison:
             targetMesh = vls.Mesh()

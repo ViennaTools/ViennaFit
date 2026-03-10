@@ -42,4 +42,4 @@ gss.setDistanceMetric("CA+CSF")
 gss.setSamplingOptions(numSamples=1000, secondOrder=True)
 
 # Run the sensitivity analysis
-gss.apply(saveVisualization=False)
+gss.apply(saveComparison=False)
