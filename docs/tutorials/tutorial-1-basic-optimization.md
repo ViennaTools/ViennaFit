@@ -1,3 +1,16 @@
+---
+jupytext:
+  formats: "docs/tutorials//md,notebooks//ipynb"
+  text_representation:
+    extension: .md
+    format_name: markdown
+    format_version: '1.3'
+kernelspec:
+  display_name: Python 3
+  language: python
+  name: python3
+---
+
 # Tutorial 1: Basic Optimization
 
 Learn the complete optimization workflow from project setup to result analysis through a realistic plasma etching calibration example.
@@ -27,10 +40,11 @@ You have SEM cross-section images of a plasma-etched silicon trench and want to 
 **Process:** SF6/C4F8 plasma etching (Bosch process)
 
 **Parameters to calibrate:**
-- Ion flux density
-- Neutral (etchant) flux density
+- Ion source power (controls angular distribution)
+- Neutral etchant rate
 - Ion mean energy
 - Neutral sticking probability
+- Ion etch rate
 
 **Goal:** Find parameters that make simulated profile match experimental cross-section
 
@@ -80,61 +94,27 @@ projects/etchCalibration/
 
 ## Step 2: Set the Initial Domain for your project
 
-Define the initial substrate geometry before etching:
+Define the initial substrate geometry before etching. `vps.MakeTrench` with `makeMask=True`
+creates a silicon substrate with a patterned mask (opening of `trenchWidth`) on top — no trench
+cut into the substrate yet:
 
 ```python
 # Grid resolution
 gridDelta = 5.0  # nm
 
-# Create 2D domain
-initialDomain = vps.Domain(
+initialDomain = vps.Domain()
+vps.MakeTrench(
+    initialDomain,
     gridDelta=gridDelta,
-    xExtent=600.0,      # 600nm wide
-    yExtent=400.0,      # 400nm tall
-    boundary=vps.BoundaryType.REFLECTIVE_BOUNDARY
-)
-
-# Create substrate level set (silicon)
-substrate = vls.Domain(
-    [-300, 300, -200, 200],  # Bounds
-    [vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
-     vls.BoundaryConditionEnum.INFINITE_BOUNDARY],
-    gridDelta
-)
-
-# Simple flat substrate with mask opening
-# Substrate extends from y=-200 to y=50
-vls.MakeGeometry(
-    substrate,
-    vls.lsBox([0, -200], [600, 50])  # Full substrate
+    xExtent=600.0,       # 600nm wide
+    yExtent=400.0,       # 400nm tall
+    trenchWidth=200.0,   # mask opening width (x=-100 to x=100)
+    trenchDepth=50.0,    # mask height (nm)
+    makeMask=True,       # substrate + mask with opening; no trench yet
+    material=vps.Material.Si
 ).apply()
 
-# Create mask (SiO2) - opening from x=100 to x=500
-mask = vls.Domain(
-    [-300, 300, -200, 200],
-    [vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
-     vls.BoundaryConditionEnum.INFINITE_BOUNDARY],
-    gridDelta
-)
-vls.MakeGeometry(
-    mask,
-    vls.lsBox([0, 50], [600, 100])  # Mask layer
-).apply()
-# Remove opening
-vls.BooleanOperation(
-    mask,
-    vls.lsBox([100, 50], [400, 50]),  # Opening region
-    vls.BooleanOperationEnum.RELATIVE_COMPLEMENT
-).apply()
-
-# Add layers to domain
-initialDomain.insertNextLevelSetAsMaterial(substrate, vps.Material.Si)
-initialDomain.insertNextLevelSetAsMaterial(mask, vps.Material.SiO2)
-
-# Assign to project
 project.setInitialDomain(initialDomain)
-
-# Save visualization
 initialDomain.saveSurfaceMesh(
     os.path.join(project.projectPath, "domains/initialDomain/initial.vtp"),
     True  # Add material IDs
@@ -148,44 +128,24 @@ print("Initial domain created and saved")
 
 ## Step 3: Load Target Domain
 
-In a real scenario, you'd load experimental data. For this tutorial, we'll create a target that represents a typical etched trench:
+In a real scenario, you'd load experimental data. For this tutorial, we'll create a target that represents a typical etched trench. `vps.MakeTrench` with `makeMask=False` (default) creates a silicon substrate with a trench already etched into it:
 
 ```python
-# Create target level set (experimental profile to match)
-target = vls.Domain(
-    [-300, 300, -200, 200],
-    [vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
-     vls.BoundaryConditionEnum.INFINITE_BOUNDARY],
-    gridDelta
-)
-
-# Simulated experimental profile: trench with sidewall angle
-# Main trench from x=120 to x=480, depth to y=-120
-vls.MakeGeometry(
-    target,
-    vls.lsBox([120, -200], [360, -120])  # Trench base
+targetDomain = vps.Domain()
+vps.MakeTrench(
+    targetDomain,
+    gridDelta=gridDelta,
+    xExtent=600.0,       # 600nm wide
+    yExtent=400.0,       # 400nm tall
+    trenchWidth=200.0,   # trench width (x=-100 to x=100)
+    trenchDepth=150.0,   # trench depth (150nm)
+    material=vps.Material.Si
 ).apply()
 
-# Add sloped sidewalls (simplified)
-# Left sidewall
-vls.BooleanOperation(
-    target,
-    vls.lsBox([100, -120], [20, 120]),  # Left slope
-    vls.BooleanOperationEnum.UNION
-).apply()
-# Right sidewall
-vls.BooleanOperation(
-    target,
-    vls.lsBox([480, -120], [20, 120]),  # Right slope
-    vls.BooleanOperationEnum.UNION
-).apply()
+project.setTargetLevelSet(targetDomain.getLevelSets()[-1])
 
-# Assign to project
-project.setTargetLevelSet(target)
-
-# Save visualization
 targetMesh = vls.Mesh()
-vls.ToSurfaceMesh(target, targetMesh).apply()
+vls.ToSurfaceMesh(targetDomain.getLevelSets()[-1], targetMesh).apply()
 writer = vls.VTKWriter(targetMesh)
 writer.setFileName(
     os.path.join(project.projectPath, "domains/targetDomain/target.vtp")
@@ -214,23 +174,16 @@ def etchingProcess(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
     SF6/C4F8 plasma etching process.
 
     Parameters:
-    - ionFlux: Ion flux density (1/nm²/s)
-    - etchantFlux: Neutral etchant flux (1/nm²/s)
+    - ionSourcePower: Source power controlling ion angular distribution
+    - neutralRate: Neutral etchant etch rate contribution (nm/s)
     - ionEnergy: Ion mean energy (eV)
     - neutralStickP: Neutral sticking probability
+    - ionRate: Ion etch rate contribution (nm/s)
     """
     # Set up model
     model = vps.MultiParticleProcess()
 
-    # Add ion particles
-    model.addIonParticle(
-        sourcePower=params["ionFlux"],
-        meanEnergy=params["ionEnergy"],
-        sigmaEnergy=10.0,  # Energy spread
-        label="ion"
-    )
-
-    # Add neutral etchant particles
+    # Add neutral etchant particles first (→ fluxes[0])
     sticking = {
         vps.Material.Si: params["neutralStickP"],
         vps.Material.SiO2: 0.01  # Low sticking on mask
@@ -240,16 +193,26 @@ def etchingProcess(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
         label="etchant"
     )
 
+    # Add ion particles second (→ fluxes[1])
+    model.addIonParticle(
+        sourcePower=params["ionSourcePower"],
+        meanEnergy=params["ionEnergy"],
+        sigmaEnergy=10.0,  # Energy spread
+        label="ion"
+    )
+
     # Define etch rate function
+    # fluxes[0] = neutral flux, fluxes[1] = ion flux
+    # Rates are negative for etching (material removal)
     def rateFunction(fluxes, material):
         if material == vps.Material.Si:
             # Silicon etches with both ions and neutrals
-            ionRate = fluxes["ion"] * 0.5      # Ion-enhanced etch
-            neutralRate = fluxes["etchant"] * params["etchantFlux"] * 0.01
-            return ionRate + neutralRate
+            neutralContrib = -fluxes[0] * params["neutralRate"]
+            ionContrib = -fluxes[1] * params["ionRate"]
+            return neutralContrib + ionContrib
         elif material == vps.Material.SiO2:
-            # Mask etches much slower
-            return fluxes["ion"] * 0.05
+            # Mask etches much slower (ion-only)
+            return -fluxes[1] * 0.05
         return 0.0
 
     model.setRateFunction(rateFunction)
@@ -260,16 +223,17 @@ def etchingProcess(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
     process.setProcessModel(model)
     process.setProcessDuration(1.0)  # 1 second
 
-    # Set ray tracing parameters for accuracy
-    rayTracing = vps.RayTracingParameters()
-    rayTracing.raysPerPoint = 300  # More rays = better accuracy
-    process.setParameters(rayTracing)
+    # Use CPU disk flux engine for accurate flux calculation
+    process.setFluxEngineType(vps.FluxEngineType.CPU_DISK)
 
     # Apply
     process.apply()
 
-    # Return resulting level set (etched substrate)
-    return domain.getLevelSets()[0]  # First level set = silicon
+    # Planarize at y=50 to clean up top surface before comparing
+    vps.Planarize(domain, 50.0).apply()
+
+    # Return resulting level set (etched substrate is the last level set)
+    return domain.getLevelSets()[-1]
 ```
 
 !!! note "Process Complexity"
@@ -290,18 +254,20 @@ opt.setProcessSequence(etchingProcess)
 
 # Define parameter names
 opt.setParameterNames([
-    "ionFlux",
-    "etchantFlux",
+    "ionSourcePower",
+    "neutralRate",
     "ionEnergy",
-    "neutralStickP"
+    "neutralStickP",
+    "ionRate"
 ])
 
 # Set parameter bounds (based on physical constraints and literature)
 opt.setVariableParameters({
-    "ionFlux": (10.0, 100.0),        # ions/(nm²·s)
-    "etchantFlux": (100.0, 1000.0),  # neutrals/(nm²·s)
-    "ionEnergy": (20.0, 200.0),      # eV
-    "neutralStickP": (0.01, 0.9)     # probability
+    "ionSourcePower": (10.0, 200.0),   # source power (controls angular spread)
+    "neutralRate":    (0.001, 20.0),   # neutral etch rate (nm/s)
+    "ionEnergy":      (20.0, 200.0),   # eV
+    "neutralStickP":  (0.01, 0.9),     # probability
+    "ionRate":        (0.01, 20.0)     # ion etch rate (nm/s)
 })
 
 # Choose distance metric
@@ -332,10 +298,11 @@ print("Optimization configured")
 4. **Experimental conditions**: match your setup
 
 **Our bounds rationale:**
-- `ionFlux`: Typical plasma densities range 10-100 ions/(nm²·s)
-- `etchantFlux`: Neutrals more abundant, 100-1000
+- `ionSourcePower`: Controls the angular distribution of ions; 10-200 covers typical plasma conditions
+- `neutralRate`: Neutral etch rate contribution; 0.001-20 nm/s spans slow to aggressive chemistries
 - `ionEnergy`: Typical RF plasma energies 20-200 eV
 - `neutralStickP`: Must be 0-1, typical range 0.01-0.9
+- `ionRate`: Ion etch rate contribution; 0.01-20 nm/s
 
 ## Step 6: Run Optimization
 
@@ -372,22 +339,23 @@ print("="*60)
 STARTING OPTIMIZATION
 ==============================================================
 Evaluation 1/100: Objective = 145.67
-  ionFlux: 55.2, etchantFlux: 450.3, ionEnergy: 110.5, neutralStickP: 0.45
+  ionSourcePower: 105.2, neutralRate: 8.3, ionEnergy: 110.5, neutralStickP: 0.45, ionRate: 7.1
 Evaluation 2/100: Objective = 132.89
-  ionFlux: 48.7, etchantFlux: 520.1, ionEnergy: 95.2, neutralStickP: 0.38
+  ionSourcePower: 88.7, neutralRate: 11.1, ionEnergy: 95.2, neutralStickP: 0.38, ionRate: 5.4
 ...
 Evaluation 97/100: Objective = 23.41
-  ionFlux: 42.3, etchantFlux: 680.5, ionEnergy: 88.7, neutralStickP: 0.31
+  ionSourcePower: 72.3, neutralRate: 6.5, ionEnergy: 88.7, neutralStickP: 0.31, ionRate: 3.9
 ...
 ==============================================================
 OPTIMIZATION COMPLETE
 ==============================================================
 Best objective value: 21.87
 Best parameters:
-  ionFlux: 43.1
-  etchantFlux: 695.2
+  ionSourcePower: 74.1
+  neutralRate: 6.9
   ionEnergy: 85.3
   neutralStickP: 0.29
+  ionRate: 4.2
 ```
 
 **Runtime:** 15-60 minutes depending on simulation complexity.
@@ -466,8 +434,8 @@ See how parameters changed:
 all_evals = pd.read_csv(os.path.join(results_dir, "progressAll.csv"))
 
 # Plot parameter evolution
-fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-params = ["ionFlux", "etchantFlux", "ionEnergy", "neutralStickP"]
+fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+params = ["ionSourcePower", "neutralRate", "ionEnergy", "neutralStickP", "ionRate"]
 
 for i, param in enumerate(params):
     ax = axes[i//2, i%2]
@@ -559,8 +527,8 @@ opt.apply(numEvaluations=50, saveComparison=True)
 # Focus search around best values
 best = results['bestParameters']
 opt.setVariableParameters({
-    "ionFlux": (best["ionFlux"] * 0.9, best["ionFlux"] * 1.1),
-    "etchantFlux": (best["etchantFlux"] * 0.9, best["etchantFlux"] * 1.1),
+    "ionSourcePower": (best["ionSourcePower"] * 0.9, best["ionSourcePower"] * 1.1),
+    "neutralRate":    (best["neutralRate"] * 0.9,    best["neutralRate"] * 1.1),
     # ... etc
 })
 ```
@@ -596,32 +564,103 @@ vps.setDimension(2)
 vls.setDimension(2)
 
 # Create project
-project = fit.Project("etchCalibration", "./projects").initialize()
+project = fit.Project("etchCalibration", "./projects")
+project.initialize()
 
-# [... domain creation code from steps 2-3 ...]
+# ── Step 2: Initial Domain ──────────────────────────────────────────────────
+gridDelta = 5.0
 
-# Process sequence
+initialDomain = vps.Domain()
+vps.MakeTrench(
+    initialDomain,
+    gridDelta=gridDelta,
+    xExtent=600.0,
+    yExtent=400.0,
+    trenchWidth=200.0,
+    trenchDepth=50.0,
+    makeMask=True,
+    material=vps.Material.Si
+).apply()
+project.setInitialDomain(initialDomain)
+initialDomain.saveSurfaceMesh(
+    os.path.join(project.projectPath, "domains/initialDomain/initial.vtp"), True
+)
+
+# ── Step 3: Target Domain ───────────────────────────────────────────────────
+targetDomain = vps.Domain()
+vps.MakeTrench(
+    targetDomain,
+    gridDelta=gridDelta,
+    xExtent=600.0,
+    yExtent=400.0,
+    trenchWidth=200.0,
+    trenchDepth=150.0,
+    material=vps.Material.Si
+).apply()
+project.setTargetLevelSet(targetDomain.getLevelSets()[-1])
+targetMesh = vls.Mesh()
+vls.ToSurfaceMesh(targetDomain.getLevelSets()[-1], targetMesh).apply()
+writer = vls.VTKWriter(targetMesh)
+writer.setFileName(os.path.join(project.projectPath, "domains/targetDomain/target.vtp"))
+writer.apply()
+
+# ── Step 4: Process Sequence ────────────────────────────────────────────────
 def etchingProcess(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
-    # [... from step 4 ...]
-    pass
+    model = vps.MultiParticleProcess()
 
-# Configure optimization
+    # Neutral etchant particles first (→ fluxes[0])
+    sticking = {
+        vps.Material.Si: params["neutralStickP"],
+        vps.Material.SiO2: 0.01
+    }
+    model.addNeutralParticle(sticking=sticking, label="etchant")
+
+    # Ion particles second (→ fluxes[1])
+    model.addIonParticle(
+        sourcePower=params["ionSourcePower"],
+        meanEnergy=params["ionEnergy"],
+        sigmaEnergy=10.0,
+        label="ion"
+    )
+
+    # Rates are negative for material removal
+    def rateFunction(fluxes, material):
+        if material == vps.Material.Si:
+            return -fluxes[0] * params["neutralRate"] - fluxes[1] * params["ionRate"]
+        elif material == vps.Material.SiO2:
+            return -fluxes[1] * 0.05
+        return 0.0
+
+    model.setRateFunction(rateFunction)
+
+    process = vps.Process()
+    process.setDomain(domain)
+    process.setProcessModel(model)
+    process.setProcessDuration(1.0)
+    process.setFluxEngineType(vps.FluxEngineType.CPU_DISK)
+    process.apply()
+
+    vps.Planarize(domain, 50.0).apply()
+    return domain.getLevelSets()[-1]
+
+# ── Step 5: Configure Optimization ─────────────────────────────────────────
 opt = fit.Optimization(project)
 opt.setProcessSequence(etchingProcess)
-opt.setParameterNames(["ionFlux", "etchantFlux", "ionEnergy", "neutralStickP"])
+opt.setParameterNames(["ionSourcePower", "neutralRate", "ionEnergy", "neutralStickP", "ionRate"])
 opt.setVariableParameters({
-    "ionFlux": (10.0, 100.0),
-    "etchantFlux": (100.0, 1000.0),
-    "ionEnergy": (20.0, 200.0),
-    "neutralStickP": (0.01, 0.9)
+    "ionSourcePower": (10.0, 200.0),
+    "neutralRate":    (0.001, 20.0),
+    "ionEnergy":      (20.0, 200.0),
+    "neutralStickP":  (0.01, 0.9),
+    "ionRate":        (0.01, 20.0)
 })
 opt.setDistanceMetrics(primaryMetric="CCH", additionalMetrics=["CA"])
 opt.setName("run1_initialCalibration")
 
-# Run
+# ── Step 6: Run ─────────────────────────────────────────────────────────────
 opt.apply(numEvaluations=100, saveComparison=True)
 
-# Analyze
+# ── Step 7: Analyze ─────────────────────────────────────────────────────────
 results_dir = os.path.join(project.projectPath, "optimizationRuns", "run1_initialCalibration")
 with open(os.path.join(results_dir, "run1_initialCalibration-final-results.json")) as f:
     results = json.load(f)

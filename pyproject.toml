@@ -18,6 +18,9 @@ dependencies = [
     "pandas>=1.5",
     ]
 
+[project.optional-dependencies]
+dev = ["jupytext>=1.16"]
+
 [project.urls]
 Repository = "https://github.com/ViennaTools/ViennaFit.git"
 
