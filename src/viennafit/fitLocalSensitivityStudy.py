@@ -19,14 +19,11 @@ class LocalSensitivityStudy(Study):
         # Override the progress directory name
         self._progressDir = os.path.join(self.runDir, "evaluations")
 
-        # Support for exact value evaluation mode
-        self.variableParameterValues = {}  # Dict[str, List[float]] - exact values
-        self.useExactValues = False  # Flag to indicate evaluation mode
-
         # Progress tracking
         self._progressManager = None  # Will be initialized in apply()
         self._storageFormat = "csv"  # Default storage format
         self.notes = None  # Optional notes for the sensitivity study
+        self._bestScore = float("inf")
 
     def setParameterSensitivityRanges(
         self, varParams: Dict[str, Tuple[float, float, float]], nEval: Tuple[int] = None
@@ -73,60 +70,6 @@ class LocalSensitivityStudy(Study):
             self.variableParameters[name] = (lowerBound, poi, upperBound)
 
         self.nEval = nEval if nEval is not None else (7,) * len(varParams)
-        self.useExactValues = False  # Ensure range mode is set
-        return self
-
-    def setParameterGridValues(
-        self, varParamValues: Dict[str, List[float]]
-    ) -> "LocalSensitivityStudy":
-        """
-        Set parameters for grid-based evaluation with exact discrete values.
-
-        Args:
-            varParamValues: Dictionary mapping parameter names to lists of exact values to evaluate
-
-        Example:
-            study.setParameterGridValues({
-                "temperature": [300, 350, 400, 450, 500],
-                "pressure": [0.1, 0.5, 1.0, 2.0, 5.0]
-            })
-        """
-        if not self.parameterNames:
-            raise ValueError(
-                "Parameter names must be set before defining grid parameters"
-            )
-
-        for name, valueList in varParamValues.items():
-            if name not in self.parameterNames:
-                raise ValueError(
-                    f"Parameter '{name}' is not defined in parameter names. "
-                    f"The current parameter names are: {self.parameterNames}"
-                )
-            if name in self.fixedParameters:
-                raise ValueError(f"Parameter '{name}' is already set as fixed")
-
-            if not isinstance(valueList, list) or len(valueList) == 0:
-                raise ValueError(
-                    f"Values for parameter '{name}' must be a non-empty list"
-                )
-
-            self.variableParameterValues[name] = valueList
-
-        # Populate self.variableParameters for validation compatibility
-        # Use min/max from values as bounds with first value as POI placeholder
-        for name, values in varParamValues.items():
-            minVal = min(values)
-            maxVal = max(values)
-            firstVal = values[0]  # Use first value as POI placeholder
-            self.variableParameters[name] = (minVal, firstVal, maxVal)
-
-        self.useExactValues = True
-        print(f"Set grid values for {len(varParamValues)} parameters")
-        for name, values in varParamValues.items():
-            print(
-                f"  {name}: {len(values)} values ({min(values):.3f} to {max(values):.3f})"
-            )
-
         return self
 
     def getParameterDict(self):
@@ -179,17 +122,10 @@ class LocalSensitivityStudy(Study):
         """Save parameter configuration to file"""
         filepath = os.path.join(self.runDir, filename)
 
-        # Create parameter configuration dict
         paramDict = {
             "fixed": self.fixedParameters,
             "variable": self.variableParameters,
-            "evaluationMode": (
-                "grid_values" if self.useExactValues else "sensitivity_ranges"
-            ),
         }
-
-        if self.useExactValues:
-            paramDict["gridValues"] = self.variableParameterValues
 
         with open(filepath, "w") as f:
             json.dump(paramDict, f, indent=4)
@@ -222,9 +158,6 @@ class LocalSensitivityStudy(Study):
                 leftPoints = list(np.linspace(lb, poi, (nPoints + 1) // 2)[:-1])
                 paramValues.extend(leftPoints)
 
-            # Add POI (skip since already added)
-            # paramValues.append(poi)
-
             # Add points between poi and ub
             if nPoints > 1:
                 rightPoints = list(np.linspace(poi, ub, (nPoints + 1) // 2)[1:])
@@ -235,24 +168,6 @@ class LocalSensitivityStudy(Study):
                 paramSet = baseParams.copy()
                 paramSet[paramName] = value
                 combinations.append(paramSet)
-
-        return combinations
-
-    def _generateExactValueCombinations(self) -> List[Dict[str, float]]:
-        """Generate parameter combinations using exact values approach (grid evaluation)."""
-        import itertools
-
-        # Get parameter names and their value lists
-        paramNames = list(self.variableParameterValues.keys())
-        paramValueLists = [self.variableParameterValues[name] for name in paramNames]
-
-        # Generate all combinations
-        combinations = []
-        for combination in itertools.product(*paramValueLists):
-            paramSet = self.fixedParameters.copy()
-            for paramName, value in zip(paramNames, combination):
-                paramSet[paramName] = value
-            combinations.append(paramSet)
 
         return combinations
 
@@ -268,21 +183,19 @@ class LocalSensitivityStudy(Study):
 
         startTime = time.time()
         try:
-            # Get variable parameter names based on evaluation mode
-            if self.useExactValues:
-                # Grid-based: variable parameters are those with explicit values
-                variableParamNames = set(self.variableParameterValues.keys())
-            else:
-                # Range-based: variable parameters are those with sensitivity ranges
-                variableParamNames = set(self.variableParameters.keys())
+            variableParamNames = set(self.variableParameters.keys())
 
             # Single evaluation with clean state
-            objValue, execTime = objectiveWrapper._evaluateObjective(
+            objValue, execTime, _, _ = objectiveWrapper._evaluateObjective(
                 paramSet,
                 self.saveComparison,
                 saveAll=self.saveAllEvaluations,
                 variableParamNames=variableParamNames,
             )
+
+            isBest = objValue < self._bestScore
+            if isBest:
+                self._bestScore = objValue
 
             result = {
                 "evaluationNumber": evalNumber,
@@ -300,6 +213,7 @@ class LocalSensitivityStudy(Study):
                     list(paramSet.values()),
                     execTime,
                     objValue,
+                    isBest=isBest,
                     saveAll=True,
                 )
 
@@ -321,6 +235,7 @@ class LocalSensitivityStudy(Study):
                     list(paramSet.values()),
                     time.time() - startTime,
                     float("inf"),
+                    isBest=False,
                     saveAll=True,
                 )
 
@@ -328,7 +243,6 @@ class LocalSensitivityStudy(Study):
 
     def validate(self):
         """Validate that all required parameters are defined (override base class)"""
-        # Call base validation for common checks
         if not hasattr(self, "processSequence") or self.processSequence is None:
             raise ValueError("No process sequence has been set")
 
@@ -338,19 +252,10 @@ class LocalSensitivityStudy(Study):
         if not self.distanceMetric:
             raise ValueError("No distance metric has been set")
 
-        # Check that parameters are properly configured for the selected mode
-        if self.useExactValues:
-            # Grid values mode validation
-            if not self.variableParameterValues:
-                raise ValueError(
-                    "No grid parameter values have been set. Use setParameterGridValues()."
-                )
-        else:
-            # Sensitivity ranges mode validation
-            if not self.variableParameters:
-                raise ValueError(
-                    "No sensitivity parameter ranges have been set. Use setParameterSensitivityRanges()."
-                )
+        if not self.variableParameters:
+            raise ValueError(
+                "No sensitivity parameter ranges have been set. Use setParameterSensitivityRanges()."
+            )
 
         # Standard validation: union of fixed and variable parameters must match parameter names
         if set(self.fixedParameters.keys()).union(
@@ -367,7 +272,12 @@ class LocalSensitivityStudy(Study):
         saveAllEvaluations: bool = True,
         saveComparison: bool = True,
     ):
-        """Apply the sensitivity study."""
+        """Apply the sensitivity study.
+
+        Runs a one-at-a-time (OAT) local sensitivity analysis over the ranges defined
+        via setParameterSensitivityRanges(). Multi-domain projects are supported
+        automatically through the underlying BaseObjectiveWrapper.
+        """
         if not self._applied:
             self.validate()
             self.saveComparison = saveComparison
@@ -415,15 +325,8 @@ class LocalSensitivityStudy(Study):
             return
 
         try:
-            # Determine evaluation mode and generate parameter combinations
-            if self.useExactValues:
-                print("Running sensitivity study with grid parameter values...")
-                paramCombinations = self._generateExactValueCombinations()
-                evaluationMode = "grid_values"
-            else:
-                print("Running sensitivity study with sensitivity range exploration...")
-                paramCombinations = self._generateRangeBasedCombinations()
-                evaluationMode = "sensitivity_ranges"
+            print("Running sensitivity study with sensitivity range exploration...")
+            paramCombinations = self._generateRangeBasedCombinations()
 
             print(f"Total parameter combinations to evaluate: {len(paramCombinations)}")
 
@@ -448,20 +351,14 @@ class LocalSensitivityStudy(Study):
             finalResults = {
                 "metadata": {
                     "studyName": self.name,
-                    "evaluationMode": evaluationMode,
                     "totalEvaluations": len(results),
                     "successfulEvaluations": len(successfulResults),
                     "failedEvaluations": len(failedResults),
                 },
                 "configuration": {
                     "fixedParameters": self.fixedParameters,
-                    "variableParameters": (
-                        self.variableParameters if not self.useExactValues else {}
-                    ),
-                    "variableParameterValues": (
-                        self.variableParameterValues if self.useExactValues else {}
-                    ),
-                    "nEval": self.nEval if not self.useExactValues else None,
+                    "variableParameters": self.variableParameters,
+                    "nEval": self.nEval,
                 },
                 "evaluations": results,
                 "summary": {
