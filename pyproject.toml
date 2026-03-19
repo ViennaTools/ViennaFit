@@ -18,6 +18,9 @@ dependencies = [
     "pandas>=1.5",
     ]
 
+[project.scripts]
+viennafit-view-best = "viennafit.fitParaviewViewer:_viewBestCLI"
+
 [project.urls]
 Repository = "https://github.com/ViennaTools/ViennaFit.git"
 
