@@ -11,7 +11,7 @@ class OptimizerWrapper:
         Create an optimizer wrapper based on optimizer type.
 
         Args:
-            optimizer: String identifying the optimizer ("dlib", "nevergrad", "ax", "botorch")
+            optimizer: String identifying the optimizer ("dlib", "nevergrad", "cma", "ax", "botorch")
             optimization: Reference to the Optimization instance
 
         Returns:
@@ -21,6 +21,8 @@ class OptimizerWrapper:
             return DlibOptimizerWrapper(optimization)
         elif optimizer == "nevergrad":
             return NevergradOptimizerWrapper(optimization)
+        elif optimizer == "cma":
+            return CmaOptimizerWrapper(optimization)
         elif optimizer in ["ax", "botorch"]:
             return AxOptimizerWrapper(optimization)
         else:
@@ -156,6 +158,67 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
             "success": True,
             "x": optimizedParams,
             "fun": bestLoss,
+            "nfev": self._optimization._evalCounter,
+            "earlyStopped": earlyStopped,
+        }
+
+
+class CmaOptimizerWrapper(BaseOptimizerWrapper):
+    """Wrapper for CMA-ES optimizer (via pycma)."""
+
+    def optimize(self, numEvaluations: int) -> Dict[str, Any]:
+        import cma
+        from .fitExceptions import EarlyStoppingException
+
+        parameterNames = list(self._optimization.variableParameters.keys())
+        lowerBounds, upperBounds = self.getBounds()
+        n = len(parameterNames)
+        ranges = [u - l for l, u in zip(lowerBounds, upperBounds)]
+
+        # Normalize to [0, 1]^n so sigma0 is meaningful for all dimensions equally
+        x0Norm = [0.5] * n
+        sigma0 = 0.3
+
+        # Objective in normalized space — denormalize before evaluation
+        objectiveFunction = ObjectiveWrapper.create("cma", self._optimization)
+
+        def normalizedObjective(xNorm):
+            xOrig = [l + v * r for v, l, r in zip(xNorm, lowerBounds, ranges)]
+            return objectiveFunction(xOrig)
+
+        options = cma.CMAOptions()
+        options["maxfevals"] = numEvaluations
+        options["bounds"] = [[0.0] * n, [1.0] * n]
+        options["verbose"] = -9
+
+        es = cma.CMAEvolutionStrategy(x0Norm, sigma0, options)
+
+        earlyStopped = False
+        try:
+            while not es.stop():
+                solutions = es.ask()
+                fitnesses = [normalizedObjective(x) for x in solutions]
+                es.tell(solutions, fitnesses)
+        except EarlyStoppingException:
+            earlyStopped = True
+
+        if earlyStopped:
+            optimizedParams = {
+                name: self._optimization.bestParameters.get(name)
+                for name in parameterNames
+            }
+            fx = self._optimization.bestScore
+        else:
+            # Denormalize best solution back to original space
+            xBestNorm = es.result.xbest
+            xBestOrig = [l + v * r for v, l, r in zip(xBestNorm, lowerBounds, ranges)]
+            optimizedParams = dict(zip(parameterNames, xBestOrig))
+            fx = es.result.fbest
+
+        return {
+            "success": True,
+            "x": optimizedParams,
+            "fun": fx,
             "nfev": self._optimization._evalCounter,
             "earlyStopped": earlyStopped,
         }

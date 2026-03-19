@@ -19,7 +19,7 @@ class ObjectiveWrapper:
         Create an objective function wrapper based on optimizer type.
 
         Args:
-            optimizer: String identifying the optimizer ("dlib", "nevergrad", "ax", "botorch")
+            optimizer: String identifying the optimizer ("dlib", "nevergrad", "ax", "botorch", "cma")
             optimization: Reference to the Optimization instance
             initialDomainName: Name of the initial domain to use (optional)
 
@@ -31,6 +31,8 @@ class ObjectiveWrapper:
             wrapper = DlibObjectiveWrapper(optimization, initialDomainName)
         elif optimizer == "nevergrad":
             wrapper = NevergradObjectiveWrapper(optimization, initialDomainName)
+        elif optimizer == "cma":
+            wrapper = CmaObjectiveWrapper(optimization, initialDomainName)
         elif optimizer in ["ax", "botorch"]:
             # Return wrapper object directly for Ax - it has evaluateTrial and evaluateBatch methods
             wrapper = AxObjectiveWrapper(optimization, initialDomainName)
@@ -623,6 +625,36 @@ class NevergradObjectiveWrapper(BaseObjectiveWrapper):
         # Save evaluation data - only save to "all" evaluations, not duplicate with _evaluateObjective
         if not self._progressManager:
             # Only use legacy system if no progress manager
+            self._saveEvaluationData(
+                list(paramDict.values()),
+                elapsedTime,
+                objectiveValue,
+                "progressAll",
+                isBest=False,
+                simulationTime=simulationTime,
+                distanceMetricTime=distanceMetricTime,
+            )
+
+        return objectiveValue
+
+
+class CmaObjectiveWrapper(BaseObjectiveWrapper):
+    """Objective function wrapper for CMA-ES optimizer (via pycma)."""
+
+    def __call__(self, x):
+        paramDict = self._study.fixedParameters.copy()
+        for value, (name, _) in zip(x, self._study.variableParameters.items()):
+            paramDict[name] = value
+
+        objectiveValue, elapsedTime, simulationTime, distanceMetricTime = (
+            self._evaluateObjective(
+                paramDict,
+                self._study.saveComparison,
+                saveAll=self._study.saveAllEvaluations,
+            )
+        )
+
+        if not self._progressManager:
             self._saveEvaluationData(
                 list(paramDict.values()),
                 elapsedTime,
