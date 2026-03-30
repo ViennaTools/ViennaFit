@@ -30,7 +30,7 @@ lss1.setFixedParameters(
 )
 
 # Set variable parameters with ranges
-lss1.setVariableParameters(
+lss1.setParameterSensitivityRanges(
     {
         "neutralRate": (1.0, 40.0, 70.0),
         "ionRate": (1.0, 5.0, 40.0),

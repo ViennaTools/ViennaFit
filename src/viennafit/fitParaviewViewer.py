@@ -161,3 +161,318 @@ Render()
 
     subprocess.Popen([paraview_executable, f"--script={script_file.name}"])
     print(f"Launched ParaView with {len(vtp_files)} .vtp files from {folder}")
+
+
+def openBestInParaview(
+    optimizationRunDir,
+    paraview_executable="paraview",
+):
+    """Open the current best optimization result alongside target surfaces in ParaView.
+
+    Reads ``progressBest.csv`` (or falls back to ``progressAll.csv``) to find
+    the best evaluation number, then opens the corresponding VTP files from the
+    ``progress/`` folder alongside the target surfaces from the project's
+    ``domains/targetDomain/`` folder.
+
+    Target surfaces are shown in green with line width 3; best simulated
+    surfaces use default styling.
+
+    Parameters
+    ----------
+    optimizationRunDir : str
+        Path to the optimization run directory (contains ``progressBest.csv``
+        and the ``progress/`` subfolder).
+    paraview_executable : str, optional
+        Path to the ParaView executable. Defaults to ``"paraview"``.
+    """
+    import csv
+
+    optimizationRunDir = os.path.abspath(optimizationRunDir)
+    runName = os.path.basename(optimizationRunDir)
+
+    # Locate best evaluation number
+    best_eval = None
+
+    best_csv = os.path.join(optimizationRunDir, "progressBest.csv")
+    if os.path.exists(best_csv):
+        with open(best_csv, newline="") as f:
+            rows = list(csv.DictReader(f))
+        if rows:
+            best_eval = int(rows[-1]["evaluationNumber"])
+
+    if best_eval is None:
+        all_csv = os.path.join(optimizationRunDir, "progressAll.csv")
+        if os.path.exists(all_csv):
+            with open(all_csv, newline="") as f:
+                rows = list(csv.DictReader(f))
+            if rows:
+                best_row = min(rows, key=lambda r: float(r["objectiveValue"]))
+                best_eval = int(best_row["evaluationNumber"])
+
+    if best_eval is None:
+        raise FileNotFoundError(
+            f"No progressBest.csv or progressAll.csv found in {optimizationRunDir}"
+        )
+
+    # Glob best VTPs from progress/
+    progress_dir = os.path.join(optimizationRunDir, "progress")
+    best_vtps = sorted(
+        glob.glob(os.path.join(progress_dir, f"{runName}-{best_eval:03d}-*.vtp"))
+    )
+    if not best_vtps:
+        # Also try without domain suffix (single-surface case)
+        best_vtps = sorted(
+            glob.glob(os.path.join(progress_dir, f"{runName}-{best_eval:03d}.vtp"))
+        )
+
+    # Glob target surfaces
+    project_dir = os.path.dirname(os.path.dirname(optimizationRunDir))
+    target_vtps = sorted(
+        glob.glob(os.path.join(project_dir, "domains", "targetDomain", "*-surface.vtp"))
+    )
+
+    if not best_vtps and not target_vtps:
+        print(f"No VTP files found for evaluation {best_eval:03d} in {progress_dir}")
+        return
+
+    target_stems = [os.path.splitext(os.path.basename(f))[0] for f in target_vtps]
+    best_stems = [os.path.splitext(os.path.basename(f))[0] for f in best_vtps]
+
+    script_content = f"""\
+from paraview.simple import *
+
+target_files = {repr(target_vtps)}
+target_labels = {repr(target_stems)}
+best_files = {repr(best_vtps)}
+best_labels = {repr(best_stems)}
+
+view = GetActiveViewOrCreate('RenderView')
+view.InteractionMode = '2D'
+view.AxesGrid.Visibility = 1
+
+text_displays = []
+
+import os as _os
+for filepath, label in zip(target_files, target_labels):
+    source = OpenDataFile(filepath)
+    RenameSource(label, source)
+    x_offset = 200.0 if 'wider' in _os.path.basename(filepath) else 0.0
+    if x_offset:
+        transform = Transform(Input=source)
+        transform.Transform.Translate = [x_offset, 0.0, 0.0]
+        RenameSource(label + " (translated)", transform)
+        display = Show(transform, view)
+        Hide(source, view)
+    else:
+        display = Show(source, view)
+    display.AmbientColor = [0.0, 1.0, 0.0]
+    display.DiffuseColor = [0.0, 1.0, 0.0]
+    display.LineWidth = 3.0
+    text = Text(Text=label)
+    textDisplay = Show(text, view)
+    textDisplay.FontFamily = 'Arial'
+    textDisplay.FontSize = 20
+    textDisplay.Color = [0, 0, 0]
+    textDisplay.WindowLocation = 'Any Location'
+    bounds = source.GetDataInformation().GetBounds()
+    text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_offset, bounds[2], (bounds[4] + bounds[5]) / 2]))
+    RenameSource(label + " (label)", text)
+
+for filepath, label in zip(best_files, best_labels):
+    source = OpenDataFile(filepath)
+    RenameSource(label, source)
+    x_offset = 200.0 if 'wider' in _os.path.basename(filepath) else 0.0
+    if x_offset:
+        transform = Transform(Input=source)
+        transform.Transform.Translate = [x_offset, 0.0, 0.0]
+        RenameSource(label + " (translated)", transform)
+        display = Show(transform, view)
+        Hide(source, view)
+    else:
+        display = Show(source, view)
+    display.LineWidth = 3.0
+    text = Text(Text=label)
+    textDisplay = Show(text, view)
+    textDisplay.FontFamily = 'Arial'
+    textDisplay.FontSize = 20
+    textDisplay.Color = [0, 0, 0]
+    textDisplay.WindowLocation = 'Any Location'
+    bounds = source.GetDataInformation().GetBounds()
+    text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_offset, bounds[2], (bounds[4] + bounds[5]) / 2]))
+    RenameSource(label + " (label)", text)
+
+ResetCamera()
+Render()
+
+renderer = view.GetRenderer()
+size = view.ViewSize
+for textDisplay, world_pos in text_displays:
+    renderer.SetWorldPoint(world_pos[0], world_pos[1], world_pos[2], 1.0)
+    renderer.WorldToDisplay()
+    d = renderer.GetDisplayPoint()
+    textDisplay.Position = [d[0] / size[0], d[1] / size[1]]
+
+Render()
+"""
+
+    script_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".py", prefix="paraview_best_", delete=False
+    )
+    script_file.write(script_content)
+    script_file.close()
+
+    subprocess.Popen([paraview_executable, f"--script={script_file.name}"])
+    n_target = len(target_vtps)
+    n_best = len(best_vtps)
+    print(
+        f"Launched ParaView: {n_target} target surface(s) + {n_best} best surface(s)"
+        f" (evaluation {best_eval:03d}) from {optimizationRunDir}"
+    )
+
+
+def openCustomEvaluationInParaview(
+    customEvaluationDir,
+    paraview_executable="paraview",
+):
+    """Open custom evaluation results alongside target surfaces in ParaView.
+
+    Loads all result VTP files from a custom evaluation directory and the
+    corresponding target surfaces from the project's ``domains/targetDomain/``
+    folder. Domains whose name contains ``wider`` are shifted 200 units in X
+    so all domain variants are visible side-by-side.
+
+    Target surfaces are shown in green with line width 3; simulated surfaces
+    use default styling.
+
+    Parameters
+    ----------
+    customEvaluationDir : str
+        Path to the custom evaluation output directory (contains ``*-result-*.vtp``).
+    paraview_executable : str, optional
+        Path to the ParaView executable. Defaults to ``"paraview"``.
+    """
+    customEvaluationDir = os.path.abspath(customEvaluationDir)
+
+    result_vtps = sorted(glob.glob(os.path.join(customEvaluationDir, "*-result-*.vtp")))
+    if not result_vtps:
+        print(f"No result VTP files found in {customEvaluationDir}")
+        return
+
+    # Project dir is two levels up: customEvaluations/<evalName> -> project root
+    project_dir = os.path.dirname(os.path.dirname(customEvaluationDir))
+    target_vtps = sorted(
+        glob.glob(os.path.join(project_dir, "domains", "targetDomain", "*-surface.vtp"))
+    )
+
+    result_stems = [os.path.splitext(os.path.basename(f))[0] for f in result_vtps]
+    target_stems = [os.path.splitext(os.path.basename(f))[0] for f in target_vtps]
+
+    script_content = f"""\
+from paraview.simple import *
+import os as _os
+
+target_files = {repr(target_vtps)}
+target_labels = {repr(target_stems)}
+result_files = {repr(result_vtps)}
+result_labels = {repr(result_stems)}
+
+view = GetActiveViewOrCreate('RenderView')
+view.InteractionMode = '2D'
+view.AxesGrid.Visibility = 1
+
+text_displays = []
+
+def _x_offset(filepath):
+    return 200.0 if 'wider' in _os.path.basename(filepath) else 0.0
+
+for filepath, label in zip(target_files, target_labels):
+    source = OpenDataFile(filepath)
+    RenameSource(label, source)
+    x_off = _x_offset(filepath)
+    if x_off:
+        transform = Transform(Input=source)
+        transform.Transform.Translate = [x_off, 0.0, 0.0]
+        RenameSource(label + " (translated)", transform)
+        display = Show(transform, view)
+        Hide(source, view)
+    else:
+        display = Show(source, view)
+    display.AmbientColor = [0.0, 1.0, 0.0]
+    display.DiffuseColor = [0.0, 1.0, 0.0]
+    display.LineWidth = 3.0
+    text = Text(Text=label)
+    textDisplay = Show(text, view)
+    textDisplay.FontFamily = 'Arial'
+    textDisplay.FontSize = 20
+    textDisplay.Color = [0, 0, 0]
+    textDisplay.WindowLocation = 'Any Location'
+    bounds = source.GetDataInformation().GetBounds()
+    text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_off, bounds[2], (bounds[4] + bounds[5]) / 2]))
+    RenameSource(label + " (label)", text)
+
+for filepath, label in zip(result_files, result_labels):
+    source = OpenDataFile(filepath)
+    RenameSource(label, source)
+    x_off = _x_offset(filepath)
+    if x_off:
+        transform = Transform(Input=source)
+        transform.Transform.Translate = [x_off, 0.0, 0.0]
+        RenameSource(label + " (translated)", transform)
+        display = Show(transform, view)
+        Hide(source, view)
+    else:
+        display = Show(source, view)
+    display.LineWidth = 3.0
+    text = Text(Text=label)
+    textDisplay = Show(text, view)
+    textDisplay.FontFamily = 'Arial'
+    textDisplay.FontSize = 20
+    textDisplay.Color = [0, 0, 0]
+    textDisplay.WindowLocation = 'Any Location'
+    bounds = source.GetDataInformation().GetBounds()
+    text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_off, bounds[2], (bounds[4] + bounds[5]) / 2]))
+    RenameSource(label + " (label)", text)
+
+ResetCamera()
+Render()
+
+renderer = view.GetRenderer()
+size = view.ViewSize
+for textDisplay, world_pos in text_displays:
+    renderer.SetWorldPoint(world_pos[0], world_pos[1], world_pos[2], 1.0)
+    renderer.WorldToDisplay()
+    d = renderer.GetDisplayPoint()
+    textDisplay.Position = [d[0] / size[0], d[1] / size[1]]
+
+Render()
+"""
+
+    script_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".py", prefix="paraview_custom_eval_", delete=False
+    )
+    script_file.write(script_content)
+    script_file.close()
+
+    subprocess.Popen([paraview_executable, f"--script={script_file.name}"])
+    print(
+        f"Launched ParaView: {len(target_vtps)} target surface(s) + "
+        f"{len(result_vtps)} result surface(s) from {customEvaluationDir}"
+    )
+
+
+def _viewBestCLI():
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: viennafit-view-best <optimization-run-dir>")
+        sys.exit(1)
+    openBestInParaview(sys.argv[1])
+
+
+def _viewCustomEvaluationCLI():
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: viennafit-view-custom-eval <custom-evaluation-dir>")
+        sys.exit(1)
+    openCustomEvaluationInParaview(sys.argv[1])
