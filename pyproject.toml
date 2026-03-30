@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 viennafit-view-best = "viennafit.fitParaviewViewer:_viewBestCLI"
+viennafit-view-custom-eval = "viennafit.fitParaviewViewer:_viewCustomEvaluationCLI"
 
 [project.urls]
 Repository = "https://github.com/ViennaTools/ViennaFit.git"
