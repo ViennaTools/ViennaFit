@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 
 
 def annotate(image_path, scale=1.0, output=None):
-    """Interactively pick boundary points from a SEM image.
+    """Interactively annotate boundary points on a SEM image.
 
     Opens the image in a matplotlib window. Click once to set the coordinate
     origin, then click to add points. Press ``a`` to switch to add mode and
@@ -77,7 +77,7 @@ def annotate(image_path, scale=1.0, output=None):
     coord_text = ax.text(
         0.5, 0.01, "",
         transform=ax.transAxes,
-        color="cyan", fontsize=9,
+        color="cyan", fontsize=14,
         va="bottom", ha="center",
         bbox=dict(boxstyle="round,pad=0.2", fc="black", alpha=0.5),
     )
