@@ -16,6 +16,7 @@ from .fitUtilities import (
 )
 
 from .fitParaviewViewer import openInParaview
+from .fitAnnotator import annotate
 
 from .fitExceptions import EarlyStoppingException
 

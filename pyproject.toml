@@ -16,11 +16,13 @@ dependencies = [
     "SALib >= 1.5.1",
     "matplotlib>=3.5",
     "pandas>=1.5",
+    "Pillow>=9.0",
     ]
 
 [project.scripts]
 viennafit-view-best = "viennafit.fitParaviewViewer:_viewBestCLI"
 viennafit-view-custom-eval = "viennafit.fitParaviewViewer:_viewCustomEvaluationCLI"
+viennafit-annotate = "viennafit.fitAnnotator:_annotateCLI"
 
 [project.urls]
 Repository = "https://github.com/ViennaTools/ViennaFit.git"
