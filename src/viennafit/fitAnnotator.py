@@ -11,6 +11,7 @@ Keys:
     d  — delete mode
     Close window to save and exit.
 """
+
 import argparse
 from pathlib import Path
 import numpy as np
@@ -52,10 +53,10 @@ def annotate(image_path, scale=1.0, output=None):
     output = Path(output)
 
     state = {
-        "mode": "set_origin",   # "set_origin" | "add" | "delete"
-        "origin": None,          # (ox, oy) in pixel coords
-        "points": [],            # list of (phys_x, phys_y)
-        "px_points": [],         # list of (px_x, px_y)
+        "mode": "set_origin",  # "set_origin" | "add" | "delete"
+        "origin": None,  # (ox, oy) in pixel coords
+        "points": [],  # list of (phys_x, phys_y)
+        "px_points": [],  # list of (px_x, px_y)
     }
 
     fig, ax = plt.subplots()
@@ -68,17 +69,25 @@ def annotate(image_path, scale=1.0, output=None):
     labels = []
 
     status_text = ax.text(
-        0.01, 0.99, "Click to set origin",
+        0.01,
+        0.99,
+        "Click to set origin",
         transform=ax.transAxes,
-        color="yellow", fontsize=9,
-        va="top", ha="left",
+        color="yellow",
+        fontsize=9,
+        va="top",
+        ha="left",
         bbox=dict(boxstyle="round,pad=0.2", fc="black", alpha=0.5),
     )
     coord_text = ax.text(
-        0.5, 0.01, "",
+        0.5,
+        0.01,
+        "",
         transform=ax.transAxes,
-        color="cyan", fontsize=14,
-        va="bottom", ha="center",
+        color="cyan",
+        fontsize=14,
+        va="bottom",
+        ha="center",
         bbox=dict(boxstyle="round,pad=0.2", fc="black", alpha=0.5),
     )
 
@@ -102,8 +111,7 @@ def annotate(image_path, scale=1.0, output=None):
             xs, ys = zip(*state["px_points"])
             scatter.set_offsets(np.column_stack([xs, ys]))
             for i, (px, py) in enumerate(state["px_points"]):
-                lbl = ax.text(px + 4, py - 4, str(i),
-                              color="red", fontsize=7, zorder=6)
+                lbl = ax.text(px + 4, py - 4, str(i), color="red", fontsize=7, zorder=6)
                 labels.append(lbl)
         else:
             scatter.set_offsets(np.empty((0, 2)))
@@ -185,16 +193,19 @@ def annotate(image_path, scale=1.0, output=None):
 def _annotateCLI():
     parser = argparse.ArgumentParser(
         description="Interactive annotator for SEM images. "
-                    "Output is compatible with readPointsFromFile."
+        "Output is compatible with readPointsFromFile."
     )
     parser.add_argument("image", help="Path to the SEM image")
     parser.add_argument(
-        "--scale", type=float, default=1.0,
-        help="nm per pixel (default: 1.0, output in px)"
+        "--scale",
+        type=float,
+        default=1.0,
+        help="nm per pixel (default: 1.0, output in px)",
     )
     parser.add_argument(
-        "--output", default=None,
-        help="Output file path (default: <stem>_points_<unit>.dat)"
+        "--output",
+        default=None,
+        help="Output file path (default: <stem>_points_<unit>.dat)",
     )
     args = parser.parse_args()
     annotate(args.image, args.scale, args.output)
