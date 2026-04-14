@@ -165,6 +165,7 @@ Render()
 
 def openBestInParaview(
     optimizationRunDir,
+    labels=True,
     paraview_executable="paraview",
 ):
     """Open the current best optimization result alongside target surfaces in ParaView.
@@ -182,6 +183,8 @@ def openBestInParaview(
     optimizationRunDir : str
         Path to the optimization run directory (contains ``progressBest.csv``
         and the ``progress/`` subfolder).
+    labels : bool, optional
+        Whether to show a movable text annotation for each file. Defaults to True.
     paraview_executable : str, optional
         Path to the ParaView executable. Defaults to ``"paraview"``.
     """
@@ -237,6 +240,7 @@ def openBestInParaview(
 
     target_stems = [os.path.splitext(os.path.basename(f))[0] for f in target_vtps]
     best_stems = [os.path.splitext(os.path.basename(f))[0] for f in best_vtps]
+    show_labels = labels
 
     script_content = f"""\
 from paraview.simple import *
@@ -268,15 +272,16 @@ for filepath, label in zip(target_files, target_labels):
     display.AmbientColor = [0.0, 1.0, 0.0]
     display.DiffuseColor = [0.0, 1.0, 0.0]
     display.LineWidth = 3.0
-    text = Text(Text=label)
-    textDisplay = Show(text, view)
-    textDisplay.FontFamily = 'Arial'
-    textDisplay.FontSize = 20
-    textDisplay.Color = [0, 0, 0]
-    textDisplay.WindowLocation = 'Any Location'
-    bounds = source.GetDataInformation().GetBounds()
-    text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_offset, bounds[2], (bounds[4] + bounds[5]) / 2]))
-    RenameSource(label + " (label)", text)
+    if {show_labels}:
+        text = Text(Text=label)
+        textDisplay = Show(text, view)
+        textDisplay.FontFamily = 'Arial'
+        textDisplay.FontSize = 20
+        textDisplay.Color = [0, 0, 0]
+        textDisplay.WindowLocation = 'Any Location'
+        bounds = source.GetDataInformation().GetBounds()
+        text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_offset, bounds[2], (bounds[4] + bounds[5]) / 2]))
+        RenameSource(label + " (label)", text)
 
 for filepath, label in zip(best_files, best_labels):
     source = OpenDataFile(filepath)
@@ -291,15 +296,16 @@ for filepath, label in zip(best_files, best_labels):
     else:
         display = Show(source, view)
     display.LineWidth = 3.0
-    text = Text(Text=label)
-    textDisplay = Show(text, view)
-    textDisplay.FontFamily = 'Arial'
-    textDisplay.FontSize = 20
-    textDisplay.Color = [0, 0, 0]
-    textDisplay.WindowLocation = 'Any Location'
-    bounds = source.GetDataInformation().GetBounds()
-    text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_offset, bounds[2], (bounds[4] + bounds[5]) / 2]))
-    RenameSource(label + " (label)", text)
+    if {show_labels}:
+        text = Text(Text=label)
+        textDisplay = Show(text, view)
+        textDisplay.FontFamily = 'Arial'
+        textDisplay.FontSize = 20
+        textDisplay.Color = [0, 0, 0]
+        textDisplay.WindowLocation = 'Any Location'
+        bounds = source.GetDataInformation().GetBounds()
+        text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_offset, bounds[2], (bounds[4] + bounds[5]) / 2]))
+        RenameSource(label + " (label)", text)
 
 ResetCamera()
 Render()
@@ -332,6 +338,7 @@ Render()
 
 def openCustomEvaluationInParaview(
     customEvaluationDir,
+    labels=True,
     paraview_executable="paraview",
 ):
     """Open custom evaluation results alongside target surfaces in ParaView.
@@ -348,6 +355,8 @@ def openCustomEvaluationInParaview(
     ----------
     customEvaluationDir : str
         Path to the custom evaluation output directory (contains ``*-result-*.vtp``).
+    labels : bool, optional
+        Whether to show a movable text annotation for each file. Defaults to True.
     paraview_executable : str, optional
         Path to the ParaView executable. Defaults to ``"paraview"``.
     """
@@ -366,6 +375,7 @@ def openCustomEvaluationInParaview(
 
     result_stems = [os.path.splitext(os.path.basename(f))[0] for f in result_vtps]
     target_stems = [os.path.splitext(os.path.basename(f))[0] for f in target_vtps]
+    show_labels = labels
 
     script_content = f"""\
 from paraview.simple import *
@@ -400,15 +410,16 @@ for filepath, label in zip(target_files, target_labels):
     display.AmbientColor = [0.0, 1.0, 0.0]
     display.DiffuseColor = [0.0, 1.0, 0.0]
     display.LineWidth = 3.0
-    text = Text(Text=label)
-    textDisplay = Show(text, view)
-    textDisplay.FontFamily = 'Arial'
-    textDisplay.FontSize = 20
-    textDisplay.Color = [0, 0, 0]
-    textDisplay.WindowLocation = 'Any Location'
-    bounds = source.GetDataInformation().GetBounds()
-    text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_off, bounds[2], (bounds[4] + bounds[5]) / 2]))
-    RenameSource(label + " (label)", text)
+    if {show_labels}:
+        text = Text(Text=label)
+        textDisplay = Show(text, view)
+        textDisplay.FontFamily = 'Arial'
+        textDisplay.FontSize = 20
+        textDisplay.Color = [0, 0, 0]
+        textDisplay.WindowLocation = 'Any Location'
+        bounds = source.GetDataInformation().GetBounds()
+        text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_off, bounds[2], (bounds[4] + bounds[5]) / 2]))
+        RenameSource(label + " (label)", text)
 
 for filepath, label in zip(result_files, result_labels):
     source = OpenDataFile(filepath)
@@ -423,15 +434,16 @@ for filepath, label in zip(result_files, result_labels):
     else:
         display = Show(source, view)
     display.LineWidth = 3.0
-    text = Text(Text=label)
-    textDisplay = Show(text, view)
-    textDisplay.FontFamily = 'Arial'
-    textDisplay.FontSize = 20
-    textDisplay.Color = [0, 0, 0]
-    textDisplay.WindowLocation = 'Any Location'
-    bounds = source.GetDataInformation().GetBounds()
-    text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_off, bounds[2], (bounds[4] + bounds[5]) / 2]))
-    RenameSource(label + " (label)", text)
+    if {show_labels}:
+        text = Text(Text=label)
+        textDisplay = Show(text, view)
+        textDisplay.FontFamily = 'Arial'
+        textDisplay.FontSize = 20
+        textDisplay.Color = [0, 0, 0]
+        textDisplay.WindowLocation = 'Any Location'
+        bounds = source.GetDataInformation().GetBounds()
+        text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_off, bounds[2], (bounds[4] + bounds[5]) / 2]))
+        RenameSource(label + " (label)", text)
 
 ResetCamera()
 Render()
@@ -461,18 +473,32 @@ Render()
 
 
 def _viewBestCLI():
-    import sys
+    import argparse
 
-    if len(sys.argv) < 2:
-        print("Usage: viennafit-view-best <optimization-run-dir>")
-        sys.exit(1)
-    openBestInParaview(sys.argv[1])
+    parser = argparse.ArgumentParser(prog="viennafit-view-best")
+    parser.add_argument("optimization_run_dir", help="Path to the optimization run directory")
+    parser.add_argument(
+        "--no-labels",
+        dest="labels",
+        action="store_false",
+        default=True,
+        help="Hide filename annotations (shown by default)",
+    )
+    args = parser.parse_args()
+    openBestInParaview(args.optimization_run_dir, labels=args.labels)
 
 
 def _viewCustomEvaluationCLI():
-    import sys
+    import argparse
 
-    if len(sys.argv) < 2:
-        print("Usage: viennafit-view-custom-eval <custom-evaluation-dir>")
-        sys.exit(1)
-    openCustomEvaluationInParaview(sys.argv[1])
+    parser = argparse.ArgumentParser(prog="viennafit-view-custom-eval")
+    parser.add_argument("custom_evaluation_dir", help="Path to the custom evaluation directory")
+    parser.add_argument(
+        "--no-labels",
+        dest="labels",
+        action="store_false",
+        default=True,
+        help="Hide filename annotations (shown by default)",
+    )
+    args = parser.parse_args()
+    openCustomEvaluationInParaview(args.custom_evaluation_dir, labels=args.labels)
