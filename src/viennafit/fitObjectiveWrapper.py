@@ -137,6 +137,9 @@ class BaseObjectiveWrapper:
         startTime = time.time()
         simulationStartTime = startTime
 
+        _customScalarObjective = None
+        postProcessingTime = 0.0
+
         if self._isMultiDomainProcess:
             # Multi-domain processing
             initialDomains = {}
@@ -165,18 +168,22 @@ class BaseObjectiveWrapper:
             # Apply process sequence to all domains (modifies vps.Domains in-place)
             processResult = self._study.processSequence(initialDomains, paramDict)
 
-            # Handle optional timing dict return
-            postProcessingTime = 0.0
-            if isinstance(processResult, tuple) and len(processResult) == 2:
-                resultDomains, timingDict = processResult
-                postProcessingTime = timingDict.get("postProcessingTime", 0.0)
-            else:
-                resultDomains = processResult
+            # Detect scalar objective returned directly (bypasses level-set comparison)
+            if isinstance(processResult, (int, float)):
+                _customScalarObjective = float(processResult)
 
-            if not isinstance(resultDomains, dict):
-                raise ValueError(
-                    "Multi-domain process sequence must return dict[str, Domain] or (dict[str, Domain], dict)"
-                )
+            if _customScalarObjective is None:
+                # Handle optional timing dict return
+                if isinstance(processResult, tuple) and len(processResult) == 2:
+                    resultDomains, timingDict = processResult
+                    postProcessingTime = timingDict.get("postProcessingTime", 0.0)
+                else:
+                    resultDomains = processResult
+
+                if not isinstance(resultDomains, dict):
+                    raise ValueError(
+                        "Multi-domain process sequence must return dict[str, Domain] or (dict[str, Domain], dict)"
+                    )
         else:
             # Single-domain processing (backward compatibility)
             if self._initialDomainName is not None:
@@ -213,7 +220,11 @@ class BaseObjectiveWrapper:
         additionalMetricValues = {}
         additionalMetricTimes = {}
 
-        if self._isMultiDomainProcess:
+        if self._isMultiDomainProcess and _customScalarObjective is not None:
+            # Scalar objective returned directly — no level-set comparison needed
+            objectiveValue = _customScalarObjective
+            primaryMetricTime = 0.0
+        elif self._isMultiDomainProcess:
             # Multi-domain distance calculation
             if len(self._study.project.targetLevelSets) == 0:
                 raise ValueError(
