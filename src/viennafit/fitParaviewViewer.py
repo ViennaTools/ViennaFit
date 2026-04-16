@@ -476,7 +476,9 @@ def _viewBestCLI():
     import argparse
 
     parser = argparse.ArgumentParser(prog="viennafit-view-best")
-    parser.add_argument("optimization_run_dir", help="Path to the optimization run directory")
+    parser.add_argument(
+        "optimization_run_dir", help="Path to the optimization run directory"
+    )
     parser.add_argument(
         "--no-labels",
         dest="labels",
@@ -492,7 +494,9 @@ def _viewCustomEvaluationCLI():
     import argparse
 
     parser = argparse.ArgumentParser(prog="viennafit-view-custom-eval")
-    parser.add_argument("custom_evaluation_dir", help="Path to the custom evaluation directory")
+    parser.add_argument(
+        "custom_evaluation_dir", help="Path to the custom evaluation directory"
+    )
     parser.add_argument(
         "--no-labels",
         dest="labels",
