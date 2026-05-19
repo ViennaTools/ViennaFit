@@ -94,6 +94,46 @@ class Optimization(Study):
         upperBounds = [p.upperBound for p in varParams]
         return lowerBounds, upperBounds
 
+    def _evaluateSubset(
+        self,
+        paramDict: Dict[str, float],
+        initialDomains: Dict,
+        targetDomains: Dict,
+    ) -> Tuple[float, Dict[str, float]]:
+        """
+        Run the process sequence on a domain subset with fixed parameters.
+
+        Used to compute validation scores after optimization. Has no side effects
+        on counters, progress files, or best-score tracking.
+
+        Returns:
+            (total_score, {domain_name: score})
+        """
+        from viennaps import Domain
+        from .fitDistanceMetrics import DistanceMetric
+
+        domainCopies = {name: Domain(d) for name, d in initialDomains.items()}
+
+        processResult = self.processSequence(domainCopies, paramDict)
+
+        if isinstance(processResult, tuple) and len(processResult) == 2:
+            resultDomains, _ = processResult
+        else:
+            resultDomains = processResult
+
+        if not isinstance(resultDomains, dict):
+            raise ValueError(
+                "_evaluateSubset requires a multi-domain process sequence "
+                "that returns dict[str, Domain]"
+            )
+
+        detailedMetric = DistanceMetric.createDetailed(
+            self.distanceMetric,
+            criticalDimensionRanges=getattr(self, "criticalDimensionRanges", None),
+            sparseFieldExpansionWidth=getattr(self, "sparseFieldExpansionWidth", 200),
+        )
+        return detailedMetric(resultDomains, targetDomains, False, None)
+
     def saveResults(self, filename: str = "results.json"):
         """Save results to file"""
         filepath = os.path.join(self.runDir, filename)
@@ -110,6 +150,23 @@ class Optimization(Study):
             "earlyStopped": self.earlyStoppedAt is not None,
             "earlyStoppedAtEvaluation": self.earlyStoppedAt,
         }
+
+        # Evaluate validation domains if any are defined
+        validationDomains = self.project.getValidationDomains()
+        if validationDomains:
+            validationTargets = self.project.getValidationTargets()
+            try:
+                print("\nEvaluating validation domains with best parameters...")
+                validTotal, validPerDomain = self._evaluateSubset(
+                    self.bestParameters, validationDomains, validationTargets
+                )
+                result["validationScore"] = validTotal
+                result["validationPerDomainScores"] = validPerDomain
+                print(f"  Validation total score: {validTotal:.6f}")
+                for name, score in validPerDomain.items():
+                    print(f"    {name}: {score:.6f}")
+            except Exception as e:
+                print(f"Warning: Validation evaluation failed: {e}")
 
         with open(filepath, "w") as f:
             json.dump(result, f, indent=4)
