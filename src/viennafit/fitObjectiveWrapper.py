@@ -154,8 +154,13 @@ class BaseObjectiveWrapper:
             processedDomains = {}  # Keep references to vps.Domains that get processed
 
             if len(self._study.project.initialDomains) > 0:
-                # Use only training initial domains (all domains when no roles defined)
-                for name, domain in self._study.project.getTrainingDomains().items():
+                # Fold train domains take priority over project-level roles
+                _trainSource = (
+                    self._study._foldTrainDomains
+                    if getattr(self._study, "_foldTrainDomains", None) is not None
+                    else self._study.project.getTrainingDomains()
+                )
+                for name, domain in _trainSource.items():
                     domainCopy = Domain(domain)
                     initialDomains[name] = domainCopy
                     processedDomains[name] = (
@@ -234,7 +239,11 @@ class BaseObjectiveWrapper:
             primaryMetricTime = 0.0
         elif self._isMultiDomainProcess:
             # Multi-domain distance calculation (training domains only)
-            trainingTargets = self._study.project.getTrainingTargets()
+            trainingTargets = (
+                self._study._foldTrainTargets
+                if getattr(self._study, "_foldTrainTargets", None) is not None
+                else self._study.project.getTrainingTargets()
+            )
             if len(trainingTargets) == 0:
                 raise ValueError(
                     "No training target level sets available for multi-domain comparison"

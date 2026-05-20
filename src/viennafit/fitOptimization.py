@@ -35,6 +35,16 @@ class Optimization(Study):
         )
         self.initialSamples = None  # Will default to 2*numParams if not set
 
+        # Fold-based cross-validation (set via setFold())
+        self._foldName = None
+        self._foldDir = None       # folds/{foldName}/ — shared across all runs of this fold
+        self._validateDomainNames = []
+        self._trainDomainNames = []
+        self._foldTrainDomains = None
+        self._foldTrainTargets = None
+        self._foldValidateDomains = None
+        self._foldValidateTargets = None
+
     def setParameterNames(self, paramNames: List[str]):
         """Specifies names of parameters that will be used in optimization"""
         self.parameterNames = paramNames
@@ -151,10 +161,21 @@ class Optimization(Study):
             "earlyStoppedAtEvaluation": self.earlyStoppedAt,
         }
 
-        # Evaluate validation domains if any are defined
-        validationDomains = self.project.getValidationDomains()
-        if validationDomains:
+        # Record fold split in final-results.json when running as a fold
+        if self._foldName is not None:
+            result["foldName"] = self._foldName
+            result["trainDomains"] = self._trainDomainNames
+            result["validateDomains"] = self._validateDomainNames
+
+        # Determine validation domains: fold split takes priority over project roles
+        if self._foldValidateDomains:
+            validationDomains = self._foldValidateDomains
+            validationTargets = self._foldValidateTargets
+        else:
+            validationDomains = self.project.getValidationDomains()
             validationTargets = self.project.getValidationTargets()
+
+        if validationDomains:
             try:
                 print("\nEvaluating validation domains with best parameters...")
                 validTotal, validPerDomain = self._evaluateSubset(
@@ -294,8 +315,13 @@ class Optimization(Study):
         if self._applied:
             raise RuntimeError("Cannot change name after optimization has been applied")
 
-        # Generate new directory paths using parent class logic
-        newName, newRunDir = self._generateRunDirectory(name, "optimizationRuns")
+        # When inside a fold, runs live in folds/{foldName}/runs/ not optimizationRuns/
+        if self._foldName is not None:
+            newName, newRunDir = self._generateRunDirectory(
+                name, os.path.join("folds", self._foldName, "runs")
+            )
+        else:
+            newName, newRunDir = self._generateRunDirectory(name, "optimizationRuns")
 
         # Update name and paths (directories will be created when apply() is called)
         self.name = newName
@@ -311,6 +337,69 @@ class Optimization(Study):
     def setNotes(self, notes: str):
         """Set notes for the optimization run"""
         self.notes = notes
+        return self
+
+    def setFold(self, foldName: str, validateDomains: List[str]) -> "Optimization":
+        """
+        Configure this optimization as a named fold in a cross-validation study.
+
+        Training domains are all project domains *not* listed in validateDomains.
+        The run directory is placed under folds/{foldName}/ (not optimizationRuns/)
+        and a fold-info.json is written there on apply(), documenting the split.
+
+        Call this before apply(). Do not set project-level domain roles when using
+        folds — the split is specified per run here instead.
+
+        Args:
+            foldName: Unique name for this fold, e.g. "fold_W1" or "holdout_W3W5".
+            validateDomains: Domain names to hold out from optimization. All other
+                             domains in the project are used as training domains.
+
+        Returns:
+            self for method chaining
+        """
+        if self._applied:
+            raise RuntimeError("Cannot set fold after optimization has been applied")
+
+        allDomains = self.project.initialDomains
+        missing = [n for n in validateDomains if n not in allDomains]
+        if missing:
+            raise ValueError(
+                f"Validation domain(s) {missing} not found in project. "
+                f"Available: {list(allDomains.keys())}"
+            )
+
+        validateSet = set(validateDomains)
+        trainDomains = {k: v for k, v in allDomains.items() if k not in validateSet}
+        if not trainDomains:
+            raise ValueError("No training domains remain after removing validation domains")
+
+        self._foldName = foldName
+        self._foldDir = os.path.join(self.project.projectPath, "folds", foldName)
+        self._validateDomainNames = list(validateDomains)
+        self._trainDomainNames = list(trainDomains.keys())
+        self._foldTrainDomains = trainDomains
+        self._foldTrainTargets = {
+            k: v for k, v in self.project.targetLevelSets.items()
+            if k not in validateSet
+        }
+        self._foldValidateDomains = {
+            k: v for k, v in allDomains.items() if k in validateSet
+        }
+        self._foldValidateTargets = {
+            k: v for k, v in self.project.targetLevelSets.items()
+            if k in validateSet
+        }
+
+        # Redirect the run directory into folds/{foldName}/runs/{runName}/
+        # Each fold can have many runs; the fold name stays stable.
+        foldRunsType = os.path.join("folds", foldName, "runs")
+        currentRunBaseName = self.name
+        newName, newRunDir = self._generateRunDirectory(currentRunBaseName, foldRunsType)
+        self.name = newName
+        self.runDir = newRunDir
+        self._progressDir = os.path.join(self.runDir, "progress")
+
         return self
 
     def setBatchSize(self, batchSize: int):
@@ -498,7 +587,22 @@ class Optimization(Study):
             self.saveAllEvaluations = saveAllEvaluations
             self.saveAdditionalMetricVisualizations = saveAdditionalMetricVisualizations
 
-            # Create directories
+            # Create fold directory and write fold-info.json (shared across all runs
+            # of this fold; only written once — subsequent runs leave it intact)
+            if self._foldName is not None:
+                os.makedirs(self._foldDir, exist_ok=True)
+                foldInfoPath = os.path.join(self._foldDir, "fold-info.json")
+                if not os.path.exists(foldInfoPath):
+                    foldInfo = {
+                        "foldName": self._foldName,
+                        "validateDomains": self._validateDomainNames,
+                        "trainDomains": self._trainDomainNames,
+                        "createdDate": datetime.now().isoformat(),
+                    }
+                    with open(foldInfoPath, "w") as f:
+                        json.dump(foldInfo, f, indent=4)
+
+            # Create run directories
             os.makedirs(self.runDir, exist_ok=False)
             os.makedirs(self._progressDir, exist_ok=False)
 

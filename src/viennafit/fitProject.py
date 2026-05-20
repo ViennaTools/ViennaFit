@@ -41,6 +41,9 @@ class Project:
         # Domain roles: "train" or "validate" (absent → treated as "train")
         self.domainRoles = {}  # {name: "train" | "validate"}
 
+        # Cross-validation mode marker
+        self.studyMode = "standard"
+
         # Set paths if name is provided
         if name is not None:
             baseName = name
@@ -121,6 +124,7 @@ class Project:
             "targetLevelSetPath": "",  # Keep for backward compatibility
             "targetLevelSetPaths": {},  # New multi-target support
             "domainRoles": {},
+            "studyMode": "standard",
         }
 
         # Save project information to JSON file
@@ -164,6 +168,7 @@ class Project:
                 self._initialDomainPaths["default"] = self._initialDomainPath
 
         self.domainRoles = projectInfo.get("domainRoles", {})
+        self.studyMode = projectInfo.get("studyMode", "standard")
 
         # Load multi-target paths (new format) with backward compatibility
         if "targetLevelSetPaths" in projectInfo:
@@ -869,6 +874,27 @@ class Project:
             k: v for k, v in self.targetLevelSets.items()
             if self.domainRoles.get(k) == "validate"
         }
+
+    _VALID_STUDY_MODES = ("standard", "cross-validation", "leave-one-out")
+
+    def setStudyMode(self, mode: str):
+        """
+        Mark this project's intended study strategy.
+
+        Args:
+            mode: One of 'standard', 'cross-validation', or 'leave-one-out'.
+                  Stored in project-info.json so it is visible in metadata.
+                  For 'cross-validation' and 'leave-one-out' projects, domain
+                  roles are not set at the project level; use Optimization.setFold()
+                  to specify the train/validate split per run instead.
+        """
+        if mode not in self._VALID_STUDY_MODES:
+            raise ValueError(
+                f"studyMode must be one of {self._VALID_STUDY_MODES}, got '{mode}'"
+            )
+        self.studyMode = mode
+        self.updateProjectInfo("studyMode", mode)
+        return self
 
     # ── End train / validate roles ─────────────────────────────────────────────
 
