@@ -258,11 +258,13 @@ def openBestInParaview(
     )
     if os.path.exists(fold_info_path):
         import json as _json
+
         with open(fold_info_path) as _f:
             _fold_info = _json.load(_f)
         train_domains = _fold_info.get("trainDomains", [])
         target_vtps = [
-            v for v in target_vtps
+            v
+            for v in target_vtps
             if any(f"-{d}-" in os.path.basename(v) for d in train_domains)
         ]
 
@@ -281,11 +283,14 @@ def openBestInParaview(
 
         # Extract domain name: best -> {runName}-{eval:03d}-{domain}.vtp
         best_prefix = f"{runName}-{best_eval:03d}-"
+
         def _best_domain(path):
             stem = os.path.splitext(os.path.basename(path))[0]
-            return stem[len(best_prefix):] if stem.startswith(best_prefix) else None
+            return stem[len(best_prefix) :] if stem.startswith(best_prefix) else None
 
-        target_by_domain = {_target_domain(f): f for f in target_vtps if _target_domain(f)}
+        target_by_domain = {
+            _target_domain(f): f for f in target_vtps if _target_domain(f)
+        }
         best_by_domain = {_best_domain(f): f for f in best_vtps if _best_domain(f)}
 
         all_domains = sorted(
@@ -296,11 +301,13 @@ def openBestInParaview(
         # Ordered (filepath, pipeline_label, x_offset) entries
         target_entries = [
             (target_by_domain[d], f"{d} (target)", domain_offsets[d])
-            for d in all_domains if d in target_by_domain
+            for d in all_domains
+            if d in target_by_domain
         ]
         best_entries = [
             (best_by_domain[d], f"{d} (sim)", domain_offsets[d])
-            for d in all_domains if d in best_by_domain
+            for d in all_domains
+            if d in best_by_domain
         ]
         # One text annotation per domain column, placed using target bounds
         label_entries = [

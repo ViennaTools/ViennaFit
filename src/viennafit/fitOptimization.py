@@ -37,7 +37,7 @@ class Optimization(Study):
 
         # Fold-based cross-validation (set via setFold())
         self._foldName = None
-        self._foldDir = None       # folds/{foldName}/ — shared across all runs of this fold
+        self._foldDir = None  # folds/{foldName}/ — shared across all runs of this fold
         self._validateDomainNames = []
         self._trainDomainNames = []
         self._foldTrainDomains = None
@@ -372,7 +372,9 @@ class Optimization(Study):
         validateSet = set(validateDomains)
         trainDomains = {k: v for k, v in allDomains.items() if k not in validateSet}
         if not trainDomains:
-            raise ValueError("No training domains remain after removing validation domains")
+            raise ValueError(
+                "No training domains remain after removing validation domains"
+            )
 
         self._foldName = foldName
         self._foldDir = os.path.join(self.project.projectPath, "folds", foldName)
@@ -380,22 +382,24 @@ class Optimization(Study):
         self._trainDomainNames = list(trainDomains.keys())
         self._foldTrainDomains = trainDomains
         self._foldTrainTargets = {
-            k: v for k, v in self.project.targetLevelSets.items()
+            k: v
+            for k, v in self.project.targetLevelSets.items()
             if k not in validateSet
         }
         self._foldValidateDomains = {
             k: v for k, v in allDomains.items() if k in validateSet
         }
         self._foldValidateTargets = {
-            k: v for k, v in self.project.targetLevelSets.items()
-            if k in validateSet
+            k: v for k, v in self.project.targetLevelSets.items() if k in validateSet
         }
 
         # Redirect the run directory into folds/{foldName}/runs/{runName}/
         # Each fold can have many runs; the fold name stays stable.
         foldRunsType = os.path.join("folds", foldName, "runs")
         currentRunBaseName = self.name
-        newName, newRunDir = self._generateRunDirectory(currentRunBaseName, foldRunsType)
+        newName, newRunDir = self._generateRunDirectory(
+            currentRunBaseName, foldRunsType
+        )
         self.name = newName
         self.runDir = newRunDir
         self._progressDir = os.path.join(self.runDir, "progress")

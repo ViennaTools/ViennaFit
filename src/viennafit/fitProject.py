@@ -844,14 +844,16 @@ class Project:
         if not self.domainRoles:
             return self.initialDomains
         return {
-            k: v for k, v in self.initialDomains.items()
+            k: v
+            for k, v in self.initialDomains.items()
             if self.domainRoles.get(k, "train") == "train"
         }
 
     def getValidationDomains(self) -> Dict:
         """Return the subset of initialDomains reserved for validation."""
         return {
-            k: v for k, v in self.initialDomains.items()
+            k: v
+            for k, v in self.initialDomains.items()
             if self.domainRoles.get(k) == "validate"
         }
 
@@ -864,14 +866,16 @@ class Project:
         if not self.domainRoles:
             return self.targetLevelSets
         return {
-            k: v for k, v in self.targetLevelSets.items()
+            k: v
+            for k, v in self.targetLevelSets.items()
             if self.domainRoles.get(k, "train") == "train"
         }
 
     def getValidationTargets(self) -> Dict:
         """Return the subset of targetLevelSets reserved for validation."""
         return {
-            k: v for k, v in self.targetLevelSets.items()
+            k: v
+            for k, v in self.targetLevelSets.items()
             if self.domainRoles.get(k) == "validate"
         }
 
