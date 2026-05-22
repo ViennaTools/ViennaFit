@@ -187,6 +187,59 @@ class DistanceMetric:
                 )
 
     @staticmethod
+    def createDetailed(
+        metricName: str,
+        criticalDimensionRanges: list[dict] = None,
+        sparseFieldExpansionWidth: int = 200,
+    ) -> Callable:
+        """
+        Create a multi-domain metric that returns (total, per_domain_scores).
+
+        Unlike create(..., multiDomain=True), the returned callable returns a
+        Tuple[float, dict[str, float]] instead of a plain float, giving the
+        caller per-domain breakdown without rerunning the metric.
+
+        Args:
+            metricName: Distance metric name (same options as create()).
+            criticalDimensionRanges: For CCD metric.
+            sparseFieldExpansionWidth: For CSF/CSF-IS metrics.
+
+        Returns:
+            Callable[[dict, dict, bool, str], Tuple[float, dict[str, float]]]
+        """
+        singleMetric = DistanceMetric.create(
+            metricName,
+            multiDomain=False,
+            criticalDimensionRanges=criticalDimensionRanges,
+            sparseFieldExpansionWidth=sparseFieldExpansionWidth,
+        )
+
+        def _detailed(resultDomains, targetDomains, saveComparison, writePath):
+            perDomain: dict[str, float] = {}
+            total = 0.0
+            for domainName, resultDomain in resultDomains.items():
+                if domainName not in targetDomains:
+                    raise ValueError(
+                        f"No target domain found for result domain '{domainName}'"
+                    )
+                domainWritePath = (
+                    f"{writePath}-{domainName}"
+                    if saveComparison and writePath
+                    else None
+                )
+                score = singleMetric(
+                    resultDomain,
+                    targetDomains[domainName],
+                    saveComparison,
+                    domainWritePath,
+                )
+                perDomain[domainName] = score
+                total += score
+            return total, perDomain
+
+        return _detailed
+
+    @staticmethod
     def _compareArea(
         domain1: vls.Domain,
         domain2: vls.Domain,

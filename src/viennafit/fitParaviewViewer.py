@@ -163,9 +163,22 @@ Render()
     print(f"Launched ParaView with {len(vtp_files)} .vtp files from {folder}")
 
 
+def _find_project_dir(start_dir, max_levels=6):
+    """Walk up from start_dir until finding the project root (contains domains/)."""
+    d = os.path.abspath(start_dir)
+    for _ in range(max_levels):
+        d = os.path.dirname(d)
+        if os.path.isdir(os.path.join(d, "domains")):
+            return d
+    raise FileNotFoundError(
+        f"Could not find a project root with a 'domains/' subdirectory above {start_dir}"
+    )
+
+
 def openBestInParaview(
     optimizationRunDir,
     labels=True,
+    domainSpacing=200.0,
     paraview_executable="paraview",
 ):
     """Open the current best optimization result alongside target surfaces in ParaView.
@@ -175,8 +188,10 @@ def openBestInParaview(
     ``progress/`` folder alongside the target surfaces from the project's
     ``domains/targetDomain/`` folder.
 
-    Target surfaces are shown in green with line width 3; best simulated
-    surfaces use default styling.
+    For multi-domain runs each domain pair (target + simulated) is placed side
+    by side along the X axis with ``domainSpacing`` between columns. Domains are
+    sorted in natural order (W1 < W2 < … < W13). Target surfaces are shown in
+    green with line width 3; simulated surfaces use default styling.
 
     Parameters
     ----------
@@ -184,18 +199,21 @@ def openBestInParaview(
         Path to the optimization run directory (contains ``progressBest.csv``
         and the ``progress/`` subfolder).
     labels : bool, optional
-        Whether to show a movable text annotation for each file. Defaults to True.
+        Whether to show a domain-name annotation for each column. Defaults to True.
+    domainSpacing : float, optional
+        X distance between consecutive domain columns (same units as the geometry,
+        typically nm). Defaults to 200.0.
     paraview_executable : str, optional
         Path to the ParaView executable. Defaults to ``"paraview"``.
     """
     import csv
+    import re
 
     optimizationRunDir = os.path.abspath(optimizationRunDir)
     runName = os.path.basename(optimizationRunDir)
 
     # Locate best evaluation number
     best_eval = None
-
     best_csv = os.path.join(optimizationRunDir, "progressBest.csv")
     if os.path.exists(best_csv):
         with open(best_csv, newline="") as f:
@@ -222,90 +240,157 @@ def openBestInParaview(
     best_vtps = sorted(
         glob.glob(os.path.join(progress_dir, f"{runName}-{best_eval:03d}-*.vtp"))
     )
-    if not best_vtps:
-        # Also try without domain suffix (single-surface case)
+    multi_domain = bool(best_vtps)
+    if not multi_domain:
         best_vtps = sorted(
             glob.glob(os.path.join(progress_dir, f"{runName}-{best_eval:03d}.vtp"))
         )
 
     # Glob target surfaces
-    project_dir = os.path.dirname(os.path.dirname(optimizationRunDir))
+    project_dir = _find_project_dir(optimizationRunDir)
     target_vtps = sorted(
         glob.glob(os.path.join(project_dir, "domains", "targetDomain", "*-surface.vtp"))
     )
+
+    # If this is a fold run, show only calibration (train) domain targets
+    fold_info_path = os.path.join(
+        os.path.dirname(os.path.dirname(optimizationRunDir)), "fold-info.json"
+    )
+    if os.path.exists(fold_info_path):
+        import json as _json
+
+        with open(fold_info_path) as _f:
+            _fold_info = _json.load(_f)
+        train_domains = _fold_info.get("trainDomains", [])
+        target_vtps = [
+            v
+            for v in target_vtps
+            if any(f"-{d}-" in os.path.basename(v) for d in train_domains)
+        ]
 
     if not best_vtps and not target_vtps:
         print(f"No VTP files found for evaluation {best_eval:03d} in {progress_dir}")
         return
 
-    target_stems = [os.path.splitext(os.path.basename(f))[0] for f in target_vtps]
-    best_stems = [os.path.splitext(os.path.basename(f))[0] for f in best_vtps]
+    def _natural_key(s):
+        return [int(c) if c.isdigit() else c.lower() for c in re.split(r"(\d+)", s)]
+
+    if multi_domain:
+        # Extract domain name: target -> *-targetDomain-{domain}-surface.vtp
+        def _target_domain(path):
+            m = re.search(r"-targetDomain-(.+)-surface\.vtp$", path)
+            return m.group(1) if m else None
+
+        # Extract domain name: best -> {runName}-{eval:03d}-{domain}.vtp
+        best_prefix = f"{runName}-{best_eval:03d}-"
+
+        def _best_domain(path):
+            stem = os.path.splitext(os.path.basename(path))[0]
+            return stem[len(best_prefix) :] if stem.startswith(best_prefix) else None
+
+        target_by_domain = {
+            _target_domain(f): f for f in target_vtps if _target_domain(f)
+        }
+        best_by_domain = {_best_domain(f): f for f in best_vtps if _best_domain(f)}
+
+        all_domains = sorted(
+            set(target_by_domain) | set(best_by_domain), key=_natural_key
+        )
+        domain_offsets = {d: i * domainSpacing for i, d in enumerate(all_domains)}
+
+        # Ordered (filepath, pipeline_label, x_offset) entries
+        target_entries = [
+            (target_by_domain[d], f"{d} (target)", domain_offsets[d])
+            for d in all_domains
+            if d in target_by_domain
+        ]
+        best_entries = [
+            (best_by_domain[d], f"{d} (sim)", domain_offsets[d])
+            for d in all_domains
+            if d in best_by_domain
+        ]
+        # One text annotation per domain column, placed using target bounds
+        label_entries = [
+            (target_by_domain.get(d) or best_by_domain.get(d), d, domain_offsets[d])
+            for d in all_domains
+        ]
+    else:
+        target_entries = [
+            (f, os.path.splitext(os.path.basename(f))[0], 0.0) for f in target_vtps
+        ]
+        best_entries = [
+            (f, os.path.splitext(os.path.basename(f))[0], 0.0) for f in best_vtps
+        ]
+        label_entries = target_entries or best_entries
+
     show_labels = labels
 
     script_content = f"""\
 from paraview.simple import *
 
-target_files = {repr(target_vtps)}
-target_labels = {repr(target_stems)}
-best_files = {repr(best_vtps)}
-best_labels = {repr(best_stems)}
+target_entries = {repr(target_entries)}
+best_entries = {repr(best_entries)}
+label_entries = {repr(label_entries)}
 
 view = GetActiveViewOrCreate('RenderView')
 view.InteractionMode = '2D'
 view.AxesGrid.Visibility = 1
 
-text_displays = []
+loaded_sources = {{}}  # filepath -> source, for label bounds
 
-import os as _os
-for filepath, label in zip(target_files, target_labels):
+def _load_and_show(filepath, pipeline_name, x_offset):
     source = OpenDataFile(filepath)
-    RenameSource(label, source)
-    x_offset = 200.0 if 'wider' in _os.path.basename(filepath) else 0.0
+    loaded_sources[filepath] = source
+    RenameSource(pipeline_name, source)
     if x_offset:
         transform = Transform(Input=source)
         transform.Transform.Translate = [x_offset, 0.0, 0.0]
-        RenameSource(label + " (translated)", transform)
+        RenameSource(pipeline_name + " (t)", transform)
         display = Show(transform, view)
         Hide(source, view)
     else:
         display = Show(source, view)
+    return display
+
+for filepath, label, x_offset in target_entries:
+    display = _load_and_show(filepath, label, x_offset)
     display.AmbientColor = [0.0, 1.0, 0.0]
     display.DiffuseColor = [0.0, 1.0, 0.0]
     display.LineWidth = 3.0
-    if {show_labels}:
-        text = Text(Text=label)
-        textDisplay = Show(text, view)
-        textDisplay.FontFamily = 'Arial'
-        textDisplay.FontSize = 20
-        textDisplay.Color = [0, 0, 0]
-        textDisplay.WindowLocation = 'Any Location'
-        bounds = source.GetDataInformation().GetBounds()
-        text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_offset, bounds[2], (bounds[4] + bounds[5]) / 2]))
-        RenameSource(label + " (label)", text)
 
-for filepath, label in zip(best_files, best_labels):
-    source = OpenDataFile(filepath)
-    RenameSource(label, source)
-    x_offset = 200.0 if 'wider' in _os.path.basename(filepath) else 0.0
-    if x_offset:
-        transform = Transform(Input=source)
-        transform.Transform.Translate = [x_offset, 0.0, 0.0]
-        RenameSource(label + " (translated)", transform)
-        display = Show(transform, view)
-        Hide(source, view)
-    else:
-        display = Show(source, view)
+for filepath, label, x_offset in best_entries:
+    display = _load_and_show(filepath, label, x_offset)
     display.LineWidth = 3.0
-    if {show_labels}:
-        text = Text(Text=label)
+
+import numpy as _np
+from paraview import servermanager as _sm
+from vtk.util.numpy_support import vtk_to_numpy as _vtk_to_numpy
+
+def _label_pos(source, x_offset, band_fraction=0.05):
+    dataset = _sm.Fetch(source)
+    pts = _vtk_to_numpy(dataset.GetPoints().GetData())  # (N, 3)
+    y_min = pts[:, 1].min()
+    y_max = pts[:, 1].max()
+    band = (y_max - y_min) * band_fraction
+    near_bottom = pts[pts[:, 1] <= y_min + band]
+    x_right = near_bottom[:, 0].max()
+    z_mid = (pts[:, 2].min() + pts[:, 2].max()) / 2.0
+    return [x_right + x_offset, y_min, z_mid]
+
+text_displays = []
+if {show_labels}:
+    for filepath, domain_label, x_offset in label_entries:
+        source = loaded_sources.get(filepath)
+        if source is None:
+            continue
+        text = Text(Text=domain_label)
         textDisplay = Show(text, view)
         textDisplay.FontFamily = 'Arial'
         textDisplay.FontSize = 20
         textDisplay.Color = [0, 0, 0]
         textDisplay.WindowLocation = 'Any Location'
-        bounds = source.GetDataInformation().GetBounds()
-        text_displays.append((textDisplay, [(bounds[0] + bounds[1]) / 2 + x_offset, bounds[2], (bounds[4] + bounds[5]) / 2]))
-        RenameSource(label + " (label)", text)
+        text_displays.append((textDisplay, _label_pos(source, x_offset)))
+        RenameSource(domain_label + " (label)", text)
 
 ResetCamera()
 Render()
@@ -484,10 +569,21 @@ def _viewBestCLI():
         dest="labels",
         action="store_false",
         default=True,
-        help="Hide filename annotations (shown by default)",
+        help="Hide domain annotations (shown by default)",
+    )
+    parser.add_argument(
+        "--domain-spacing",
+        dest="domain_spacing",
+        type=float,
+        default=500.0,
+        help="X distance between domain columns in geometry units (default: 500.0)",
     )
     args = parser.parse_args()
-    openBestInParaview(args.optimization_run_dir, labels=args.labels)
+    openBestInParaview(
+        args.optimization_run_dir,
+        labels=args.labels,
+        domainSpacing=args.domain_spacing,
+    )
 
 
 def _viewCustomEvaluationCLI():

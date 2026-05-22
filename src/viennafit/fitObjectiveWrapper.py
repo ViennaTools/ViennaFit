@@ -72,6 +72,14 @@ class BaseObjectiveWrapper:
             sparseFieldExpansionWidth=sparseFieldExpansionWidth,
         )
 
+        # Detailed multi-domain metric: returns (total, {name: score}) for
+        # per-domain tracking. Only used in the multi-domain path.
+        self._detailedDistanceMetric = DistanceMetric.createDetailed(
+            primaryMetric,
+            criticalDimensionRanges=criticalDimensionRanges,
+            sparseFieldExpansionWidth=sparseFieldExpansionWidth,
+        )
+
         # Additional metrics (for tracking)
         self._additionalDistanceMetrics = {}
         additionalMetrics = getattr(study, "additionalDistanceMetrics", [])
@@ -146,8 +154,13 @@ class BaseObjectiveWrapper:
             processedDomains = {}  # Keep references to vps.Domains that get processed
 
             if len(self._study.project.initialDomains) > 0:
-                # Use multiple named initial domains
-                for name, domain in self._study.project.initialDomains.items():
+                # Fold train domains take priority over project-level roles
+                _trainSource = (
+                    self._study._foldTrainDomains
+                    if getattr(self._study, "_foldTrainDomains", None) is not None
+                    else self._study.project.getTrainingDomains()
+                )
+                for name, domain in _trainSource.items():
                     domainCopy = Domain(domain)
                     initialDomains[name] = domainCopy
                     processedDomains[name] = (
@@ -225,22 +238,28 @@ class BaseObjectiveWrapper:
             objectiveValue = _customScalarObjective
             primaryMetricTime = 0.0
         elif self._isMultiDomainProcess:
-            # Multi-domain distance calculation
-            if len(self._study.project.targetLevelSets) == 0:
+            # Multi-domain distance calculation (training domains only)
+            trainingTargets = (
+                self._study._foldTrainTargets
+                if getattr(self._study, "_foldTrainTargets", None) is not None
+                else self._study.project.getTrainingTargets()
+            )
+            if len(trainingTargets) == 0:
                 raise ValueError(
-                    "No target level sets available for multi-domain comparison"
+                    "No training target level sets available for multi-domain comparison"
                 )
 
-            # Calculate primary objective value
+            # Calculate primary objective value with per-domain breakdown
+            progressPath = os.path.join(
+                self._study._progressDir,
+                f"{self._study.name}-{self._study._evalCounter}",
+            )
             primaryMetricStartTime = time.time()
-            objectiveValue = self._distanceMetric(
+            objectiveValue, perDomainScores = self._detailedDistanceMetric(
                 resultDomains,
-                self._study.project.targetLevelSets,
+                trainingTargets,
                 False,  # Don't save visualization yet
-                os.path.join(
-                    self._study._progressDir,
-                    f"{self._study.name}-{self._study._evalCounter}",
-                ),
+                progressPath,
             )
             primaryMetricTime = time.time() - primaryMetricStartTime
 
@@ -252,17 +271,19 @@ class BaseObjectiveWrapper:
             additionalMetricValues[primaryMetricName] = objectiveValue
             additionalMetricTimes[primaryMetricName] = primaryMetricTime
 
+            # Store per-domain scores (timing attributed to primary metric above)
+            for domainName, score in perDomainScores.items():
+                additionalMetricValues[domainName] = score
+                additionalMetricTimes[domainName] = 0.0
+
             # Calculate additional metrics with individual timing
             for metricName, metricFunc in self._additionalDistanceMetrics.items():
                 additionalMetricStartTime = time.time()
                 additionalMetricValues[metricName] = metricFunc(
                     resultDomains,
-                    self._study.project.targetLevelSets,
+                    trainingTargets,
                     False,  # Don't save visualization
-                    os.path.join(
-                        self._study._progressDir,
-                        f"{self._study.name}-{self._study._evalCounter}",
-                    ),
+                    progressPath,
                 )
                 additionalMetricTimes[metricName] = (
                     time.time() - additionalMetricStartTime
@@ -273,12 +294,9 @@ class BaseObjectiveWrapper:
                 # Save primary metric visualization
                 self._distanceMetric(
                     resultDomains,
-                    self._study.project.targetLevelSets,
+                    trainingTargets,
                     True,  # Save visualization
-                    os.path.join(
-                        self._study._progressDir,
-                        f"{self._study.name}-{self._study._evalCounter}",
-                    ),
+                    progressPath,
                 )
 
                 # Save additional metric visualizations if requested
@@ -289,12 +307,9 @@ class BaseObjectiveWrapper:
                     ) in self._additionalDistanceMetrics.items():
                         metricFunc(
                             resultDomains,
-                            self._study.project.targetLevelSets,
+                            trainingTargets,
                             True,  # Save visualization
-                            os.path.join(
-                                self._study._progressDir,
-                                f"{self._study.name}-{self._study._evalCounter}",
-                            ),
+                            progressPath,
                         )
         else:
             # Single-domain distance calculation (backward compatibility)
@@ -383,6 +398,8 @@ class BaseObjectiveWrapper:
             self._study.bestScore = objectiveValue
             self._study.bestParameters = paramDict.copy()
             self._study.bestEvaluationNumber = self._study._evalCounter
+            if hasattr(self._study, "_saveBestParameterPositionsPlot"):
+                self._study._saveBestParameterPositionsPlot()
 
         # Early stopping tracking
         if newBest:

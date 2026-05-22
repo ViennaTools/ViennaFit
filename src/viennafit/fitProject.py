@@ -38,6 +38,12 @@ class Project:
         self.targetLevelSets = {}  # {name: levelSet}
         self._targetLevelSetPaths = {}  # {name: path}
 
+        # Domain roles: "train" or "validate" (absent → treated as "train")
+        self.domainRoles = {}  # {name: "train" | "validate"}
+
+        # Cross-validation mode marker
+        self.studyMode = "standard"
+
         # Set paths if name is provided
         if name is not None:
             baseName = name
@@ -117,6 +123,8 @@ class Project:
             "initialDomainPaths": {},  # New multi-domain support
             "targetLevelSetPath": "",  # Keep for backward compatibility
             "targetLevelSetPaths": {},  # New multi-target support
+            "domainRoles": {},
+            "studyMode": "standard",
         }
 
         # Save project information to JSON file
@@ -158,6 +166,9 @@ class Project:
             self._initialDomainPaths = {}
             if self._initialDomainPath != "":
                 self._initialDomainPaths["default"] = self._initialDomainPath
+
+        self.domainRoles = projectInfo.get("domainRoles", {})
+        self.studyMode = projectInfo.get("studyMode", "standard")
 
         # Load multi-target paths (new format) with backward compatibility
         if "targetLevelSetPaths" in projectInfo:
@@ -546,8 +557,14 @@ class Project:
         print(f"Target domain set from '{filePath}' and saved to project")
         return self
 
-    def addTargetLevelSet(self, name: str, levelSet):
-        """Add a named target level set to the project."""
+    def addTargetLevelSet(self, name: str, levelSet, role: str = None):
+        """Add a named target level set to the project.
+
+        Args:
+            name:     Unique identifier (should match the corresponding initial domain name).
+            levelSet: ViennaLS Domain object.
+            role:     Optional 'train' or 'validate'.
+        """
         if name in self.targetLevelSets:
             print(f"Warning: Target '{name}' already exists. Overwriting.")
 
@@ -593,6 +610,10 @@ class Project:
         print(
             f"Target level set '{name}' and visualization meshes saved to {targetDomainDir}"
         )
+
+        if role is not None:
+            self.setDomainRole(name, role)
+
         return self
 
     def getTargetLevelSet(self, name: str):
@@ -636,7 +657,7 @@ class Project:
         """Get the number of target level sets in the project."""
         return len(self.targetLevelSets)
 
-    def addTargetLevelSetFromFile(self, name: str, filePath: str):
+    def addTargetLevelSetFromFile(self, name: str, filePath: str, role: str = None):
         """Add a named target level set from file."""
         if not os.path.exists(filePath):
             raise FileNotFoundError(f"Target domain file '{filePath}' does not exist.")
@@ -650,12 +671,19 @@ class Project:
         lsReader(levelSet, filePath).apply()
 
         # Use existing addTargetLevelSet method to save to project structure
-        self.addTargetLevelSet(name, levelSet)
+        self.addTargetLevelSet(name, levelSet, role=role)
         print(f"Target domain '{name}' set from '{filePath}' and saved to project")
         return self
 
-    def addInitialDomain(self, name: str, domain):
-        """Add a named initial domain to the project."""
+    def addInitialDomain(self, name: str, domain, role: str = None):
+        """Add a named initial domain to the project.
+
+        Args:
+            name:   Unique identifier for this domain.
+            domain: ViennaPS Domain object.
+            role:   Optional 'train' or 'validate'. Defaults to 'train' when any
+                    role is defined for the project.
+        """
         if name in self.initialDomains:
             print(f"Warning: Initial domain '{name}' already exists. Overwriting.")
 
@@ -740,6 +768,10 @@ class Project:
         print(
             f"Initial domain '{name}' and visualization meshes saved to {initialDomainDir}"
         )
+
+        if role is not None:
+            self.setDomainRole(name, role)
+
         return self
 
     def getInitialDomain(self, name: str):
@@ -779,11 +811,102 @@ class Project:
         """List all initial domain names in the project."""
         return list(self.initialDomains.keys())
 
+    # ── Train / validate roles ─────────────────────────────────────────────────
+
+    def setDomainRole(self, name: str, role: str):
+        """
+        Mark a domain pair as 'train' or 'validate'.
+
+        Domains without a role default to 'train'. When at least one domain has
+        a role assigned, only 'train' domains are used during optimization;
+        'validate' domains are evaluated afterward with the best parameters.
+
+        Args:
+            name: Domain name (must match a name used in addInitialDomain / addTargetLevelSet).
+            role: Either 'train' or 'validate'.
+        """
+        if role not in ("train", "validate"):
+            raise ValueError(f"role must be 'train' or 'validate', got '{role}'")
+        self.domainRoles[name] = role
+        self.updateProjectInfo("domainRoles", self.domainRoles)
+        return self
+
+    def listDomainRoles(self) -> Dict[str, str]:
+        """Return a copy of the domain-role mapping."""
+        return dict(self.domainRoles)
+
+    def getTrainingDomains(self) -> Dict:
+        """
+        Return the subset of initialDomains used for optimization.
+
+        If no roles are defined, all domains are returned (backward compatible).
+        """
+        if not self.domainRoles:
+            return self.initialDomains
+        return {
+            k: v
+            for k, v in self.initialDomains.items()
+            if self.domainRoles.get(k, "train") == "train"
+        }
+
+    def getValidationDomains(self) -> Dict:
+        """Return the subset of initialDomains reserved for validation."""
+        return {
+            k: v
+            for k, v in self.initialDomains.items()
+            if self.domainRoles.get(k) == "validate"
+        }
+
+    def getTrainingTargets(self) -> Dict:
+        """
+        Return the subset of targetLevelSets used for optimization.
+
+        If no roles are defined, all targets are returned (backward compatible).
+        """
+        if not self.domainRoles:
+            return self.targetLevelSets
+        return {
+            k: v
+            for k, v in self.targetLevelSets.items()
+            if self.domainRoles.get(k, "train") == "train"
+        }
+
+    def getValidationTargets(self) -> Dict:
+        """Return the subset of targetLevelSets reserved for validation."""
+        return {
+            k: v
+            for k, v in self.targetLevelSets.items()
+            if self.domainRoles.get(k) == "validate"
+        }
+
+    _VALID_STUDY_MODES = ("standard", "cross-validation", "leave-one-out")
+
+    def setStudyMode(self, mode: str):
+        """
+        Mark this project's intended study strategy.
+
+        Args:
+            mode: One of 'standard', 'cross-validation', or 'leave-one-out'.
+                  Stored in project-info.json so it is visible in metadata.
+                  For 'cross-validation' and 'leave-one-out' projects, domain
+                  roles are not set at the project level; use Optimization.setFold()
+                  to specify the train/validate split per run instead.
+        """
+        if mode not in self._VALID_STUDY_MODES:
+            raise ValueError(
+                f"studyMode must be one of {self._VALID_STUDY_MODES}, got '{mode}'"
+            )
+        self.studyMode = mode
+        self.updateProjectInfo("studyMode", mode)
+        return self
+
+    # ── End train / validate roles ─────────────────────────────────────────────
+
     def getInitialDomainCount(self):
         """Get the number of initial domains in the project."""
         return len(self.initialDomains)
 
-    def addInitialDomainFromFile(self, name: str, filePath: str):
+    def addInitialDomainFromFile(self, name: str, filePath: str, role: str = None):
         """Add a named initial domain from file."""
         if not os.path.exists(filePath):
             raise FileNotFoundError(f"Initial domain file '{filePath}' does not exist.")
@@ -796,7 +919,7 @@ class Project:
         Reader(domain, filePath).apply()
 
         # Use existing addInitialDomain method to save to project structure
-        self.addInitialDomain(name, domain)
+        self.addInitialDomain(name, domain, role=role)
         print(f"Initial domain '{name}' set from '{filePath}' and saved to project")
         return self
 
