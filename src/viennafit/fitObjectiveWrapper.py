@@ -398,6 +398,8 @@ class BaseObjectiveWrapper:
             self._study.bestScore = objectiveValue
             self._study.bestParameters = paramDict.copy()
             self._study.bestEvaluationNumber = self._study._evalCounter
+            if hasattr(self._study, "_saveBestParameterPositionsPlot"):
+                self._study._saveBestParameterPositionsPlot()
 
         # Early stopping tracking
         if newBest:

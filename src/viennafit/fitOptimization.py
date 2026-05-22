@@ -693,6 +693,28 @@ class Optimization(Study):
             print(f"Optimization failed with error: {str(e)}")
             raise
 
+    def _saveBestParameterPositionsPlot(self):
+        """Save a parameter-positions plot for the current best, overwriting on each new best."""
+        if not self.bestParameters or not self.variableParameters:
+            return
+        try:
+            from .postprocessing.plotters.parameters import ParameterPlotter
+            from .postprocessing.base import StudyData, PlotConfig
+
+            plotsDir = os.path.join(self.runDir, "plots")
+            os.makedirs(plotsDir, exist_ok=True)
+
+            data = StudyData(
+                runDir=self.runDir,
+                studyName=self.name,
+                studyType="optimization",
+                metadata={"parameterBounds": self.variableParameters},
+                results={"bestParameters": self.bestParameters},
+            )
+            ParameterPlotter(PlotConfig())._plotParameterPositions(data, plotsDir)
+        except Exception:
+            pass
+
     def generatePlots(
         self, plotTypes: Optional[List[str]] = None
     ) -> Dict[str, List[str]]:
