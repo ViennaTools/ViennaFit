@@ -4,7 +4,7 @@ Produces space-separated x y coordinate files compatible with
 ``readPointsFromFile``.
 
 CLI usage:
-    viennafit-annotate <image_path> [--scale NM_PER_PX] [--output FILE]
+    viennafit-annotate <imagePath> [--scale NM_PER_PX] [--output FILE]
 
 Keys:
     a  — add mode (default)
@@ -19,7 +19,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 
-def annotate(image_path, scale=1.0, output=None):
+def annotate(imagePath, scale=1.0, output=None):
     """Interactively annotate boundary points on a SEM image.
 
     Opens the image in a matplotlib window. Click once to set the coordinate
@@ -31,7 +31,7 @@ def annotate(image_path, scale=1.0, output=None):
 
     Parameters
     ----------
-    image_path : str or Path
+    imagePath : str or Path
         Path to the SEM image.
     scale : float, optional
         Nanometres per pixel. When 1.0 (default) coordinates are in pixels.
@@ -44,31 +44,31 @@ def annotate(image_path, scale=1.0, output=None):
     Path
         Path to the written output file, or ``None`` if no points were picked.
     """
-    image_path = Path(image_path)
-    img = np.array(Image.open(image_path).convert("L"))
+    imagePath = Path(imagePath)
+    img = np.array(Image.open(imagePath).convert("L"))
 
     unit = "nm" if scale != 1.0 else "px"
     if output is None:
-        output = image_path.parent / f"{image_path.stem}_points_{unit}.dat"
+        output = imagePath.parent / f"{imagePath.stem}_points_{unit}.dat"
     output = Path(output)
 
     state = {
-        "mode": "set_origin",  # "set_origin" | "add" | "delete"
+        "mode": "setOrigin",  # "setOrigin" | "add" | "delete"
         "origin": None,  # (ox, oy) in pixel coords
-        "points": [],  # list of (phys_x, phys_y)
-        "px_points": [],  # list of (px_x, px_y)
+        "points": [],  # list of (physX, physY)
+        "pxPoints": [],  # list of (pxX, pxY)
     }
 
     fig, ax = plt.subplots()
-    fig.canvas.manager.set_window_title(image_path.name)
+    fig.canvas.manager.set_window_title(imagePath.name)
     ax.imshow(img, cmap="gray", origin="upper")
     ax.set_axis_off()
 
-    origin_marker = ax.plot([], [], "m+", markersize=16, markeredgewidth=2)[0]
+    originMarker = ax.plot([], [], "m+", markersize=16, markeredgewidth=2)[0]
     scatter = ax.scatter([], [], c="red", s=30, zorder=5)
     labels = []
 
-    status_text = ax.text(
+    statusText = ax.text(
         0.01,
         0.99,
         "Click to set origin",
@@ -79,7 +79,7 @@ def annotate(image_path, scale=1.0, output=None):
         ha="left",
         bbox=dict(boxstyle="round,pad=0.2", fc="black", alpha=0.5),
     )
-    coord_text = ax.text(
+    coordText = ax.text(
         0.5,
         0.01,
         "",
@@ -91,8 +91,8 @@ def annotate(image_path, scale=1.0, output=None):
         bbox=dict(boxstyle="round,pad=0.2", fc="black", alpha=0.5),
     )
 
-    def _mode_label():
-        if state["mode"] == "set_origin":
+    def _modeLabel():
+        if state["mode"] == "setOrigin":
             return "Click to set origin"
         n = len(state["points"])
         tag = "ADD" if state["mode"] == "add" else "DELETE"
@@ -101,31 +101,31 @@ def annotate(image_path, scale=1.0, output=None):
     def _redraw():
         if state["origin"] is not None:
             ox, oy = state["origin"]
-            origin_marker.set_data([ox], [oy])
+            originMarker.set_data([ox], [oy])
 
         for lbl in labels:
             lbl.remove()
         labels.clear()
 
-        if state["px_points"]:
-            xs, ys = zip(*state["px_points"])
+        if state["pxPoints"]:
+            xs, ys = zip(*state["pxPoints"])
             scatter.set_offsets(np.column_stack([xs, ys]))
-            for i, (px, py) in enumerate(state["px_points"]):
+            for i, (px, py) in enumerate(state["pxPoints"]):
                 lbl = ax.text(px + 4, py - 4, str(i), color="red", fontsize=7, zorder=6)
                 labels.append(lbl)
         else:
             scatter.set_offsets(np.empty((0, 2)))
 
-        status_text.set_text(_mode_label())
+        statusText.set_text(_modeLabel())
         fig.canvas.draw_idle()
 
-    def on_click(event):
+    def onClick(event):
         if event.inaxes is not ax or event.button != 1:
             return
-        px_x, px_y = event.xdata, event.ydata
+        pxX, pxY = event.xdata, event.ydata
 
-        if state["mode"] == "set_origin":
-            state["origin"] = (px_x, px_y)
+        if state["mode"] == "setOrigin":
+            state["origin"] = (pxX, pxY)
             state["mode"] = "add"
             _redraw()
             return
@@ -133,44 +133,44 @@ def annotate(image_path, scale=1.0, output=None):
         ox, oy = state["origin"]
 
         if state["mode"] == "add":
-            phys_x = (px_x - ox) * scale
-            phys_y = -(px_y - oy) * scale
-            state["points"].append((phys_x, phys_y))
-            state["px_points"].append((px_x, px_y))
+            physX = (pxX - ox) * scale
+            physY = -(pxY - oy) * scale
+            state["points"].append((physX, physY))
+            state["pxPoints"].append((pxX, pxY))
             _redraw()
 
         elif state["mode"] == "delete":
-            if not state["px_points"]:
+            if not state["pxPoints"]:
                 return
-            pts = np.array(state["px_points"])
-            dists = np.hypot(pts[:, 0] - px_x, pts[:, 1] - px_y)
+            pts = np.array(state["pxPoints"])
+            dists = np.hypot(pts[:, 0] - pxX, pts[:, 1] - pxY)
             idx = int(np.argmin(dists))
             state["points"].pop(idx)
-            state["px_points"].pop(idx)
+            state["pxPoints"].pop(idx)
             _redraw()
 
-    def on_motion(event):
+    def onMotion(event):
         if event.inaxes is not ax or state["origin"] is None:
             return
         ox, oy = state["origin"]
-        phys_x = (event.xdata - ox) * scale
-        phys_y = -(event.ydata - oy) * scale
-        coord_text.set_text(f"x={phys_x:.2f}  y={phys_y:.2f}  {unit}")
+        physX = (event.xdata - ox) * scale
+        physY = -(event.ydata - oy) * scale
+        coordText.set_text(f"x={physX:.2f}  y={physY:.2f}  {unit}")
         fig.canvas.draw_idle()
 
-    def on_key(event):
+    def onKey(event):
         if event.key == "a":
-            if state["mode"] != "set_origin":
+            if state["mode"] != "setOrigin":
                 state["mode"] = "add"
                 _redraw()
         elif event.key == "d":
-            if state["mode"] != "set_origin":
+            if state["mode"] != "setOrigin":
                 state["mode"] = "delete"
                 _redraw()
 
     result = [None]
 
-    def on_close(event):
+    def onClose(event):
         if not state["points"]:
             print("No points picked — file not written.")
             return
@@ -179,10 +179,10 @@ def annotate(image_path, scale=1.0, output=None):
         print(f"Saved {len(state['points'])} points → {output}")
         result[0] = output
 
-    fig.canvas.mpl_connect("button_press_event", on_click)
-    fig.canvas.mpl_connect("motion_notify_event", on_motion)
-    fig.canvas.mpl_connect("key_press_event", on_key)
-    fig.canvas.mpl_connect("close_event", on_close)
+    fig.canvas.mpl_connect("button_press_event", onClick)
+    fig.canvas.mpl_connect("motion_notify_event", onMotion)
+    fig.canvas.mpl_connect("key_press_event", onKey)
+    fig.canvas.mpl_connect("close_event", onClose)
 
     plt.tight_layout()
     plt.show()
