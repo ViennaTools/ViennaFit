@@ -19,7 +19,6 @@ class SensitivityPlotter(BasePlotter):
             return createdFiles
 
         sensitivityResults = data.sensitivityData
-        method = sensitivityResults.get("method", "sobol")
 
         # First-order sensitivity indices
         if "firstOrder" in sensitivityResults:

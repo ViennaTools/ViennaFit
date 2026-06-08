@@ -392,7 +392,7 @@ class LocalSensitivityStudy(Study):
             with open(resultsPath, "w") as f:
                 json.dump(finalResults, f, indent=4)
 
-            print(f"\nSensitivity study completed!")
+            print("\nSensitivity study completed!")
             print(f"Results saved to: {resultsPath}")
             print(f"Successful evaluations: {len(successfulResults)}/{len(results)}")
             if successfulResults:

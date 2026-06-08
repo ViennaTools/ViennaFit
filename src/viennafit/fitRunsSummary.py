@@ -4,7 +4,7 @@ Optimization runs summary and aggregation functionality.
 
 import os
 import json
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from datetime import datetime
 import glob
 

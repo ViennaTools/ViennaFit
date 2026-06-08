@@ -4,15 +4,12 @@ from .fitStudy import Study
 from .fitUtilities import (
     createProgressManager,
     ProgressMetadata,
-    migrateLegacyProgressFile,
-    ProgressDataManager,
     getViennaVersionInfo,
 )
 from .postprocessing import GSSPostprocessor
 import os
 import json
 import numpy as np
-import matplotlib.pyplot as plt
 from typing import Dict, Tuple, List, Optional
 from datetime import datetime
 from SALib.sample import saltelli
@@ -449,7 +446,7 @@ class GlobalSensitivityStudy(Study):
 
             # Print best results summary
             if bestParams:
-                print(f"\nBest evaluation found:")
+                print("\nBest evaluation found:")
                 print(f"  Evaluation #: {self.bestEvaluationNumber}")
                 print(f"  Best score: {bestScore:.6f}")
                 print("  Best parameters:")

@@ -2,10 +2,9 @@
 Parameter-related plot generation for optimization and GSS results.
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
-from typing import List, Dict, Optional
+from typing import List, Optional
 from ..base import BasePlotter, StudyData
 
 

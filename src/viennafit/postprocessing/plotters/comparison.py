@@ -5,7 +5,7 @@ Multi-run comparison plot generation.
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Dict, Optional
+from typing import List, Optional
 from ..base import BasePlotter, StudyData
 from ..loaders import ResultsLoader
 

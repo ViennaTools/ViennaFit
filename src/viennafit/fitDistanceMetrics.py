@@ -65,18 +65,13 @@ class DistanceMetric:
 
                 def cached_csf_is_single(d1, d2, sv, wp):
                     """Cached CSF-IS for single domain comparison."""
-                    import time as time_module
-
                     cacheKey = id(d2)
 
                     if cacheKey not in expandedTargetCache:
-                        # First call: expand target and cache it (exclude from timing)
-                        expandStartTime = time_module.time()
+                        # First call: expand target and cache it
                         expandedTarget = vls.Domain(d2)
                         vls.Expand(expandedTarget, sparseFieldExpansionWidth).apply()
-                        expandTime = time_module.time() - expandStartTime
                         expandedTargetCache[cacheKey] = expandedTarget
-                        # print(f"CSF-IS: Expanded target domain (took {expandTime:.3f}s, excluded from metric time)")
 
                     # Use cached expanded target
                     return DistanceMetric._compareSparseFieldIterateSample(
@@ -142,18 +137,13 @@ class DistanceMetric:
 
                 def cached_csf_is(d1, d2, sv, wp):
                     """Cached CSF-IS that expands target (d2) only once."""
-                    import time as time_module
-
                     cacheKey = id(d2)
 
                     if cacheKey not in expandedTargetCache:
-                        # First call: expand target and cache it (exclude from timing)
-                        expandStartTime = time_module.time()
+                        # First call: expand target and cache it
                         expandedTarget = vls.Domain(d2)
                         vls.Expand(expandedTarget, sparseFieldExpansionWidth).apply()
-                        expandTime = time_module.time() - expandStartTime
                         expandedTargetCache[cacheKey] = expandedTarget
-                        # print(f"CSF-IS: Expanded target domain (took {expandTime:.3f}s, excluded from metric time)")
 
                     # Use cached expanded target
                     # Note: d1 is sample (will be iterated), cached target is expanded

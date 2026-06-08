@@ -225,7 +225,6 @@ class BaseObjectiveWrapper:
 
         # Track simulation time (subtract post-processing if provided)
         simulationTime = time.time() - simulationStartTime - postProcessingTime
-        distanceMetricStartTime = time.time()
 
         self._study._evalCounter += 1
 
