@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use ViennaFit in your research, please cite it as below."
+title: "ViennaFit"
+type: software
+authors:
+  - family-names: "Kostal"
+    given-names: "Roman"
+    affiliation: "Institute for Microelectronics, TU Wien"
+repository-code: "https://github.com/ViennaTools/ViennaFit"
+url: "https://viennatools.github.io/ViennaFit/"
+license: GPL-3.0-only
+version: 2.0.0
+date-released: 2026-06-12
+keywords:
+  - process-simulation
+  - parameter-optimization
+  - model-calibration
+  - sensitivity-analysis
+  - semiconductor
+abstract: >-
+  ViennaFit is a Python package for parameter optimization and calibration
+  of ViennaPS process simulation models. It automates the fitting of
+  simulation parameters to match experimental data through various
+  optimization algorithms and distance metrics, and provides local and
+  global sensitivity analysis.

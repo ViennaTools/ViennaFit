@@ -56,7 +56,7 @@ pip install .
 
 For Bayesian optimization (Ax/BoTorch):
 ```bash
-pip install botorch>=0.15.1 gpytorch>=1.14 ax-platform>=1.1.2
+pip install .[bayesian]
 ```
 
 ## Requirements
@@ -65,17 +65,17 @@ pip install botorch>=0.15.1 gpytorch>=1.14 ax-platform>=1.1.2
 
 **Dependencies** (installed automatically):
 - ViennaPS >= 4.0.0
-- dlib == 19.24.0
+- dlib >= 19.24.6
 - nevergrad >= 1.0.12
-- NumPy == 1.26.4
-- cma == 3.2.2
+- NumPy >= 1.26
+- cma >= 3.2.2
 - SALib >= 1.5.1
 - matplotlib >= 3.5
 - pandas >= 1.5
 
 ## Documentation
 
-📚 **Full Documentation**: *[TODO: Not yet published]* https://viennatools.github.io/ViennaFit/
+📚 **Full Documentation**: https://viennatools.github.io/ViennaFit/
 
 - [Examples](examples/) - Working code examples
 
@@ -136,12 +136,16 @@ If you use ViennaFit in your research, please cite:
 }
 ```
 
+A `CITATION.cff` file is also provided — use the "Cite this repository" button on GitHub.
+
 ## License
+
+Copyright © 2025 Institute for Microelectronics, TU Wien.
 
 ViennaFit is released under the GNU General Public License v3. See [LICENSE](LICENSE) for details.
 
 ## Support
 
-- **Documentation**: https://viennatools.github.io/ViennaFit/ *[TODO: Not yet published]*
+- **Documentation**: https://viennatools.github.io/ViennaFit/
 - **Issues**: https://github.com/ViennaTools/ViennaFit/issues
 - **Examples**: See [examples/](examples/) directory
