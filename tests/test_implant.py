@@ -256,3 +256,4 @@ def test_anneal_calibrator_smoke_with_viennaps_if_available():
     assert result.sim_profile is not None
     assert result.sim_profile.max() > 0.0
     assert result.rsh_computed is not None
+    assert np.isfinite(result.rsh_computed)

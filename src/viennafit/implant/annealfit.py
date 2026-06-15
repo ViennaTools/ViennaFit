@@ -519,6 +519,9 @@ class AnnealCalibrator:
             sr = vps.SheetResistance()
             sr.setCellSet(domain.getCellSet())
             sr.setConcentrationLabel(self._label_active)
+            sr.setDepthAxis(1)
+            if hasattr(sr, "setSurfacePosition"):
+                sr.setSurfacePosition(0.0)
             rsh_sim = float(sr.computeElectron())
 
         # Normalise and interpolate onto post-anneal SIMS depth axis
