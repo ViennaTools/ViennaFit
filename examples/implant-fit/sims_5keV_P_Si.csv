@@ -1,0 +1,40 @@
+# SIMS depth profile — P implantation in Si, 5 keV
+# Signal: 31P (direct phosphorus secondary ion)
+# Source: digitized from SIMSdata.png (log-scale intensity vs depth)
+# Depth unit : nm
+# Intensity  : normalized (peak = 1)
+#
+# Note on ViennaPS parameter convention
+# --------------------------------------
+# The fitted 'skewness' parameter maps to C++ params.beta (β₂ position in formula)
+# The fitted 'kurtosis' parameter maps to C++ params.gamma (γ₁ position in formula)
+# Use these values directly in the ViennaPS config.txt keys 'skewness' and 'kurtosis'.
+depth_nm,intensity
+0.0,0.115
+0.5,0.160
+1.0,0.230
+1.5,0.330
+2.0,0.460
+2.5,0.620
+3.0,0.800
+3.5,0.930
+4.0,1.000
+4.5,0.980
+5.0,0.880
+5.5,0.740
+6.0,0.590
+6.5,0.460
+7.0,0.350
+7.5,0.265
+8.0,0.200
+9.0,0.120
+10.0,0.078
+11.0,0.055
+12.5,0.040
+15.0,0.028
+17.5,0.021
+20.0,0.017
+25.0,0.013
+30.0,0.010
+35.0,0.008
+40.0,0.006

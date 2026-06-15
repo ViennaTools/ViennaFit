@@ -1,0 +1,39 @@
+# Post-anneal SIMS depth profile — 5 keV ³¹P in Si
+# Anneal condition: 1000 °C / 30 s (RTA, N₂ ambient)
+# Dose: 1×10¹⁴ cm⁻²
+#
+# This is a SYNTHETIC profile generated for example/calibration demonstration.
+# It represents the expected shape after thermal broadening of the as-implanted
+# Pearson IV profile by P diffusion and TED at 1000 °C.
+#
+# Profile modelled as a two-component Gaussian:
+#   f(z) = 0.85 × exp[−(z−8)²/288] + 0.15 × exp[−(z−20)²/450]
+#   normalised so peak = 1.0
+#
+# Measured Rsh (synthetic): 1200 Ω/□
+#   (corresponds to peak active conc. ~4×10¹⁹ cm⁻³, junction depth ~30 nm
+#    at background doping 1×10¹⁶ cm⁻³)
+#
+# Parameter convention reminder:
+#   config 'skewness' → C++ params.beta  (β₂ position in Pearson formula)
+#   config 'kurtosis' → C++ params.gamma (γ₁ position in Pearson formula)
+depth_nm,intensity
+0.0,0.775
+2.0,0.858
+4.0,0.927
+6.0,0.975
+8.0,1.000
+10.0,1.000
+12.0,0.974
+15.0,0.896
+18.0,0.781
+20.0,0.694
+25.0,0.473
+30.0,0.290
+35.0,0.165
+40.0,0.090
+45.0,0.047
+50.0,0.023
+60.0,0.004
+70.0,0.0006
+80.0,0.0001
