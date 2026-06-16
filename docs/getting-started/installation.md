@@ -62,13 +62,14 @@ pip install .
 
 This will automatically install:
 
-- `dlib` 19.24.0 - Global optimization
+- `dlib-bin` 19.24.6+ - Global optimization
 - `nevergrad` 1.0.12+ - Alternative optimization algorithms
-- `numpy` 1.26.4 - Array operations
-- `cma` 3.2.2 - CMA-ES algorithm
+- `numpy` 1.26+ - Array operations
+- `cma` 3.2.2+ - CMA-ES algorithm
 - `SALib` 1.5.1+ - Sensitivity analysis
 - `matplotlib` 3.5+ - Plotting
 - `pandas` 1.5+ - Data handling
+- `Pillow` 9.0+ - Image handling for annotations
 
 ## Step 5: Verify Installation
 
@@ -94,10 +95,10 @@ All imports successful!
 
 ### Bayesian Optimization (Ax/BoTorch)
 
-For advanced Bayesian optimization capabilities, install additional packages:
+For advanced Bayesian optimization capabilities, install ViennaFit with the `bayesian` extra:
 
 ```bash
-pip install botorch>=0.15.1 gpytorch>=1.14 ax-platform>=1.1.2
+pip install .[bayesian]
 ```
 
 !!! warning "Large Install"
@@ -149,30 +150,15 @@ vls.setDimension(2)  # match ViennaPS dimension
 
 ### dlib Installation Fails
 
-**Error:**
-```
-ERROR: Could not build wheels for dlib
-```
+ViennaFit depends on `dlib-bin`, which ships pre-built wheels for all major
+platforms, so no compiler should be needed. If installation still fails:
 
-**Solution (Linux):**
 ```bash
-# Install build dependencies
-sudo apt-get install cmake build-essential
+# Update pip so it can resolve the pre-built wheels
+pip install --upgrade pip
 
 # Try again
-pip install dlib==19.24.0
-```
-
-**Solution (macOS):**
-```bash
-# Install Xcode command line tools
-xcode-select --install
-
-# Install cmake
-brew install cmake
-
-# Try again
-pip install dlib==19.24.0
+pip install dlib-bin
 ```
 
 ### Version Conflicts
@@ -220,8 +206,9 @@ cd ViennaFit
 # Install in editable mode
 pip install -e .
 
-# Install development dependencies (optional)
-pip install pytest black isort
+# Install and activate the formatting hooks
+pip install pre-commit
+pre-commit install
 ```
 
 Editable mode (`-e`) means changes to the source code take effect immediately without reinstalling.
