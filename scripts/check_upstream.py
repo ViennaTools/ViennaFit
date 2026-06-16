@@ -87,10 +87,16 @@ def _check_repo(name, repo, do_fetch, used):
     local_v = _cmake_version(repo, "HEAD")
     remote_v = _cmake_version(repo, remote)
     behind = _git(repo, "rev-list", "--count", f"HEAD..{remote}").stdout.strip() or "?"
-    print(f"  branch {branch}: HEAD {local_v}  ->  {remote} {remote_v}  ({behind} commits behind)")
+    print(
+        f"  branch {branch}: HEAD {local_v}  ->  {remote} {remote_v}  ({behind} commits behind)"
+    )
 
     if behind in ("0", "?"):
-        print("  up to date with remote.\n" if behind == "0" else "  could not compare to remote.\n")
+        print(
+            "  up to date with remote.\n"
+            if behind == "0"
+            else "  could not compare to remote.\n"
+        )
         return
 
     # Scan the unpulled .pyi diff for removals of symbols ViennaFit uses.
@@ -99,12 +105,22 @@ def _check_repo(name, repo, do_fetch, used):
         diff = _git(repo, "diff", f"HEAD..{remote}", "--", rel).stdout
         if not diff:
             continue
-        removed_lines = [ln[1:] for ln in diff.splitlines() if ln.startswith("-") and not ln.startswith("---")]
-        added_lines = [ln[1:] for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+        removed_lines = [
+            ln[1:]
+            for ln in diff.splitlines()
+            if ln.startswith("-") and not ln.startswith("---")
+        ]
+        added_lines = [
+            ln[1:]
+            for ln in diff.splitlines()
+            if ln.startswith("+") and not ln.startswith("+++")
+        ]
         for sym in used[name]:
             token = f" {sym}"
             gone = any(token in r for r in removed_lines)
-            still = any(token in a for a in added_lines) or any(sym in a for a in added_lines)
+            still = any(token in a for a in added_lines) or any(
+                sym in a for a in added_lines
+            )
             if gone and not still:
                 removed.append(f"{sym} (in {rel})")
     if removed:
