@@ -1,8 +1,9 @@
 version: 2
 updates:
-  # Open PRs when ViennaPS/ViennaLS (or other Python deps) publish new versions.
+  # Open PRs when ViennaPS (or other Python deps) publish new versions.
   # The compat workflow runs on these PRs, so a green check means the bump is
-  # safe against ViennaFit's actual API usage.
+  # safe against ViennaFit's actual API usage. (ViennaLS is not declared here:
+  # ViennaPS owns its version, so it moves with viennaps bumps.)
   - package-ecosystem: pip
     directory: "/"
     schedule:
@@ -13,11 +14,14 @@ updates:
       viennatools:
         patterns:
           - "viennaps"
-          - "viennals"
 
-  # Keep the GitHub Actions themselves current.
+  # Keep the GitHub Actions current; bundle all action bumps into one PR.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
       day: monday
+    groups:
+      github-actions:
+        patterns:
+          - "*"
