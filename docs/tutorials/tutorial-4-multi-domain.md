@@ -375,7 +375,7 @@ opt.setNotes(
 )
 
 print("\nMulti-domain optimization configured")
-print(f"Parameters: {opt.getParameterNames()}")
+print(f"Parameters: {opt.parameterNames}")
 print(f"Domains: {list(project.initialDomains.keys())}")
 ```
 

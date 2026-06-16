@@ -124,7 +124,7 @@ local_study.setParameterSensitivityRanges({
         optimal["neutralStickP"],
         optimal["neutralStickP"] * 1.2
     )
-})
+}, nEval=(5, 5, 5, 5))  # 5 points per parameter (one entry per parameter)
 
 print(f"\nSensitivity ranges defined around optimal:")
 for param, value in optimal.items():
@@ -138,9 +138,9 @@ for param, value in optimal.items():
 local_study.setDistanceMetric("CCH")
 
 # Run local sensitivity analysis
-# nEval=(5,) means 5 points per parameter
+# Point counts were set via nEval in setParameterSensitivityRanges above
 print("\nRunning local sensitivity analysis...")
-local_study.apply(nEval=(5,))  # Total: 4 params × 5 points = 20 evaluations
+local_study.apply()  # Total: 4 params × 5 points = 20 evaluations
 
 print("Local sensitivity analysis complete!")
 ```
@@ -478,10 +478,11 @@ local_study.setParameterNames(list(optimal.keys()))
 
 # Define ranges (±20% around optimal)
 ranges = {param: (val*0.8, val, val*1.2) for param, val in optimal.items()}
-local_study.setParameterSensitivityRanges(ranges)
+# nEval needs one entry per parameter (5 points each)
+local_study.setParameterSensitivityRanges(ranges, nEval=(5,) * len(ranges))
 
 local_study.setDistanceMetric("CCH")
-local_study.apply(nEval=(5,))
+local_study.apply()
 
 # === Global Sensitivity ===
 global_study = fit.GlobalSensitivityStudy("globalSens1", project)
