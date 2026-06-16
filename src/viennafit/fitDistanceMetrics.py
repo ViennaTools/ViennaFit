@@ -1,5 +1,5 @@
 from typing import Callable
-import viennals as vls
+from viennaps import ls as vls
 import os
 
 

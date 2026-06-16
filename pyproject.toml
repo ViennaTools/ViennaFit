@@ -36,7 +36,11 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "viennaps>=4.0.0",
+    # ViennaPS owns the ViennaLS version (ViennaFit reaches ViennaLS via
+    # viennaps.ls), so ViennaLS is intentionally not declared here.
+    # Upper bound is the last validated major; Dependabot + the compat workflow
+    # gate raising it. See scripts/check_upstream.py and tests/test_upstream_compat.py.
+    "viennaps>=4.4,<5",
     "dlib-bin>=19.24.6",
     "cma>=3.2.2",
     "numpy>=1.26",
