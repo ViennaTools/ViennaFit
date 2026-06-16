@@ -50,7 +50,7 @@ def getViennaVersionInfo() -> Dict[str, Optional[str]]:
         result["viennalsVersion"] = importlib_metadata.version("viennals")
     except importlib_metadata.PackageNotFoundError:
         try:
-            import viennals as vls
+            from viennaps import ls as vls
 
             result["viennalsVersion"] = getattr(vls, "__version__", "unknown")
         except ImportError:

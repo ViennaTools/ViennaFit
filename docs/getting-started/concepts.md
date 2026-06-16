@@ -13,7 +13,8 @@ A **Project** is a container for all work related to one calibration or optimiza
 
 ### Directory Structure
 
-When you initialize a project, ViennaFit creates:
+Initialization creates the `domains/` folder and `projectName-info.json`. The
+remaining folders are created on demand when you run the corresponding study:
 
 ```
 projectName/
@@ -30,8 +31,8 @@ projectName/
 │       ├── progressAll.csv
 │       └── progress/             # Visualization files
 ├── customEvaluations/            # Custom parameter explorations
-├── localSensitivityStudies/      # Local sensitivity results
-└── globalSensitivityStudies/     # Global sensitivity results
+├── locSensStudies/              # Local sensitivity results
+└── globSensStudies/             # Global sensitivity results
 ```
 
 ### Creating a Project

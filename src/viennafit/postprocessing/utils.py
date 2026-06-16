@@ -47,7 +47,7 @@ def findStudyDirectories(projectDir: str, studyType: Optional[str] = None) -> Li
     # Common patterns for study directories
     patterns = [
         os.path.join(projectDir, "optimizationRuns", "*"),
-        os.path.join(projectDir, "globalSensStudies", "*"),
+        os.path.join(projectDir, "globSensStudies", "*"),
         os.path.join(projectDir, "locSensStudies", "*"),
     ]
 

@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Open PRs when ViennaPS/ViennaLS (or other Python deps) publish new versions.
+  # The compat workflow runs on these PRs, so a green check means the bump is
+  # safe against ViennaFit's actual API usage.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      viennatools:
+        patterns:
+          - "viennaps"
+          - "viennals"
+
+  # Keep the GitHub Actions themselves current.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday

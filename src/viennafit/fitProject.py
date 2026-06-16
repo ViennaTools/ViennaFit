@@ -6,8 +6,7 @@ import shutil
 from typing import List, Dict, Tuple, Optional, Any
 from viennaps import Reader
 from viennaps import Domain as psDomain
-from viennals import Reader as lsReader
-from viennals import Domain as lsDomain
+from viennaps import ls as vls
 from viennafit.postprocessing import OptimizationPostprocessor
 
 
@@ -203,8 +202,8 @@ class Project:
         else:
             # Load the target level set
             dimension = 2  # ViennaLS target domains are always 2D
-            targetDomain = lsDomain(dimension)
-            lsReader(
+            targetDomain = vls.Domain(dimension)
+            vls.Reader(
                 targetDomain,
                 os.path.join(
                     self.projectPath,
@@ -220,8 +219,8 @@ class Project:
         for targetName, targetPath in self._targetLevelSetPaths.items():
             if targetPath != "" and os.path.exists(targetPath):
                 dimension = 2  # ViennaLS target domains are always 2D
-                targetDomain = lsDomain(dimension)
-                lsReader(targetDomain, targetPath).apply()
+                targetDomain = vls.Domain(dimension)
+                vls.Reader(targetDomain, targetPath).apply()
                 self.targetLevelSets[targetName] = targetDomain
 
                 # If this is the default target and we don't have a single target loaded, use it
@@ -271,7 +270,7 @@ class Project:
 
         if self.mode == "2D":
             import viennaps as vps
-            import viennals as vls
+            from viennaps import ls as vls
 
             vps.setDimension(2)
             vls.setDimension(2)
@@ -317,7 +316,7 @@ class Project:
 
         elif self.mode == "3D":
             import viennaps as vps
-            import viennals as vls
+            from viennaps import ls as vls
 
             vps.setDimension(3)
             vls.setDimension(3)
@@ -375,7 +374,7 @@ class Project:
         )
 
         # ViennaLS target domains are always 2D
-        import viennals as vls
+        from viennaps import ls as vls
 
         vls.setDimension(2)
 
@@ -551,8 +550,8 @@ class Project:
 
         # Load the level set
         dimension = 2  # ViennaLS target domains are always 2D
-        levelSet = lsDomain(dimension)
-        lsReader(levelSet, filePath).apply()
+        levelSet = vls.Domain(dimension)
+        vls.Reader(levelSet, filePath).apply()
 
         # Use existing setTargetLevelSet method to save to project structure
         self.setTargetLevelSet(levelSet)
@@ -582,7 +581,7 @@ class Project:
         )
 
         # ViennaLS target domains are always 2D
-        import viennals as vls
+        from viennaps import ls as vls
 
         vls.setDimension(2)
 
@@ -669,8 +668,8 @@ class Project:
 
         # Load the level set
         dimension = 2  # ViennaLS target domains are always 2D
-        levelSet = lsDomain(dimension)
-        lsReader(levelSet, filePath).apply()
+        levelSet = vls.Domain(dimension)
+        vls.Reader(levelSet, filePath).apply()
 
         # Use existing addTargetLevelSet method to save to project structure
         self.addTargetLevelSet(name, levelSet, role=role)
@@ -702,7 +701,7 @@ class Project:
 
         if self.mode == "2D":
             import viennaps as vps
-            import viennals as vls
+            from viennaps import ls as vls
 
             vps.setDimension(2)
             vls.setDimension(2)
@@ -733,7 +732,7 @@ class Project:
 
         elif self.mode == "3D":
             import viennaps as vps
-            import viennals as vls
+            from viennaps import ls as vls
 
             vps.setDimension(3)
             vls.setDimension(3)

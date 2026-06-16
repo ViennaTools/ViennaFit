@@ -100,11 +100,8 @@ evaluator.setVariableValues({
     ]
 })
 
-# Other parameters fixed at optimal
-evaluator.setFixedParameters({
-    "ionEnergy": optimal["ionEnergy"],
-    "neutralStickP": optimal["neutralStickP"]
-})
+# Parameters you don't vary are automatically held at their optimal
+# values from the loaded run, so no extra configuration is needed for them.
 
 # Set distance metric (same as optimization)
 evaluator.setDistanceMetric("CCH")
@@ -486,10 +483,7 @@ evaluator.setVariableValues({
     "ionFlux": [optimal["ionFlux"] * f for f in [0.8, 0.9, 1.0, 1.1, 1.2]],
     "etchantFlux": [optimal["etchantFlux"] * f for f in [0.8, 0.9, 1.0, 1.1, 1.2]]
 })
-evaluator.setFixedParameters({
-    "ionEnergy": optimal["ionEnergy"],
-    "neutralStickP": optimal["neutralStickP"]
-})
+# Non-varied parameters stay at their optimal values automatically
 evaluator.setDistanceMetric("CCH")
 grid_results = evaluator.apply("parameterGrid")
 

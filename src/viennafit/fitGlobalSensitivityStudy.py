@@ -20,7 +20,7 @@ from SALib.analyze import fast as fastAnalyzer
 
 class GlobalSensitivityStudy(Study):
     def __init__(self, name: str, project: Project):
-        super().__init__(name, project, "globalSensStudies")
+        super().__init__(name, project, "globSensStudies")
         # Override the progress directory name
         self._progressDir = os.path.join(self.runDir, "evaluations")
         os.makedirs(self._progressDir, exist_ok=True)

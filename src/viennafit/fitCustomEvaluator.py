@@ -2,7 +2,7 @@ from .fitProject import Project
 from .fitUtilities import loadOptimumFromResultsFile
 from .fitDistanceMetrics import DistanceMetric
 import viennaps as vps
-import viennals as vls
+from viennaps import ls as vls
 import importlib.util
 import sys
 import os
