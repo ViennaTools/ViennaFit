@@ -1,9 +1,9 @@
 from .fitProject import Project
+from .fitDistanceMetrics import DistanceMetric
 import viennaps as vps
 import importlib.util
 import sys
 import os
-import json
 import inspect
 from typing import Callable
 
@@ -47,7 +47,7 @@ class Study:
         self.project = project
 
         # Check project readiness
-        if not project.isReady:
+        if not project.isReady():
             raise ValueError(
                 "Project is not ready. Please initialize the project first, "
                 "set the initial and target domains before running the study."
@@ -283,10 +283,10 @@ class Study:
             sparseFieldExpansionWidth: Expansion width for CSF metric (default: 200).
                     Applied to target level set before comparison to ensure sufficient overlap.
         """
-        if metric not in ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD"]:
+        if metric not in DistanceMetric.AVAILABLE_METRICS:
             raise ValueError(
                 f"Invalid distance metric: {metric}. "
-                "Options are 'CA', 'CSF', 'CNB', 'CA+CSF', 'CA+CNB', 'CCD'."
+                f"Options are {', '.join(DistanceMetric.AVAILABLE_METRICS)}."
             )
 
         if metric == "CCD" and criticalDimensionRanges is None:
@@ -331,7 +331,7 @@ class Study:
                     Only applies when saveComparison=True in apply() and for best/all evaluations.
                     Default: False (only primary metric visualizations are saved).
         """
-        availableMetrics = ["CA", "CSF", "CNB", "CA+CSF", "CA+CNB", "CCD", "CCH"]
+        availableMetrics = DistanceMetric.AVAILABLE_METRICS
 
         if primaryMetric not in availableMetrics:
             raise ValueError(

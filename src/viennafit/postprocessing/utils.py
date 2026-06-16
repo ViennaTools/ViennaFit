@@ -70,7 +70,7 @@ def findStudyDirectories(projectDir: str, studyType: Optional[str] = None) -> Li
                             and detectedType == "global_sensitivity"
                         ):
                             studyDirs.append(dirPath)
-                    except:
+                    except Exception:
                         continue
                 else:
                     studyDirs.append(dirPath)

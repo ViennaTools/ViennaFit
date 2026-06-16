@@ -134,18 +134,20 @@ class Project:
         print(f"Project information saved to {self._projectInfoPath}")
         return self
 
-    def load(self, projectPath: str = "projectPath"):
+    def load(self, projectPath: str):
         if not os.path.exists(projectPath):
             raise FileNotFoundError(
                 f"Project directory '{projectPath}' does not exist."
             )
 
-        # if projethPath does not end with .json, construct the path
+        # If projectPath is a directory, construct the path to its info file.
+        # Otherwise assume projectPath already points at the *-info.json file.
         if not projectPath.endswith(".json"):
             # project name is last part of the path
             projectName = os.path.basename(projectPath)
-            print(projectName)
             projectInfoPath = os.path.join(projectPath, f"{projectName}-info.json")
+        else:
+            projectInfoPath = projectPath
 
         # load the project information from the JSON file
         with open(projectInfoPath, "r") as f:

@@ -264,7 +264,7 @@ class AxOptimizerWrapper(BaseOptimizerWrapper):
         # Calculate total evaluations
         totalEvaluations = initialSamples + (numBatches * batchSize)
 
-        print(f"Ax/BoTorch configuration:")
+        print("Ax/BoTorch configuration:")
         print(f"  Initial samples (Sobol): {initialSamples}")
         print(f"  Batch size: {batchSize}")
         print(f"  Number of batches: {numBatches}")

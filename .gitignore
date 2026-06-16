@@ -176,18 +176,19 @@ cython_debug/
 # VS Code settings
 .vscode/
 
+# Simulation output files
 *.vtk
 *.vtu
 *.vtp
 *.vpsd
 *.lvst
 
-progress*
-run*
+# Optimization outputs generated in the repo root during development
+/progress*
+/run*
 
-*json
-
-# the projects directory 
+# the projects directory
 projects/
 
 BP*
+

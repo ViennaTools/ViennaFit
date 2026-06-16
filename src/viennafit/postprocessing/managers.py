@@ -2,14 +2,13 @@
 Postprocessing manager classes for optimization and GSS studies.
 """
 
-from typing import List, Optional
-from .base import BasePostprocessor, PlotConfig, StudyData
+from typing import List
+from .base import BasePostprocessor, StudyData
 from .loaders import ResultsLoader
 from .plotters import (
     ConvergencePlotter,
     ParameterPlotter,
     SensitivityPlotter,
-    ComparisonPlotter,
 )
 
 
@@ -140,7 +139,7 @@ class GSSPostprocessor(BasePostprocessor):
             summaryLines.extend(
                 [
                     "## Configuration",
-                    f"- Method: Global Sensitivity Analysis",
+                    "- Method: Global Sensitivity Analysis",
                     f"- Parameter Names: {', '.join(data.metadata.get('parameterNames', []))}",
                     "",
                 ]

@@ -5,15 +5,12 @@ from .fitUtilities import (
     createProgressManager,
     ProgressMetadata,
     migrateLegacyProgressFile,
-    ProgressDataManager,
     getViennaVersionInfo,
 )
 from .postprocessing import OptimizationPostprocessor
-import viennaps as vps
 import os
 import json
 import shutil
-import matplotlib.pyplot as plt
 import numpy as np
 import ast
 import time
@@ -99,9 +96,11 @@ class Optimization(Study):
 
     def getVariableBounds(self):
         """Get bounds for variable parameters as lists"""
-        varParams = self.getVariableParameterList()
-        lowerBounds = [p.lowerBound for p in varParams]
-        upperBounds = [p.upperBound for p in varParams]
+        lowerBounds = []
+        upperBounds = []
+        for lowerBound, upperBound in self.variableParameters.values():
+            lowerBounds.append(lowerBound)
+            upperBounds.append(upperBound)
         return lowerBounds, upperBounds
 
     def _evaluateSubset(
@@ -668,7 +667,7 @@ class Optimization(Study):
                 self.bestParameters.update(result["x"])
                 self.bestScore = result["fun"]
 
-                print(f"Optimization completed successfully:")
+                print("Optimization completed successfully:")
                 print(f"  Function evaluations: {result['nfev']}")
                 print(f"  Best score: {result['fun']:.6f}")
                 print("  Best parameters:")

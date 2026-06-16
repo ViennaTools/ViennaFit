@@ -21,3 +21,18 @@ from .fitAnnotator import annotate
 from .fitExceptions import EarlyStoppingException
 
 __version__ = "2.0.0"
+
+__all__ = [
+    "Project",
+    "Study",
+    "Optimization",
+    "LocalSensitivityStudy",
+    "GlobalSensitivityStudy",
+    "CustomEvaluator",
+    "readPointsFromFile",
+    "plotParameterProgression",
+    "plotParameterPositions",
+    "openInParaview",
+    "annotate",
+    "EarlyStoppingException",
+]

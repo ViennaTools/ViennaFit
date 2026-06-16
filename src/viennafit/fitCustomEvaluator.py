@@ -63,7 +63,7 @@ class CustomEvaluator:
         )
 
         # Check project readiness
-        if not project.isReady:
+        if not project.isReady():
             raise ValueError(
                 "Project is not ready. Please initialize the project first, "
                 "set the initial and target domains before using the evaluator."
@@ -378,7 +378,7 @@ class CustomEvaluator:
                 if os.path.exists(legacyCsvPath):
                     csvPath = legacyCsvPath
                     print(
-                        f"Using legacy progressAll_best.csv file (consider renaming to progressBest.csv)"
+                        "Using legacy progressAll_best.csv file (consider renaming to progressBest.csv)"
                     )
 
         if not os.path.exists(csvPath):
@@ -1085,7 +1085,7 @@ class CustomEvaluator:
                     )
                     with open(warningPath, "w") as f:
                         f.write(
-                            f"Warning: Could not extract process sequence source code.\n"
+                            "Warning: Could not extract process sequence source code.\n"
                         )
                         f.write(f"Function name: {self._processSequence.__name__}\n")
                         f.write(f"Error: {str(e)}\n\n")

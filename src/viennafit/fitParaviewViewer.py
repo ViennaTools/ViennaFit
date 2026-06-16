@@ -12,9 +12,9 @@ def openInParaview(
     patterns=None,
     translations=None,
     labels=True,
-    label_anchor="y",
+    labelAnchor="y",
     mode="2D",
-    paraview_executable="paraview",
+    paraviewExecutable="paraview",
 ):
     """Open .vtp files in a folder in ParaView with filename annotations.
 
@@ -42,13 +42,13 @@ def openInParaview(
 
     labels : bool, optional
         Whether to show a movable text annotation for each file. Defaults to True.
-    label_anchor : {'x', 'y', 'z', None}, optional
+    labelAnchor : {'x', 'y', 'z', None}, optional
         Axis whose minimum is used as the world-space anchor for each file's text
         annotation. Defaults to ``'y'`` (bottom edge of geometry). Pass ``None``
         to use the file's translation offset instead.
     mode : {'2D', '3D'}, optional
         Interaction mode for the ParaView render view. Defaults to ``'2D'``.
-    paraview_executable : str, optional
+    paraviewExecutable : str, optional
         Path to the ParaView executable. Defaults to "paraview".
     """
     folder = os.path.abspath(folder)
@@ -58,45 +58,45 @@ def openInParaview(
     elif isinstance(patterns, str):
         patterns = [patterns]
 
-    vtp_files = set()
+    vtpFiles = set()
     for pattern in patterns:
-        vtp_files.update(glob.glob(os.path.join(folder, pattern)))
-    vtp_files = sorted(vtp_files)
+        vtpFiles.update(glob.glob(os.path.join(folder, pattern)))
+    vtpFiles = sorted(vtpFiles)
 
-    if not vtp_files:
+    if not vtpFiles:
         print(f"No files matching {patterns} found in {folder}")
         return
 
     # Build a mapping from filepath to translation offset
-    file_translations = {}
+    fileTranslations = {}
     if translations:
-        for filepath in vtp_files:
-            basename = os.path.basename(filepath)
+        for filepath in vtpFiles:
+            baseName = os.path.basename(filepath)
             for pattern, offset in translations.items():
-                if fnmatch.fnmatch(basename, pattern):
-                    file_translations[filepath] = tuple(offset)
+                if fnmatch.fnmatch(baseName, pattern):
+                    fileTranslations[filepath] = tuple(offset)
                     break
 
     # Build lists for the ParaView script
-    filepaths_repr = repr(vtp_files)
-    stems = [os.path.splitext(os.path.basename(f))[0] for f in vtp_files]
-    labels_repr = repr(stems)
-    translations_repr = repr(file_translations)
-    show_labels = labels
+    filepathsRepr = repr(vtpFiles)
+    stems = [os.path.splitext(os.path.basename(f))[0] for f in vtpFiles]
+    labelsRepr = repr(stems)
+    translationsRepr = repr(fileTranslations)
+    showLabels = labels
 
-    use_bounds_anchor = label_anchor in ("x", "y", "z")
-    if use_bounds_anchor:
-        _axis_map = {"x": (0, 0), "y": (2, 1), "z": (4, 2)}
-        bounds_min_idx, world_idx = _axis_map[label_anchor]
+    useBoundsAnchor = labelAnchor in ("x", "y", "z")
+    if useBoundsAnchor:
+        axisMap = {"x": (0, 0), "y": (2, 1), "z": (4, 2)}
+        boundsMinIdx, worldIdx = axisMap[labelAnchor]
     else:
-        bounds_min_idx, world_idx = 2, 1  # unused placeholders
+        boundsMinIdx, worldIdx = 2, 1  # unused placeholders
 
-    script_content = f"""\
+    scriptContent = f"""\
 from paraview.simple import *
 
-files = {filepaths_repr}
-labels = {labels_repr}
-translations = {translations_repr}
+files = {filepathsRepr}
+labels = {labelsRepr}
+translations = {translationsRepr}
 
 view = GetActiveViewOrCreate('RenderView')
 view.InteractionMode = '{mode}'
@@ -117,14 +117,14 @@ for filepath, label in zip(files, labels):
         Show(source, view)
 
     # Per-file movable text annotation
-    if {show_labels}:
+    if {showLabels}:
         text = Text(Text=label)
         textDisplay = Show(text, view)
         textDisplay.FontFamily = 'Arial'
         textDisplay.FontSize = 20
         textDisplay.Color = [0, 0, 0]
         textDisplay.WindowLocation = 'Any Location'
-        if {use_bounds_anchor}:
+        if {useBoundsAnchor}:
             bounds = source.GetDataInformation().GetBounds()
             translation = translations.get(filepath, (0, 0, 0))
             world_pos = [
@@ -132,7 +132,7 @@ for filepath, label in zip(files, labels):
                 (bounds[2] + bounds[3]) / 2 + translation[1],
                 (bounds[4] + bounds[5]) / 2 + translation[2],
             ]
-            world_pos[{world_idx}] = bounds[{bounds_min_idx}] + translation[{world_idx}]
+            world_pos[{worldIdx}] = bounds[{boundsMinIdx}] + translation[{worldIdx}]
         else:
             world_pos = translations.get(filepath, (0, 0, 0))
         text_displays.append((textDisplay, world_pos))
@@ -153,25 +153,25 @@ for textDisplay, world_pos in text_displays:
 Render()
 """
 
-    script_file = tempfile.NamedTemporaryFile(
+    scriptFile = tempfile.NamedTemporaryFile(
         mode="w", suffix=".py", prefix="paraview_vtp_", delete=False
     )
-    script_file.write(script_content)
-    script_file.close()
+    scriptFile.write(scriptContent)
+    scriptFile.close()
 
-    subprocess.Popen([paraview_executable, f"--script={script_file.name}"])
-    print(f"Launched ParaView with {len(vtp_files)} .vtp files from {folder}")
+    subprocess.Popen([paraviewExecutable, f"--script={scriptFile.name}"])
+    print(f"Launched ParaView with {len(vtpFiles)} .vtp files from {folder}")
 
 
-def _find_project_dir(start_dir, max_levels=6):
-    """Walk up from start_dir until finding the project root (contains domains/)."""
-    d = os.path.abspath(start_dir)
-    for _ in range(max_levels):
+def _findProjectDir(startDir, maxLevels=6):
+    """Walk up from startDir until finding the project root (contains domains/)."""
+    d = os.path.abspath(startDir)
+    for _ in range(maxLevels):
         d = os.path.dirname(d)
         if os.path.isdir(os.path.join(d, "domains")):
             return d
     raise FileNotFoundError(
-        f"Could not find a project root with a 'domains/' subdirectory above {start_dir}"
+        f"Could not find a project root with a 'domains/' subdirectory above {startDir}"
     )
 
 
@@ -179,7 +179,7 @@ def openBestInParaview(
     optimizationRunDir,
     labels=True,
     domainSpacing=200.0,
-    paraview_executable="paraview",
+    paraviewExecutable="paraview",
 ):
     """Open the current best optimization result alongside target surfaces in ParaView.
 
@@ -203,7 +203,7 @@ def openBestInParaview(
     domainSpacing : float, optional
         X distance between consecutive domain columns (same units as the geometry,
         typically nm). Defaults to 200.0.
-    paraview_executable : str, optional
+    paraviewExecutable : str, optional
         Path to the ParaView executable. Defaults to ``"paraview"``.
     """
     import csv
@@ -213,124 +213,120 @@ def openBestInParaview(
     runName = os.path.basename(optimizationRunDir)
 
     # Locate best evaluation number
-    best_eval = None
-    best_csv = os.path.join(optimizationRunDir, "progressBest.csv")
-    if os.path.exists(best_csv):
-        with open(best_csv, newline="") as f:
+    bestEval = None
+    bestCsv = os.path.join(optimizationRunDir, "progressBest.csv")
+    if os.path.exists(bestCsv):
+        with open(bestCsv, newline="") as f:
             rows = list(csv.DictReader(f))
         if rows:
-            best_eval = int(rows[-1]["evaluationNumber"])
+            bestEval = int(rows[-1]["evaluationNumber"])
 
-    if best_eval is None:
-        all_csv = os.path.join(optimizationRunDir, "progressAll.csv")
-        if os.path.exists(all_csv):
-            with open(all_csv, newline="") as f:
+    if bestEval is None:
+        allCsv = os.path.join(optimizationRunDir, "progressAll.csv")
+        if os.path.exists(allCsv):
+            with open(allCsv, newline="") as f:
                 rows = list(csv.DictReader(f))
             if rows:
-                best_row = min(rows, key=lambda r: float(r["objectiveValue"]))
-                best_eval = int(best_row["evaluationNumber"])
+                bestRow = min(rows, key=lambda r: float(r["objectiveValue"]))
+                bestEval = int(bestRow["evaluationNumber"])
 
-    if best_eval is None:
+    if bestEval is None:
         raise FileNotFoundError(
             f"No progressBest.csv or progressAll.csv found in {optimizationRunDir}"
         )
 
     # Glob best VTPs from progress/
-    progress_dir = os.path.join(optimizationRunDir, "progress")
-    best_vtps = sorted(
-        glob.glob(os.path.join(progress_dir, f"{runName}-{best_eval:03d}-*.vtp"))
+    progressDir = os.path.join(optimizationRunDir, "progress")
+    bestVtps = sorted(
+        glob.glob(os.path.join(progressDir, f"{runName}-{bestEval:03d}-*.vtp"))
     )
-    multi_domain = bool(best_vtps)
-    if not multi_domain:
-        best_vtps = sorted(
-            glob.glob(os.path.join(progress_dir, f"{runName}-{best_eval:03d}.vtp"))
+    multiDomain = bool(bestVtps)
+    if not multiDomain:
+        bestVtps = sorted(
+            glob.glob(os.path.join(progressDir, f"{runName}-{bestEval:03d}.vtp"))
         )
 
     # Glob target surfaces
-    project_dir = _find_project_dir(optimizationRunDir)
-    target_vtps = sorted(
-        glob.glob(os.path.join(project_dir, "domains", "targetDomain", "*-surface.vtp"))
+    projectDir = _findProjectDir(optimizationRunDir)
+    targetVtps = sorted(
+        glob.glob(os.path.join(projectDir, "domains", "targetDomain", "*-surface.vtp"))
     )
 
     # If this is a fold run, show only calibration (train) domain targets
-    fold_info_path = os.path.join(
+    foldInfoPath = os.path.join(
         os.path.dirname(os.path.dirname(optimizationRunDir)), "fold-info.json"
     )
-    if os.path.exists(fold_info_path):
-        import json as _json
+    if os.path.exists(foldInfoPath):
+        import json
 
-        with open(fold_info_path) as _f:
-            _fold_info = _json.load(_f)
-        train_domains = _fold_info.get("trainDomains", [])
-        target_vtps = [
+        with open(foldInfoPath) as f:
+            foldInfo = json.load(f)
+        trainDomains = foldInfo.get("trainDomains", [])
+        targetVtps = [
             v
-            for v in target_vtps
-            if any(f"-{d}-" in os.path.basename(v) for d in train_domains)
+            for v in targetVtps
+            if any(f"-{d}-" in os.path.basename(v) for d in trainDomains)
         ]
 
-    if not best_vtps and not target_vtps:
-        print(f"No VTP files found for evaluation {best_eval:03d} in {progress_dir}")
+    if not bestVtps and not targetVtps:
+        print(f"No VTP files found for evaluation {bestEval:03d} in {progressDir}")
         return
 
-    def _natural_key(s):
+    def _naturalKey(s):
         return [int(c) if c.isdigit() else c.lower() for c in re.split(r"(\d+)", s)]
 
-    if multi_domain:
+    if multiDomain:
         # Extract domain name: target -> *-targetDomain-{domain}-surface.vtp
-        def _target_domain(path):
+        def _targetDomain(path):
             m = re.search(r"-targetDomain-(.+)-surface\.vtp$", path)
             return m.group(1) if m else None
 
         # Extract domain name: best -> {runName}-{eval:03d}-{domain}.vtp
-        best_prefix = f"{runName}-{best_eval:03d}-"
+        bestPrefix = f"{runName}-{bestEval:03d}-"
 
-        def _best_domain(path):
+        def _bestDomain(path):
             stem = os.path.splitext(os.path.basename(path))[0]
-            return stem[len(best_prefix) :] if stem.startswith(best_prefix) else None
+            return stem[len(bestPrefix) :] if stem.startswith(bestPrefix) else None
 
-        target_by_domain = {
-            _target_domain(f): f for f in target_vtps if _target_domain(f)
-        }
-        best_by_domain = {_best_domain(f): f for f in best_vtps if _best_domain(f)}
+        targetByDomain = {_targetDomain(f): f for f in targetVtps if _targetDomain(f)}
+        bestByDomain = {_bestDomain(f): f for f in bestVtps if _bestDomain(f)}
 
-        all_domains = sorted(
-            set(target_by_domain) | set(best_by_domain), key=_natural_key
-        )
-        domain_offsets = {d: i * domainSpacing for i, d in enumerate(all_domains)}
+        allDomains = sorted(set(targetByDomain) | set(bestByDomain), key=_naturalKey)
+        domainOffsets = {d: i * domainSpacing for i, d in enumerate(allDomains)}
 
         # Ordered (filepath, pipeline_label, x_offset) entries
-        target_entries = [
-            (target_by_domain[d], f"{d} (target)", domain_offsets[d])
-            for d in all_domains
-            if d in target_by_domain
+        targetEntries = [
+            (targetByDomain[d], f"{d} (target)", domainOffsets[d])
+            for d in allDomains
+            if d in targetByDomain
         ]
-        best_entries = [
-            (best_by_domain[d], f"{d} (sim)", domain_offsets[d])
-            for d in all_domains
-            if d in best_by_domain
+        bestEntries = [
+            (bestByDomain[d], f"{d} (sim)", domainOffsets[d])
+            for d in allDomains
+            if d in bestByDomain
         ]
         # One text annotation per domain column, placed using target bounds
-        label_entries = [
-            (target_by_domain.get(d) or best_by_domain.get(d), d, domain_offsets[d])
-            for d in all_domains
+        labelEntries = [
+            (targetByDomain.get(d) or bestByDomain.get(d), d, domainOffsets[d])
+            for d in allDomains
         ]
     else:
-        target_entries = [
-            (f, os.path.splitext(os.path.basename(f))[0], 0.0) for f in target_vtps
+        targetEntries = [
+            (f, os.path.splitext(os.path.basename(f))[0], 0.0) for f in targetVtps
         ]
-        best_entries = [
-            (f, os.path.splitext(os.path.basename(f))[0], 0.0) for f in best_vtps
+        bestEntries = [
+            (f, os.path.splitext(os.path.basename(f))[0], 0.0) for f in bestVtps
         ]
-        label_entries = target_entries or best_entries
+        labelEntries = targetEntries or bestEntries
 
-    show_labels = labels
+    showLabels = labels
 
-    script_content = f"""\
+    scriptContent = f"""\
 from paraview.simple import *
 
-target_entries = {repr(target_entries)}
-best_entries = {repr(best_entries)}
-label_entries = {repr(label_entries)}
+target_entries = {repr(targetEntries)}
+best_entries = {repr(bestEntries)}
+label_entries = {repr(labelEntries)}
 
 view = GetActiveViewOrCreate('RenderView')
 view.InteractionMode = '2D'
@@ -378,7 +374,7 @@ def _label_pos(source, x_offset, band_fraction=0.05):
     return [x_right + x_offset, y_min, z_mid]
 
 text_displays = []
-if {show_labels}:
+if {showLabels}:
     for filepath, domain_label, x_offset in label_entries:
         source = loaded_sources.get(filepath)
         if source is None:
@@ -406,25 +402,25 @@ for textDisplay, world_pos in text_displays:
 Render()
 """
 
-    script_file = tempfile.NamedTemporaryFile(
+    scriptFile = tempfile.NamedTemporaryFile(
         mode="w", suffix=".py", prefix="paraview_best_", delete=False
     )
-    script_file.write(script_content)
-    script_file.close()
+    scriptFile.write(scriptContent)
+    scriptFile.close()
 
-    subprocess.Popen([paraview_executable, f"--script={script_file.name}"])
-    n_target = len(target_vtps)
-    n_best = len(best_vtps)
+    subprocess.Popen([paraviewExecutable, f"--script={scriptFile.name}"])
+    nTarget = len(targetVtps)
+    nBest = len(bestVtps)
     print(
-        f"Launched ParaView: {n_target} target surface(s) + {n_best} best surface(s)"
-        f" (evaluation {best_eval:03d}) from {optimizationRunDir}"
+        f"Launched ParaView: {nTarget} target surface(s) + {nBest} best surface(s)"
+        f" (evaluation {bestEval:03d}) from {optimizationRunDir}"
     )
 
 
 def openCustomEvaluationInParaview(
     customEvaluationDir,
     labels=True,
-    paraview_executable="paraview",
+    paraviewExecutable="paraview",
 ):
     """Open custom evaluation results alongside target surfaces in ParaView.
 
@@ -442,34 +438,34 @@ def openCustomEvaluationInParaview(
         Path to the custom evaluation output directory (contains ``*-result-*.vtp``).
     labels : bool, optional
         Whether to show a movable text annotation for each file. Defaults to True.
-    paraview_executable : str, optional
+    paraviewExecutable : str, optional
         Path to the ParaView executable. Defaults to ``"paraview"``.
     """
     customEvaluationDir = os.path.abspath(customEvaluationDir)
 
-    result_vtps = sorted(glob.glob(os.path.join(customEvaluationDir, "*-result-*.vtp")))
-    if not result_vtps:
+    resultVtps = sorted(glob.glob(os.path.join(customEvaluationDir, "*-result-*.vtp")))
+    if not resultVtps:
         print(f"No result VTP files found in {customEvaluationDir}")
         return
 
     # Project dir is two levels up: customEvaluations/<evalName> -> project root
-    project_dir = os.path.dirname(os.path.dirname(customEvaluationDir))
-    target_vtps = sorted(
-        glob.glob(os.path.join(project_dir, "domains", "targetDomain", "*-surface.vtp"))
+    projectDir = os.path.dirname(os.path.dirname(customEvaluationDir))
+    targetVtps = sorted(
+        glob.glob(os.path.join(projectDir, "domains", "targetDomain", "*-surface.vtp"))
     )
 
-    result_stems = [os.path.splitext(os.path.basename(f))[0] for f in result_vtps]
-    target_stems = [os.path.splitext(os.path.basename(f))[0] for f in target_vtps]
-    show_labels = labels
+    resultStems = [os.path.splitext(os.path.basename(f))[0] for f in resultVtps]
+    targetStems = [os.path.splitext(os.path.basename(f))[0] for f in targetVtps]
+    showLabels = labels
 
-    script_content = f"""\
+    scriptContent = f"""\
 from paraview.simple import *
 import os as _os
 
-target_files = {repr(target_vtps)}
-target_labels = {repr(target_stems)}
-result_files = {repr(result_vtps)}
-result_labels = {repr(result_stems)}
+target_files = {repr(targetVtps)}
+target_labels = {repr(targetStems)}
+result_files = {repr(resultVtps)}
+result_labels = {repr(resultStems)}
 
 view = GetActiveViewOrCreate('RenderView')
 view.InteractionMode = '2D'
@@ -495,7 +491,7 @@ for filepath, label in zip(target_files, target_labels):
     display.AmbientColor = [0.0, 1.0, 0.0]
     display.DiffuseColor = [0.0, 1.0, 0.0]
     display.LineWidth = 3.0
-    if {show_labels}:
+    if {showLabels}:
         text = Text(Text=label)
         textDisplay = Show(text, view)
         textDisplay.FontFamily = 'Arial'
@@ -519,7 +515,7 @@ for filepath, label in zip(result_files, result_labels):
     else:
         display = Show(source, view)
     display.LineWidth = 3.0
-    if {show_labels}:
+    if {showLabels}:
         text = Text(Text=label)
         textDisplay = Show(text, view)
         textDisplay.FontFamily = 'Arial'
@@ -544,16 +540,16 @@ for textDisplay, world_pos in text_displays:
 Render()
 """
 
-    script_file = tempfile.NamedTemporaryFile(
+    scriptFile = tempfile.NamedTemporaryFile(
         mode="w", suffix=".py", prefix="paraview_custom_eval_", delete=False
     )
-    script_file.write(script_content)
-    script_file.close()
+    scriptFile.write(scriptContent)
+    scriptFile.close()
 
-    subprocess.Popen([paraview_executable, f"--script={script_file.name}"])
+    subprocess.Popen([paraviewExecutable, f"--script={scriptFile.name}"])
     print(
-        f"Launched ParaView: {len(target_vtps)} target surface(s) + "
-        f"{len(result_vtps)} result surface(s) from {customEvaluationDir}"
+        f"Launched ParaView: {len(targetVtps)} target surface(s) + "
+        f"{len(resultVtps)} result surface(s) from {customEvaluationDir}"
     )
 
 
@@ -562,7 +558,7 @@ def _viewBestCLI():
 
     parser = argparse.ArgumentParser(prog="viennafit-view-best")
     parser.add_argument(
-        "optimization_run_dir", help="Path to the optimization run directory"
+        "optimizationRunDir", help="Path to the optimization run directory"
     )
     parser.add_argument(
         "--no-labels",
@@ -573,16 +569,16 @@ def _viewBestCLI():
     )
     parser.add_argument(
         "--domain-spacing",
-        dest="domain_spacing",
+        dest="domainSpacing",
         type=float,
         default=500.0,
         help="X distance between domain columns in geometry units (default: 500.0)",
     )
     args = parser.parse_args()
     openBestInParaview(
-        args.optimization_run_dir,
+        args.optimizationRunDir,
         labels=args.labels,
-        domainSpacing=args.domain_spacing,
+        domainSpacing=args.domainSpacing,
     )
 
 
@@ -591,7 +587,7 @@ def _viewCustomEvaluationCLI():
 
     parser = argparse.ArgumentParser(prog="viennafit-view-custom-eval")
     parser.add_argument(
-        "custom_evaluation_dir", help="Path to the custom evaluation directory"
+        "customEvaluationDir", help="Path to the custom evaluation directory"
     )
     parser.add_argument(
         "--no-labels",
@@ -601,4 +597,4 @@ def _viewCustomEvaluationCLI():
         help="Hide filename annotations (shown by default)",
     )
     args = parser.parse_args()
-    openCustomEvaluationInParaview(args.custom_evaluation_dir, labels=args.labels)
+    openCustomEvaluationInParaview(args.customEvaluationDir, labels=args.labels)

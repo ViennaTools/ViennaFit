@@ -3,12 +3,10 @@ Base classes and interfaces for the postprocessing framework.
 """
 
 import os
-import json
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
-import numpy as np
 
 
 @dataclass
@@ -54,7 +52,6 @@ class BasePlotter(ABC):
         Returns:
             List of created plot file paths
         """
-        pass
 
     def _setupPlot(self, figsize: Optional[Tuple[int, int]] = None):
         """Setup matplotlib plot with common styling."""
@@ -93,12 +90,10 @@ class BasePostprocessor(ABC):
     @abstractmethod
     def loadData(self) -> StudyData:
         """Load all available data for this study."""
-        pass
 
     @abstractmethod
     def getAvailablePlotters(self) -> List[BasePlotter]:
         """Get list of applicable plotters for this study type."""
-        pass
 
     def generatePlots(
         self, plotTypes: Optional[List[str]] = None

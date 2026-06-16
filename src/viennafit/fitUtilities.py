@@ -5,7 +5,7 @@ import os
 import csv
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
 
 
@@ -101,7 +101,7 @@ def getViennaVersionInfo() -> Dict[str, Optional[str]]:
                                         result[commit_key] = git_result.stdout.strip()
                                 except (subprocess.SubprocessError, OSError):
                                     pass
-        except (importlib_metadata.PackageNotFoundError, Exception):
+        except Exception:
             pass
 
     return result
@@ -132,6 +132,8 @@ def readPointsFromFile(
                 elif mode == "2D":
                     x, y = map(float, line.strip().split())
                     z = 0.0  # Default z value for 2D mode
+                else:
+                    raise ValueError(f"Invalid mode '{mode}'. Must be '2D' or '3D'.")
 
                 if reflectX:
                     x = -x
@@ -496,19 +498,16 @@ class ProgressDataManager(ABC):
     @abstractmethod
     def saveEvaluation(self, record: EvaluationRecord, saveAll: bool = True) -> None:
         """Save a single evaluation record"""
-        pass
 
     @abstractmethod
     def loadData(
         self,
     ) -> Tuple[List[EvaluationRecord], List[EvaluationRecord], ProgressMetadata]:
         """Load all data and return (bestRecords, allRecords, metadata)"""
-        pass
 
     @abstractmethod
     def saveMetadata(self) -> None:
         """Save metadata to file"""
-        pass
 
     def getBestRecords(self) -> List[EvaluationRecord]:
         """Get all best evaluation records"""
@@ -1002,8 +1001,6 @@ def plotParameterProgression(
         Path to created plot file
     """
     import matplotlib.pyplot as plt
-    import pandas as pd
-    import ast
 
     # Handle backward compatibility for legacy logscale parameter
     if logscale is not None:
@@ -1150,8 +1147,6 @@ def plotParameterProgression(
             fig.suptitle(plotTitle, fontsize=plt.rcParams["font.size"])
 
         # Generate output path with appropriate suffix
-        basename = os.path.basename(fileName)
-
         # Create suffix based on log scale settings
         if logscaleObjective and logscaleParameters:
             suffix = "_log"  # Both (backward compatible)
@@ -1342,8 +1337,6 @@ def plotParameterPositions(
     try:
         # Prepare data for plotting
         paramNames = list(filteredParams.keys())
-        paramValues = list(filteredParams.values())
-        bounds = [parameterBounds[name] for name in paramNames]
 
         # Calculate positions and percentages
         positions = []
