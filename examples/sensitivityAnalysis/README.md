@@ -38,8 +38,8 @@ All examples can be run independently after completing the prerequisites:
 ## Output
 
 Results are saved in the project's sensitivity analysis directories:
-- `localSensitivityStudies/` - for local sensitivity results
-- `globalSensitivityStudies/` - for global sensitivity results
+- `locSensStudies/` - for local sensitivity results
+- `globSensStudies/` - for global sensitivity results
 - `customEvaluations/` - for custom parameter study results
 
 Each analysis includes visualization files and detailed statistical reports.

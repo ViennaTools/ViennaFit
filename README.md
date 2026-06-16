@@ -110,17 +110,20 @@ pip install .[bayesian]
 
 ## Project Structure
 
-After initialization, ViennaFit creates:
+Initialization creates the `domains/` folder (and `projectName-info.json`).
+The remaining folders are created on demand when you run the corresponding study:
 ```
 projectName/
+├── projectName-info.json   # Project metadata
 ├── domains/
 │   ├── initialDomain/      # Your starting geometry
 │   ├── targetDomain/       # Goal to match
-│   └── annotations/        # Measurement data
+│   ├── annotations/        # Measurement data
+│   └── optimalDomains/     # Best results
 ├── optimizationRuns/       # Results from optimizations
 ├── customEvaluations/      # Custom parameter evaluations
-├── localSensitivityStudies/
-└── globalSensitivityStudies/
+├── locSensStudies/         # Local sensitivity results
+└── globSensStudies/        # Global sensitivity results
 ```
 
 ## Citation

@@ -63,7 +63,7 @@ python parameterStudies.py
 
 Results are saved in the project directory structure:
 - `optimizationRuns/` - Optimization results and process sequences
-- `localSensitivityStudies/` - Local sensitivity analysis results
-- `globalSensitivityStudies/` - Global sensitivity analysis results
+- `locSensStudies/` - Local sensitivity analysis results
+- `globSensStudies/` - Global sensitivity analysis results
 - `customEvaluations/` - Custom parameter study results
 

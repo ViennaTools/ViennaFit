@@ -151,7 +151,7 @@ print("Local sensitivity analysis complete!")
 
 ```python
 # Load results
-results_dir = f"{project.projectPath}/localSensitivityStudies/localSens1"
+results_dir = f"{project.projectPath}/locSensStudies/localSens1"
 
 # Load CSV data
 csv_path = f"{results_dir}/localSens1_results.csv"
@@ -328,7 +328,7 @@ print("Global sensitivity analysis complete!")
 
 ```python
 # Load results
-results_dir_global = f"{project.projectPath}/globalSensitivityStudies/globalSens1"
+results_dir_global = f"{project.projectPath}/globSensStudies/globalSens1"
 
 # Sobol indices from SALib are typically saved in JSON format
 sobol_file = f"{results_dir_global}/globalSens1_sobol_indices.json"
