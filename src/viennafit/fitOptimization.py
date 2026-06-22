@@ -18,6 +18,39 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
 
+def _ensureHeadlessPlottingBackend():
+    """Force a non-interactive matplotlib backend for the duration of a run.
+
+    An optimization run writes plots to disk repeatedly: the parameter-positions
+    plot is saved on *every new best* (see fitObjectiveWrapper), plus convergence
+    plots at the end. With an interactive backend (TkAgg/QtAgg/...) each savefig
+    talks to a live display server. In a headless or SSH-forwarded session that
+    connection can drop mid-run, and the next draw triggers a fatal
+    "XIO: fatal IO error" that Xlib aborts the *whole process* on -- it cannot be
+    caught from Python, so it silently kills a multi-hour optimization (this is
+    what aborted runs after only a handful of evaluations). A run never displays
+    plots interactively, so Agg is always the correct choice here.
+
+    Set VIENNAFIT_KEEP_BACKEND=1 to opt out (e.g. live plotting in a notebook).
+    """
+    if os.environ.get("VIENNAFIT_KEEP_BACKEND"):
+        return
+    try:
+        import matplotlib
+
+        nonInteractive = ("agg", "pdf", "ps", "svg", "cairo", "template")
+        current = matplotlib.get_backend()
+        if current.lower() not in nonInteractive:
+            # No figures exist yet at the start of apply(), so force=True is safe.
+            matplotlib.use("Agg", force=True)
+            print(
+                f"[viennafit] matplotlib backend {current!r} -> 'Agg' for this run "
+                "(headless-safe plotting; set VIENNAFIT_KEEP_BACKEND=1 to keep it)."
+            )
+    except Exception as e:
+        print(f"[viennafit] could not set headless plotting backend: {e}")
+
+
 class Optimization(Study):
     def __init__(self, project: Project):
         super().__init__(project.projectName, project, "optimizationRuns")
@@ -31,6 +64,7 @@ class Optimization(Study):
             None  # Number of batches for Ax/BoTorch (alternative to numEvaluations)
         )
         self.initialSamples = None  # Will default to 2*numParams if not set
+        self.initialGuess = None  # Optional warm-start point (set via setInitialGuess())
 
         # Fold-based cross-validation (set via setFold())
         self._foldName = None
@@ -405,6 +439,24 @@ class Optimization(Study):
 
         return self
 
+    def setInitialGuess(self, guess: Dict[str, float]):
+        """
+        Warm-start the optimizer at a known parameter point instead of the
+        default bounds-midpoint. Currently honoured by the CMA optimizer, which
+        centres its initial distribution on this point (clamped to the bounds).
+
+        Args:
+            guess: Mapping of variable-parameter name -> starting value. Must
+                   cover every variable parameter; extra keys are ignored.
+
+        Returns:
+            self for method chaining
+        """
+        if self._applied:
+            raise RuntimeError("Cannot set initial guess after optimization has been applied")
+        self.initialGuess = dict(guess)
+        return self
+
     def setBatchSize(self, batchSize: int):
         """
         Set batch size for Ax/BoTorch optimizer (number of parallel candidates per iteration).
@@ -554,6 +606,10 @@ class Optimization(Study):
                 Only applies when saveComparison=True and for best/all evaluations.
                 Default: False (only primary metric visualizations are saved).
         """
+        # A run dumps plots to disk throughout; never let an interactive backend
+        # tie the optimization's survival to a live (and droppable) X connection.
+        _ensureHeadlessPlottingBackend()
+
         if not self._applied:
             self.validate()
 

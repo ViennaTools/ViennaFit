@@ -175,8 +175,20 @@ class CmaOptimizerWrapper(BaseOptimizerWrapper):
         n = len(parameterNames)
         ranges = [u - l for l, u in zip(lowerBounds, upperBounds)]
 
-        # Normalize to [0, 1]^n so sigma0 is meaningful for all dimensions equally
-        x0Norm = [0.5] * n
+        # Normalize to [0, 1]^n so sigma0 is meaningful for all dimensions equally.
+        # Warm-start at a supplied initial guess if present, else bounds-midpoint.
+        initialGuess = getattr(self._optimization, "initialGuess", None)
+        if initialGuess:
+            x0Norm = []
+            for name, l, r in zip(parameterNames, lowerBounds, ranges):
+                if name not in initialGuess:
+                    raise ValueError(f"initialGuess missing variable parameter '{name}'")
+                xn = (initialGuess[name] - l) / r if r else 0.5
+                x0Norm.append(min(1.0, max(0.0, xn)))
+            print(f"  CMA warm-start at initialGuess (normalized): "
+                  f"{[round(v, 3) for v in x0Norm]}")
+        else:
+            x0Norm = [0.5] * n
         sigma0 = 0.3
 
         # Objective in normalized space — denormalize before evaluation
