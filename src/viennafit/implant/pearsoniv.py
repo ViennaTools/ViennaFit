@@ -109,7 +109,7 @@ def _normalization(mu: float, sigma: float,
     with np.errstate(all="ignore"):
         vals = pearson_unnorm(z_grid, mu, sigma, skewness, kurtosis)
     vals = np.nan_to_num(vals, nan=0.0, posinf=0.0, neginf=0.0)
-    val = float(np.trapz(vals, z_grid))
+    val = float(np.trapezoid(vals, z_grid))
     return val if val > 0.0 else 1.0
 
 

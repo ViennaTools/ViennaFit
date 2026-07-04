@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Callable, Literal, Optional, Sequence
 
 import numpy as np
-from scipy.optimize import differential_evolution, minimize
+from scipy.optimize import differential_evolution, minimize, minimize_scalar
 
 Optimizer = Literal["scipy", "dlib", "nevergrad", "cma"]
 OPTIMIZERS = ("scipy", "dlib", "nevergrad", "cma")
@@ -130,6 +130,14 @@ def run_optimizer(
     if not bounds:
         raise ValueError("bounds must not be empty")
 
+    # Population optimizers (CMA-ES in particular) are undefined / crash on a
+    # single free parameter.  Route 1-D problems to a bounded scalar method.
+    if len(bounds) == 1:
+        return _run_scalar(
+            objective, list(bounds), int(n_budget),
+            initial_guess=initial_guess, polish=polish,
+        )
+
     return _BACKENDS[optimizer](
         objective,
         list(bounds),
@@ -138,6 +146,43 @@ def run_optimizer(
         initial_guess=initial_guess,
         polish=polish,
     )
+
+
+def _run_scalar(
+    objective,
+    bounds: list,
+    n_budget: int,
+    *,
+    initial_guess=None,
+    polish: bool = True,
+) -> np.ndarray:
+    """Bounded 1-D optimization: coarse grid scan (seeds the global region)
+    followed by a bounded Brent polish, all under the call budget."""
+    wrapped = _BudgetedObjective(objective, n_budget)
+    lo, hi = bounds[0]
+
+    def f(v: float) -> float:
+        return wrapped(np.array([v], dtype=np.float64))
+
+    n_grid = max(5, min(n_budget // 2, 25))
+    grid = list(np.linspace(lo, hi, n_grid))
+    if initial_guess is not None:
+        grid.append(float(_clip_to_bounds(initial_guess, bounds)[0]))
+    for v in grid:
+        f(v)
+
+    if polish and wrapped.calls < n_budget:
+        remaining = max(1, n_budget - wrapped.calls)
+        try:
+            minimize_scalar(
+                f, bounds=(lo, hi), method="bounded",
+                options={"maxiter": remaining, "xatol": 1e-4},
+            )
+        except Exception:
+            pass
+
+    best = wrapped.best_x if wrapped.best_x is not None else np.array([0.5 * (lo + hi)])
+    return _clip_to_bounds(best, bounds)
 
 
 def _run_scipy(

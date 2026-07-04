@@ -145,7 +145,7 @@ def init_domain_from_sims(
     peak = conc.max()
     if 0.0 < peak <= 2.0:
         # Normalised profile → absolute cm⁻³
-        integral_nm = float(np.trapz(conc, depth_nm))
+        integral_nm = float(np.trapezoid(conc, depth_nm))
         if integral_nm > 0.0:
             conc = conc * dose_cm2 / (integral_nm * 1e-7)
 
