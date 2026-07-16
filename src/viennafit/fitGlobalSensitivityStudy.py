@@ -288,7 +288,7 @@ class GlobalSensitivityStudy(Study):
                     paramDict[name] = params[j]
 
                 # Evaluate
-                objectiveValue, elapsedTime = objectiveWrapper._evaluateObjective(
+                objectiveValue, elapsedTime, _, _ = objectiveWrapper._evaluateObjective(
                     paramDict, self.saveComparison
                 )
 
