@@ -184,7 +184,10 @@ class GlobalSensitivityStudy(Study):
         """Prepare the problem dictionary for SALib"""
         return {
             "num_vars": len(self.variableParameters),
-            "names": list(self.variableParameters.keys()),
+            # NOTE: names must be a numpy array, not a plain list. SALib's
+            # extract_group_names() passes this straight to pandas.unique(),
+            # and pandas >= 3.0 rejects plain lists.
+            "names": np.array(list(self.variableParameters.keys())),
             "bounds": [
                 self.variableParameters[name] for name in self.variableParameters.keys()
             ],
