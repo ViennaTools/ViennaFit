@@ -62,6 +62,7 @@ bayesian = [
 viennafit-view-best = "viennafit.fitParaviewViewer:_viewBestCLI"
 viennafit-view-custom-eval = "viennafit.fitParaviewViewer:_viewCustomEvaluationCLI"
 viennafit-annotate = "viennafit.fitAnnotator:_annotateCLI"
+viennafit-finalize = "viennafit.fitProject:_finalizeRunCLI"
 
 [project.urls]
 Documentation = "https://viennatools.github.io/ViennaFit/"
