@@ -398,6 +398,8 @@ class ProgressMetadata:
     description: str = ""
     numEvaluations: Optional[int] = None
     notes: Optional[str] = None
+    initialParameters: Optional[Dict[str, float]] = None
+    randomSeed: Optional[int] = None
     viennapsVersion: Optional[str] = None
     viennalsVersion: Optional[str] = None
     viennapsCommit: Optional[str] = None
@@ -418,6 +420,10 @@ class ProgressMetadata:
             result["numEvaluations"] = self.numEvaluations
         if self.notes is not None:
             result["notes"] = self.notes
+        if self.initialParameters is not None:
+            result["initialParameters"] = self.initialParameters
+        if self.randomSeed is not None:
+            result["randomSeed"] = self.randomSeed
         # Include version info if available
         if self.viennapsVersion is not None:
             result["viennapsVersion"] = self.viennapsVersion
@@ -442,6 +448,8 @@ class ProgressMetadata:
             "description",
             "numEvaluations",
             "notes",
+            "initialParameters",
+            "randomSeed",
             "viennapsVersion",
             "viennalsVersion",
             "viennapsCommit",

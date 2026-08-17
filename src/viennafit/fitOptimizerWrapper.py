@@ -1,3 +1,4 @@
+import math
 from typing import Dict, List, Tuple, Any
 from .fitObjectiveWrapper import ObjectiveWrapper
 
@@ -68,34 +69,109 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
     """Wrapper for dlib optimizer."""
 
     def optimize(self, numEvaluations: int) -> Dict[str, Any]:
-        """Run optimization using dlib's find_min_global."""
-        from dlib import find_min_global
+        """Run optimization using dlib's global_function_search."""
+        from dlib import function_evaluation, function_spec, global_function_search
         from .fitExceptions import EarlyStoppingException
 
-        # Get bounds
+        # Get bounds and parameter order
+        parameterNames = list(self._optimization.variableParameters.keys())
         lowerBounds, upperBounds = self.getBounds()
 
         # Create objective function
         objectiveFunction = ObjectiveWrapper.create("dlib", self._optimization)
 
-        # Run optimization
+        # Match dlib.find_min_global behavior: optimize variables on a log-scale when
+        # low > 0 and high/low >= 1000.
+        logScale = []
+        searchLowerBounds = []
+        searchUpperBounds = []
+        for low, high in zip(lowerBounds, upperBounds):
+            useLog = (low > 0.0) and ((high / low) >= 1000.0)
+            logScale.append(useLog)
+            if useLog:
+                searchLowerBounds.append(math.log(low))
+                searchUpperBounds.append(math.log(high))
+            else:
+                searchLowerBounds.append(low)
+                searchUpperBounds.append(high)
+
+        def toObjectiveSpace(searchValues):
+            objectiveValues = []
+            for value, useLog in zip(searchValues, logScale):
+                objectiveValues.append(math.exp(value) if useLog else value)
+            return objectiveValues
+
+        # Build dlib optimizer state.
+        spec = function_spec(searchLowerBounds, searchUpperBounds)
+        initialFunctionEvals = [[]]
+
         earlyStopped = False
+        seedEvalCount = 0
+
+        # Optional initial parameters: evaluate once and inject as initial_function_evals.
+        initialParams = getattr(self._optimization, "initialParameters", None)
         try:
-            x, fx = find_min_global(
-                objectiveFunction,
-                lowerBounds,
-                upperBounds,
-                numEvaluations,
+            if initialParams:
+                x0Objective = []
+                for name, low, high in zip(parameterNames, lowerBounds, upperBounds):
+                    if name in initialParams:
+                        raw = float(initialParams[name])
+                    else:
+                        raw = 0.5 * (low + high)
+                    x0Objective.append(min(high, max(low, raw)))
+
+                x0Search = []
+                for value, useLog in zip(x0Objective, logScale):
+                    x0Search.append(math.log(value) if useLog else value)
+
+                f0 = objectiveFunction(*x0Objective)
+                initialFunctionEvals[0].append(function_evaluation(x0Search, -f0))
+                seedEvalCount = 1
+
+            dlibSearch = global_function_search(
+                [spec], initialFunctionEvals, 0.001
             )
+
+            randomSeed = getattr(self._optimization, "randomSeed", None)
+            if randomSeed is not None:
+                dlibSearch.set_seed(int(randomSeed))
+
+            remainingCalls = max(0, int(numEvaluations) - seedEvalCount)
+            for _ in range(remainingCalls):
+                request = dlibSearch.get_next_x()
+                xSearch = list(request.x)
+                xObjective = toObjectiveSpace(xSearch)
+                value = objectiveFunction(*xObjective)
+                request.set(-value)
+
+            # If no evaluations were recorded at all, fall back to center.
+            if self._optimization._evalCounter == 0:
+                x = [(low + high) / 2.0 for low, high in zip(lowerBounds, upperBounds)]
+                fx = float("inf")
+            else:
+                bestXSearch, bestNegFx, _ = dlibSearch.get_best_function_eval()
+                x = toObjectiveSpace(list(bestXSearch))
+                fx = -float(bestNegFx)
         except EarlyStoppingException:
             earlyStopped = True
             # Use best parameters found so far
-            parameterNames = list(self._optimization.variableParameters.keys())
-            x = [self._optimization.bestParameters.get(name) for name in parameterNames]
-            fx = self._optimization.bestScore
+            if self._optimization.bestParameters is not None:
+                x = [
+                    float(
+                        self._optimization.bestParameters.get(
+                            name, (low + high) / 2.0
+                        )
+                    )
+                    for name, low, high in zip(
+                        parameterNames, lowerBounds, upperBounds
+                    )
+                ]
+                fx = float(self._optimization.bestScore)
+            else:
+                x = [(low + high) / 2.0 for low, high in zip(lowerBounds, upperBounds)]
+                fx = float("inf")
 
         # Format results
-        parameterNames = list(self._optimization.variableParameters.keys())
         optimizedParams = dict(zip(parameterNames, x))
 
         return {
@@ -109,6 +185,22 @@ class DlibOptimizerWrapper(BaseOptimizerWrapper):
 
 class NevergradOptimizerWrapper(BaseOptimizerWrapper):
     """Wrapper for Nevergrad optimizer."""
+
+    @staticmethod
+    def _toFiniteFloat(value):
+        """Convert optimizer outputs to a finite float when possible."""
+        if value is None:
+            return None
+
+        try:
+            numericValue = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        if not math.isfinite(numericValue):
+            return None
+
+        return numericValue
 
     def optimize(self, numEvaluations: int) -> Dict[str, Any]:
         """Run optimization using Nevergrad."""
@@ -137,6 +229,9 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
             budget=numEvaluations,
             num_workers=1,  # Single-threaded for simplicity
         )
+        randomSeed = getattr(self._optimization, "randomSeed", None)
+        if randomSeed is not None:
+            optimizer.parametrization.random_state.seed(int(randomSeed))
 
         # Run optimization
         earlyStopped = False
@@ -153,6 +248,14 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
 
         # Format results - recommendation.value is an array, map to parameter names
         optimizedParams = dict(zip(parameterNames, optimizedParamValues))
+        bestLoss = self._toFiniteFloat(bestLoss)
+
+        # Nevergrad may return an unevaluated recommendation with `loss=None`.
+        # In that case, use the best observed objective tracked during evaluations.
+        if bestLoss is None:
+            bestLoss = self._toFiniteFloat(self._optimization.bestScore)
+            if self._optimization.bestParameters:
+                optimizedParams = dict(self._optimization.bestParameters)
 
         return {
             "success": True,
@@ -190,6 +293,9 @@ class CmaOptimizerWrapper(BaseOptimizerWrapper):
         options["maxfevals"] = numEvaluations
         options["bounds"] = [[0.0] * n, [1.0] * n]
         options["verbose"] = -9
+        randomSeed = getattr(self._optimization, "randomSeed", None)
+        if randomSeed is not None:
+            options["seed"] = int(randomSeed)
 
         es = cma.CMAEvolutionStrategy(x0Norm, sigma0, options)
 

@@ -28,6 +28,9 @@ class Optimization(Study):
         self._progressManager = None  # Will be initialized in apply()
         self.storageFormat = "csv"  # Default storage format
         self.notes = None  # Optional notes for the optimization run
+        # Optional optimizer controls used by selected backends
+        self.initialParameters = None  # Optional initial guess for variable parameters
+        self.randomSeed = None  # Optional random seed (currently used by dlib/ax)
         # Ax/BoTorch specific configuration
         self.batchSize = 4  # Default batch size for Ax/BoTorch
         self.numBatches = (
@@ -204,6 +207,8 @@ class Optimization(Study):
             "fixedParameters": self.fixedParameters,
             "variableParameters": self.variableParameters,
             "optimizer": self.optimizer,
+            "initialParameters": self.initialParameters,
+            "randomSeed": self.randomSeed,
             "numEvaluations": self.numEvaluations,
             "notes": self.notes,
             "earlyStoppingPatience": getattr(self, "earlyStoppingPatience", None),
@@ -223,6 +228,31 @@ class Optimization(Study):
     def setOptimizer(self, optimizer: str):
         """Set the optimizer to be used"""
         self.optimizer = optimizer
+        return self
+
+    def setInitialParameters(self, initialParams: Dict[str, float]):
+        """
+        Set an explicit initial guess for variable parameters.
+
+        Notes:
+            For dlib, this is used to seed global_function_search with one evaluated point.
+        """
+        if initialParams is None:
+            self.initialParameters = None
+            return self
+        self.initialParameters = {str(k): float(v) for k, v in initialParams.items()}
+        return self
+
+    def setStartingParameters(self, startingParams: Dict[str, float]):
+        """Backward-compatible alias for setInitialParameters()."""
+        return self.setInitialParameters(startingParams)
+
+    def setRandomSeed(self, seed: int):
+        """Set optimizer random seed for backends that support it."""
+        if seed is None:
+            self.randomSeed = None
+            return self
+        self.randomSeed = int(seed)
         return self
 
     def setStorageFormat(self, storageFormat: str):
@@ -357,6 +387,8 @@ class Optimization(Study):
                     optimizer=self.optimizer,
                     createdTime=datetime.now().isoformat(),
                     description=f"Migrated from legacy progress.txt for {self.name}",
+                    initialParameters=self.initialParameters,
+                    randomSeed=self.randomSeed,
                 )
 
             migrateLegacyProgressFile(
@@ -379,6 +411,8 @@ class Optimization(Study):
                     optimizer=self.optimizer,
                     createdTime=datetime.now().isoformat(),
                     description=f"Migrated from legacy progressAll.txt for {self.name}",
+                    initialParameters=self.initialParameters,
+                    randomSeed=self.randomSeed,
                 )
 
             migrateLegacyProgressFile(
@@ -471,6 +505,8 @@ class Optimization(Study):
                     description=f"Optimization run for {self.name}",
                     numEvaluations=self.numEvaluations,
                     notes=self.notes,
+                    initialParameters=self.initialParameters,
+                    randomSeed=self.randomSeed,
                     viennapsVersion=versionInfo["viennapsVersion"],
                     viennalsVersion=versionInfo["viennalsVersion"],
                     viennapsCommit=versionInfo["viennapsCommit"],
@@ -498,17 +534,31 @@ class Optimization(Study):
 
             # Save results
             if result["success"]:
-                if self.bestParameters is None:
-                    self.bestParameters = {}
-                self.bestParameters.update(result["x"])
-                self.bestScore = result["fun"]
+                resultParams = result.get("x") or {}
+                resultScore = result.get("fun")
+
+                # Keep tracked best from objective evaluations if optimizer summary
+                # omits a score (e.g. unevaluated recommendation).
+                if resultParams:
+                    if self.bestParameters is None:
+                        self.bestParameters = {}
+                    self.bestParameters.update(resultParams)
+
+                if resultScore is not None:
+                    self.bestScore = resultScore
 
                 print(f"Optimization completed successfully:")
                 print(f"  Function evaluations: {result['nfev']}")
-                print(f"  Best score: {result['fun']:.6f}")
+                if self.bestScore is not None:
+                    print(f"  Best score: {self.bestScore:.6f}")
+                else:
+                    print("  Best score: N/A")
                 print("  Best parameters:")
-                for name, value in result["x"].items():
-                    print(f"    {name}: {value:.6f}")
+                for name, value in (self.bestParameters or {}).items():
+                    try:
+                        print(f"    {name}: {float(value):.6f}")
+                    except (TypeError, ValueError):
+                        print(f"    {name}: {value}")
                 print(f" Best evaluation #: {self.bestEvaluationNumber}")
 
                 if result.get("earlyStopped", False):
