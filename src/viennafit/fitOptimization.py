@@ -32,6 +32,12 @@ class Optimization(Study):
         )
         self.initialSamples = None  # Will default to 2*numParams if not set
 
+        # Warm start (cma, nevergrad). None/empty means each optimizer's own
+        # default: the centre of the bounds, and sigma0 = 0.3 for CMA-ES.
+        self.startingPoint = None
+        self.initialStepSize = None
+        self.logScaledParameters = []
+
         # Fold-based cross-validation (set via setFold())
         self._foldName = None
         self._foldDir = None  # folds/{foldName}/ — shared across all runs of this fold
@@ -103,6 +109,95 @@ class Optimization(Study):
             upperBounds.append(upperBound)
         return lowerBounds, upperBounds
 
+    def setStartingPoint(self, startingPoint: Dict[str, float]):
+        """
+        Start the optimizer from a given point instead of the centre of the bounds.
+
+        Used by the cma and nevergrad optimizers; dlib and ax/botorch choose their
+        own initial samples and ignore it. Typical use: refining an earlier result,
+        for instance a surrogate-based calibration, without discarding it.
+
+        Args:
+            startingPoint: A value for every variable parameter, each within its
+                bounds. Call after setVariableParameters().
+
+        Returns:
+            self for method chaining
+        """
+        if not self.variableParameters:
+            raise ValueError(
+                "Variable parameters must be set before the starting point"
+            )
+        missing = [n for n in self.variableParameters if n not in startingPoint]
+        unknown = [n for n in startingPoint if n not in self.variableParameters]
+        if missing or unknown:
+            raise ValueError(
+                "Starting point must give exactly the variable parameters "
+                f"(missing: {missing}, not variable: {unknown})"
+            )
+        for name, (lowerBound, upperBound) in self.variableParameters.items():
+            value = float(startingPoint[name])
+            if not lowerBound <= value <= upperBound:
+                raise ValueError(
+                    f"Starting value {name} = {value} is outside its bounds "
+                    f"[{lowerBound}, {upperBound}]"
+                )
+        self.startingPoint = {
+            name: float(startingPoint[name]) for name in self.variableParameters
+        }
+        return self
+
+    def setInitialStepSize(self, sigma0: float):
+        """
+        Set the initial CMA-ES step size (sigma0), in the normalised [0, 1]
+        coordinates the cma optimizer searches in. The default 0.3 spans most of
+        the box; together with setStartingPoint() a smaller value keeps the
+        search near the start. cma only.
+
+        Returns:
+            self for method chaining
+        """
+        if not 0.0 < sigma0 <= 1.0:
+            raise ValueError(f"sigma0 must be in (0, 1], got {sigma0}")
+        self.initialStepSize = float(sigma0)
+        return self
+
+    def setLogScaledParameters(self, names: List[str]):
+        """
+        Normalise these variable parameters in log space in the cma optimizer, so
+        a step is a ratio rather than a difference. For parameters whose bounds
+        span decades (fluxes, rate coefficients). Both bounds must be positive.
+        cma only; nevergrad ignores it with a warning.
+
+        Args:
+            names: Variable parameter names. Call after setVariableParameters().
+
+        Returns:
+            self for method chaining
+        """
+        for name in names:
+            if name not in self.variableParameters:
+                raise ValueError(f"'{name}' is not a variable parameter")
+            lowerBound, _ = self.variableParameters[name]
+            if lowerBound <= 0:
+                raise ValueError(
+                    f"Log scaling needs positive bounds; '{name}' has lower "
+                    f"bound {lowerBound}"
+                )
+        self.logScaledParameters = list(names)
+        return self
+
+    def _warmStartInfo(self) -> Dict:
+        """The warm-start settings in effect, for the run's records."""
+        info = {}
+        if self.startingPoint is not None:
+            info["startingPoint"] = self.startingPoint
+        if self.initialStepSize is not None:
+            info["initialStepSize"] = self.initialStepSize
+        if self.logScaledParameters:
+            info["logScaledParameters"] = self.logScaledParameters
+        return info
+
     def _evaluateSubset(
         self,
         paramDict: Dict[str, float],
@@ -159,6 +254,7 @@ class Optimization(Study):
             "earlyStopped": self.earlyStoppedAt is not None,
             "earlyStoppedAtEvaluation": self.earlyStoppedAt,
         }
+        result.update(self._warmStartInfo())
 
         # Record fold split in final-results.json when running as a fold
         if self._foldName is not None:
@@ -621,6 +717,14 @@ class Optimization(Study):
                 with open(notesFile, "w") as f:
                     f.write(self.notes)
                 print(f"Notes saved to {notesFile}")
+
+            # Record the warm start now, so an interrupted run still documents
+            # where it started (the final results repeat it)
+            warmStart = self._warmStartInfo()
+            if warmStart:
+                warmStartFile = os.path.join(self.runDir, f"{self.name}-warmStart.json")
+                with open(warmStartFile, "w") as f:
+                    json.dump(warmStart, f, indent=4)
 
             # Initialize progress manager with metadata
             if hasattr(self, "parameterNames") and self.parameterNames:
