@@ -51,6 +51,26 @@ class BaseOptimizerWrapper:
 
         return lowerBounds, upperBounds
 
+    def getStartingPoint(self) -> List[float]:
+        """
+        Starting point in bound order: the one set with
+        Optimization.setStartingPoint(), or the centre of the bounds.
+        """
+        lowerBounds, upperBounds = self.getBounds()
+        start = getattr(self._optimization, "startingPoint", None)
+        if not start:
+            return [
+                (lower + upper) / 2 for lower, upper in zip(lowerBounds, upperBounds)
+            ]
+        names = list(self._optimization.variableParameters.keys())
+        missing = [name for name in names if name not in start]
+        if missing:
+            raise ValueError(
+                f"Starting point has no value for {missing}; call "
+                "setStartingPoint() after all variable parameters are set"
+            )
+        return [float(start[name]) for name in names]
+
     def optimize(self, numEvaluations: int) -> Dict[str, Any]:
         """
         Run the optimization.
@@ -119,10 +139,13 @@ class NevergradOptimizerWrapper(BaseOptimizerWrapper):
         parameterNames = list(self._optimization.variableParameters.keys())
         lowerBounds, upperBounds = self.getBounds()
 
-        # Create starting point at center of bounds
-        startingPoint = [
-            (lower + upper) / 2 for lower, upper in zip(lowerBounds, upperBounds)
-        ]
+        # setStartingPoint() if given, else the centre of the bounds
+        startingPoint = self.getStartingPoint()
+        if getattr(self._optimization, "logScaledParameters", None):
+            print(
+                "Warning: logScaledParameters is used by the cma optimizer only; "
+                "nevergrad ignores it"
+            )
 
         # Create parametrization
         parametrization = ng.p.Array(init=startingPoint)
@@ -167,24 +190,49 @@ class CmaOptimizerWrapper(BaseOptimizerWrapper):
     """Wrapper for CMA-ES optimizer (via pycma)."""
 
     def optimize(self, numEvaluations: int) -> Dict[str, Any]:
+        import math
         import cma
         from .fitExceptions import EarlyStoppingException
 
         parameterNames = list(self._optimization.variableParameters.keys())
         lowerBounds, upperBounds = self.getBounds()
         n = len(parameterNames)
-        ranges = [u - l for l, u in zip(lowerBounds, upperBounds)]
 
-        # Normalize to [0, 1]^n so sigma0 is meaningful for all dimensions equally
-        x0Norm = [0.5] * n
-        sigma0 = 0.3
+        # Normalize to [0, 1]^n so sigma0 is meaningful for all dimensions
+        # equally. Log-scaled parameters are normalized in log space, so a step
+        # there is a ratio rather than a difference.
+        logScaled = set(getattr(self._optimization, "logScaledParameters", None) or [])
+        isLog = [name in logScaled for name in parameterNames]
+        lows = [math.log(l) if g else l for l, g in zip(lowerBounds, isLog)]
+        highs = [math.log(u) if g else u for u, g in zip(upperBounds, isLog)]
+        ranges = [h - l for l, h in zip(lows, highs)]
 
-        # Objective in normalized space — denormalize before evaluation
+        def denormalize(xNorm):
+            xOrig = []
+            for v, l, r, g in zip(xNorm, lows, ranges, isLog):
+                t = l + v * r
+                xOrig.append(math.exp(t) if g else t)
+            return xOrig
+
+        def normalize(xOrig):
+            xNorm = []
+            for v, l, r, g in zip(xOrig, lows, ranges, isLog):
+                t = math.log(v) if g else v
+                xNorm.append(min(max((t - l) / r, 0.0), 1.0) if r else 0.5)
+            return xNorm
+
+        # Start from setStartingPoint() if given, else the centre of the box
+        if getattr(self._optimization, "startingPoint", None):
+            x0Norm = normalize(self.getStartingPoint())
+        else:
+            x0Norm = [0.5] * n
+        sigma0 = getattr(self._optimization, "initialStepSize", None) or 0.3
+
+        # Objective in normalized space; denormalize before evaluation
         objectiveFunction = ObjectiveWrapper.create("cma", self._optimization)
 
         def normalizedObjective(xNorm):
-            xOrig = [l + v * r for v, l, r in zip(xNorm, lowerBounds, ranges)]
-            return objectiveFunction(xOrig)
+            return objectiveFunction(denormalize(xNorm))
 
         options = cma.CMAOptions()
         options["maxfevals"] = numEvaluations
@@ -211,7 +259,7 @@ class CmaOptimizerWrapper(BaseOptimizerWrapper):
         else:
             # Denormalize best solution back to original space
             xBestNorm = es.result.xbest
-            xBestOrig = [l + v * r for v, l, r in zip(xBestNorm, lowerBounds, ranges)]
+            xBestOrig = denormalize(xBestNorm)
             optimizedParams = dict(zip(parameterNames, xBestOrig))
             fx = es.result.fbest
 
