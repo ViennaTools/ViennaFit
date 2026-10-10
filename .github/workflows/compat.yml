@@ -1,8 +1,10 @@
 name: Upstream compatibility
 
 # Catches ViennaPS/ViennaLS API breakage against ViennaFit's actual usage.
-# Runs weekly (so future upstream releases surface as a red badge, not a user
-# bug report) and on PRs that touch dependencies (e.g. Dependabot bumps).
+# Installs whatever the pyproject bounds resolve to, so it covers the supported
+# range only. Runs weekly (so new upstream releases inside that range surface as
+# a red badge, not a user bug report) and on PRs that touch dependencies (e.g.
+# Dependabot bumps).
 
 on:
   schedule:
@@ -17,15 +19,8 @@ on:
 
 jobs:
   compat:
-    name: Compat (${{ matrix.upstream }} ViennaPS/ViennaLS)
+    name: Compat (pinned ViennaPS/ViennaLS)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # pinned: whatever the pyproject bound resolves to (the supported range)
-        # latest: newest published, ignoring the upper pin (early warning of the
-        #         next release / major that we have not yet validated)
-        upstream: [pinned, latest]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -33,9 +28,6 @@ jobs:
           python-version: "3.12"
       - name: Install ViennaFit (pinned dependencies)
         run: pip install .
-      - name: Upgrade to latest ViennaPS/ViennaLS
-        if: matrix.upstream == 'latest'
-        run: pip install -U viennaps viennals
       - name: Report resolved versions
         run: |
           python -c "import viennaps, viennals; print('ViennaPS', viennaps.__version__); print('ViennaLS', viennals.__version__)"
