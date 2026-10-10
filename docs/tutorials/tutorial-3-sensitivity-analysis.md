@@ -1,549 +1,267 @@
 # Tutorial 3: Sensitivity Analysis
 
-Learn how to identify which parameters matter most using local and global sensitivity analysis methods.
+Find out how strongly the fit depends on each parameter, with a local study around the optimum, simple parameter sweeps, and a global study over the full parameter ranges.
 
-**Estimated time:** 30-40 minutes
+This tutorial walks through the three scripts in `examples/sensitivityAnalysis/`. Every code block below is taken from those scripts.
+
+**Estimated time:** 15-20 minutes
 
 ## What You'll Learn
 
-- Perform local sensitivity analysis (one-at-a-time)
-- Conduct global sensitivity analysis (Sobol indices)
-- Interpret sensitivity results
-- Use results to simplify optimization problems
-- Determine which parameters need tighter control
+- Run a local sensitivity study around the optimum
+- Run one-parameter and two-parameter sweeps
+- Run a global (Sobol) sensitivity study
+- Decide which of the three fits your question
 
 ## Prerequisites
 
-- Completed [Tutorial 1](tutorial-1-basic-optimization.md)
-- Understanding of [Core Concepts](../getting-started/concepts.md)
-- Familiarity with basic statistics
+- Completed [Tutorial 1](tutorial-1-basic-optimization.md), so that the run `run1` exists in `projects/exampleProject`
+- [Tutorial 2](tutorial-2-custom-evaluation.md) is helpful, since the parameter sweeps use the `CustomEvaluator` introduced there
 
-## Why Sensitivity Analysis?
+## Which Study for Which Question?
 
-**Sensitivity analysis answers:**
-- Which parameters significantly affect the output?
-- Which parameters can be fixed without hurting performance?
-- How do parameters interact with each other?
-- Which parameters need precise control in manufacturing?
+| Study | Question it answers | Cost in this example |
+|---|---|---|
+| Local sensitivity | How does the fit change when I move one parameter away from the optimum? | 14 evaluations |
+| Parameter sweeps | What does the objective look like along one or two parameters I choose? | 6 + 9 evaluations |
+| Global sensitivity | Over the whole allowed range, which parameters drive the result? | 128 evaluations |
 
-**Use cases:**
-- **Model reduction**: Fix insensitive parameters
-- **Experimental design**: Focus measurements on sensitive parameters
-- **Uncertainty quantification**: Prioritize parameters for tighter bounds
-- **Process control**: Identify critical control points
+All three vary `neutralRate` and `ionRate` and keep the other parameters at their optimum.
 
-## Scenario
+## Common Setup
 
-After optimizing etch process parameters, you want to know:
-1. Which parameters have the biggest impact on trench profile?
-2. Can you fix some parameters to simplify the problem?
-3. Do parameters interact (e.g., ion flux effect depends on energy)?
-
-## Part 1: Local Sensitivity Analysis
-
-### Step 1: Setup
+The two sensitivity studies start by loading the project, the process sequence of `run1` and its optimum:
 
 ```python
 import viennafit as fit
 import viennaps as vps
-import viennals as vls
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-
-# Setup
-vps.setDimension(2)
-vls.setDimension(2)
-
-# Load project
-project = fit.Project().load("./projects/etchCalibration")
-
-# Create local sensitivity study
-local_study = fit.LocalSensitivityStudy(
-    name="localSens1",
-    project=project
-)
-
-print("Local sensitivity study initialized")
-```
-
-### Step 2: Load Process Sequence and Parameters
-
-```python
-# Load process sequence from optimization run
-process_seq_path = (
-    "./projects/etchCalibration/optimizationRuns/"
-    "run1_initialCalibration/run1_initialCalibration-processSequence.py"
-)
-local_study.loadProcessSequence(process_seq_path)
-
-# Define parameters to analyze
-local_study.setParameterNames([
-    "ionFlux",
-    "etchantFlux",
-    "ionEnergy",
-    "neutralStickP"
-])
-
-print("Process sequence and parameters loaded")
-```
-
-### Step 3: Define Sensitivity Ranges
-
-Local sensitivity varies one parameter at a time around a baseline:
-
-```python
-# Get optimal parameters from optimization as baseline
 import json
-with open("./projects/etchCalibration/optimizationRuns/"
-          "run1_initialCalibration/run1_initialCalibration-final-results.json") as f:
-    results = json.load(f)
+import os
 
-optimal = results['bestParameters']
+# Load the project
+p1 = fit.Project()
+projectToLoad = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "../projects/exampleProject",
+)
+p1.load(projectToLoad)
 
-# Define ranges: (low, baseline, high) for each parameter
-# Vary by ±20% around optimal
-local_study.setParameterSensitivityRanges({
-    "ionFlux": (
-        optimal["ionFlux"] * 0.8,
-        optimal["ionFlux"],
-        optimal["ionFlux"] * 1.2
-    ),
-    "etchantFlux": (
-        optimal["etchantFlux"] * 0.8,
-        optimal["etchantFlux"],
-        optimal["etchantFlux"] * 1.2
-    ),
-    "ionEnergy": (
-        optimal["ionEnergy"] * 0.8,
-        optimal["ionEnergy"],
-        optimal["ionEnergy"] * 1.2
-    ),
-    "neutralStickP": (
-        optimal["neutralStickP"] * 0.8,
-        optimal["neutralStickP"],
-        optimal["neutralStickP"] * 1.2
-    )
-}, nEval=(5, 5, 5, 5))  # 5 points per parameter (one entry per parameter)
-
-print(f"\nSensitivity ranges defined around optimal:")
-for param, value in optimal.items():
-    print(f"  {param}: {value:.4f} ± 20%")
+# Use the process sequence and the optimum from a previous optimization run
+runDir = os.path.abspath(os.path.join(p1.projectPath, "optimizationRuns", "run1"))
+processPath = os.path.join(runDir, "run1-processSequence.py")
+with open(os.path.join(runDir, "run1-final-results.json")) as f:
+    optimum = json.load(f)["bestParameters"]
 ```
 
-### Step 4: Configure and Run
+Every optimization run keeps a copy of its process sequence (`run1-processSequence.py`), so a study can reuse exactly the model that was fitted.
+
+## Part 1: Local Sensitivity
+
+Script: `examples/sensitivityAnalysis/localSensitivityStudy.py`
+
+A local study moves one parameter at a time through a range while all others stay put.
 
 ```python
-# Set distance metric (same as optimization)
-local_study.setDistanceMetric("CCH")
+lss1 = fit.LocalSensitivityStudy("lss1", p1)
 
-# Run local sensitivity analysis
-# Point counts were set via nEval in setParameterSensitivityRanges above
-print("\nRunning local sensitivity analysis...")
-local_study.apply()  # Total: 4 params × 5 points = 20 evaluations
+lss1.loadProcessSequence(processPath)
 
-print("Local sensitivity analysis complete!")
-```
-
-**Runtime:** 5-20 minutes depending on simulation complexity
-
-### Step 5: Analyze Results
-
-```python
-# Load results
-results_dir = f"{project.projectPath}/locSensStudies/localSens1"
-
-# Load CSV data
-csv_path = f"{results_dir}/localSens1_results.csv"
-if os.path.exists(csv_path):
-    df = pd.read_csv(csv_path)
-
-    print("\nLocal Sensitivity Results:")
-    print(df.head())
-
-    # Plot sensitivity for each parameter
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    params = ["ionFlux", "etchantFlux", "ionEnergy", "neutralStickP"]
-
-    for i, param in enumerate(params):
-        ax = axes[i//2, i%2]
-
-        # Filter data for this parameter (others at baseline)
-        param_data = df[df['variableParameter'] == param]
-
-        if len(param_data) > 0:
-            ax.plot(param_data[param], param_data['objectiveValue'],
-                   'o-', linewidth=2, markersize=8)
-            ax.set_xlabel(param)
-            ax.set_ylabel('Objective Value')
-            ax.set_title(f'Sensitivity to {param}')
-            ax.grid(True, alpha=0.3)
-
-            # Mark baseline
-            baseline_val = optimal[param]
-            ax.axvline(baseline_val, color='r', linestyle='--',
-                      label='Baseline')
-            ax.legend()
-
-    plt.tight_layout()
-    plt.savefig(f"{results_dir}/local_sensitivity_plots.png", dpi=150)
-    print(f"\nSensitivity plots saved to {results_dir}/")
-```
-
-### Step 6: Compute Sensitivity Indices
-
-```python
-# Compute local sensitivity (numerical derivative)
-sensitivities = {}
-
-for param in params:
-    param_data = df[df['variableParameter'] == param].sort_values(param)
-
-    if len(param_data) >= 3:
-        # Compute derivative around baseline
-        param_vals = param_data[param].values
-        obj_vals = param_data['objectiveValue'].values
-
-        # Central difference approximation
-        baseline_idx = len(param_vals) // 2  # Middle point
-        if baseline_idx > 0 and baseline_idx < len(param_vals) - 1:
-            delta_param = param_vals[baseline_idx+1] - param_vals[baseline_idx-1]
-            delta_obj = obj_vals[baseline_idx+1] - obj_vals[baseline_idx-1]
-            sensitivity = abs(delta_obj / delta_param)
-            sensitivities[param] = sensitivity
-
-# Normalize sensitivities
-total_sens = sum(sensitivities.values())
-norm_sens = {k: v/total_sens for k, v in sensitivities.items()}
-
-print("\nNormalized Local Sensitivities:")
-for param, sens in sorted(norm_sens.items(), key=lambda x: x[1], reverse=True):
-    print(f"  {param:20s}: {sens*100:.2f}%")
-
-# Plot ranking
-plt.figure(figsize=(10, 6))
-sorted_params = sorted(norm_sens.items(), key=lambda x: x[1], reverse=True)
-plt.barh([p[0] for p in sorted_params], [p[1]*100 for p in sorted_params])
-plt.xlabel('Relative Sensitivity (%)')
-plt.title('Local Parameter Sensitivity Ranking')
-plt.tight_layout()
-plt.savefig(f"{results_dir}/sensitivity_ranking.png", dpi=150)
-print(f"\nSensitivity ranking plot saved")
-```
-
-### Interpret Local Results
-
-**High sensitivity parameters:**
-- Large change in objective with small parameter change
-- Need precise control
-- Cannot be fixed without hurting performance
-
-**Low sensitivity parameters:**
-- Small change in objective even with large parameter variation
-- Can potentially be fixed at nominal value
-- Less critical for process control
-
-## Part 2: Global Sensitivity Analysis
-
-Global sensitivity uses Sobol sampling to explore the entire parameter space and compute variance-based sensitivity indices.
-
-### Step 1: Setup Global Study
-
-```python
-# Create global sensitivity study
-global_study = fit.GlobalSensitivityStudy(
-    name="globalSens1",
-    project=project
+# Declare all parameters used by the process sequence
+lss1.setParameterNames(
+    ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
 )
 
-# Load process sequence
-global_study.loadProcessSequence(process_seq_path)
-
-# Define parameters
-global_study.setParameterNames([
-    "ionFlux",
-    "etchantFlux",
-    "ionEnergy",
-    "neutralStickP"
-])
-
-print("Global sensitivity study initialized")
-```
-
-### Step 2: Define Parameter Bounds
-
-Use the full parameter space, not just around optimum:
-
-```python
-# Use same bounds as optimization
-global_study.setVariableParameters({
-    "ionFlux": (10.0, 100.0),
-    "etchantFlux": (100.0, 1000.0),
-    "ionEnergy": (20.0, 200.0),
-    "neutralStickP": (0.01, 0.9)
-})
-
-print("\nGlobal parameter bounds set")
-```
-
-### Step 3: Configure Sampling
-
-```python
-# Configure Sobol sampling
-global_study.setSamplingOptions(
-    numSamples=128,        # Base sample size
-    secondOrder=True       # Compute interaction effects
+# Keep the remaining parameters fixed at their optimal values
+lss1.setFixedParameters(
+    {name: optimum[name] for name in ["ionEnergy", "neutralStickP", "ionPowerCosine"]}
 )
 
-# Total evaluations = numSamples * (2 * numParams + 2)
-# For 4 params: 128 * (2*4 + 2) = 128 * 10 = 1280 evaluations
+# Set variable parameters as (lowerBound, pointOfInterest, upperBound):
+# each one is varied on its own around the optimum, within the optimization bounds
+lss1.setParameterSensitivityRanges(
+    {
+        "neutralRate": (1.0, optimum["neutralRate"], 150.0),
+        "ionRate": (0.1, optimum["ionRate"], 10.0),
+    }
+)
 
-# Set distance metric
-global_study.setDistanceMetric("CCH")
+# Same distance metric as used in the optimization
+lss1.setDistanceMetric("CCH")
 
-print(f"Sampling configured: ~1280 evaluations")
-print("⚠ This will take significant time (1-4 hours)")
+lss1.validate()
+
+lss1.apply()
 ```
 
-!!! warning "Computational Cost"
-    Global sensitivity is expensive! Consider:
-    - Start with fewer samples (64) for testing
-    - Use simpler distance metric (CA) initially
-    - Run overnight or on cluster
-    - Or use local sensitivity if budget limited
+The points to note:
 
-### Step 4: Run Global Analysis
+- **`setParameterSensitivityRanges`** takes `(lowerBound, pointOfInterest, upperBound)` per parameter. The point of interest is the optimum; the bounds are the ones used in the optimization.
+- By default each parameter is evaluated at 7 points across its range. Pass `nEval=(n1, n2)` with one entry per variable parameter to change that.
+- **`validate()`** checks the configuration before any simulation is started.
+
+Run it:
+
+```bash
+cd examples/sensitivityAnalysis
+python localSensitivityStudy.py
+```
+
+The 14 evaluations take under a minute. The output goes to `projects/exampleProject/locSensStudies/lss1/`, with the individual evaluations in `evaluations/` and the summary in `sensitivity_results.json`.
+
+### Reading the result
+
+For each parameter you get the objective value along its range. Look at the shape:
+
+- **A sharp minimum at the optimum**: the parameter is well determined by the target.
+- **A flat curve**: the target says little about this parameter. Its fitted value should not be over-interpreted, and it is a candidate for being fixed.
+- **A minimum away from the point of interest**: the optimization had not converged for this parameter.
+
+Keep in mind that a local study only moves along the axes. The trade-off between `neutralRate` and `ionRate` seen in the grid of Tutorial 2 runs diagonally and does not show up here.
+
+## Part 2: Parameter Sweeps
+
+Script: `examples/sensitivityAnalysis/parameterStudies.py`
+
+Sometimes a plain sweep with hand-picked values is all you need. This script uses the `CustomEvaluator` for two such studies.
+
+### One parameter
 
 ```python
-print("\nRunning global sensitivity analysis...")
-print("This will take considerable time. Consider running overnight.")
+evaluator = fit.CustomEvaluator(p1)
 
-# Run
-global_study.apply()
+# Load optimization results from a previous run
+evaluator.loadOptimizationRun("run1")
+evaluator.setDistanceMetric("CCH")
 
-print("Global sensitivity analysis complete!")
+# Define a simple parameter sweep for one parameter
+singleParamValues = {
+    "neutralRate": [40.0, 60.0, 80.0, 100.0, 120.0, 140.0],
+}
+
+evaluator.setVariableValues(singleParamValues)
+results = evaluator.apply(evaluationName="singleParameterSweep", saveComparison=False)
+
+print(f"Evaluated {len(results)} parameter combinations")
+bestResult = evaluator.getBestResult()
+if bestResult:
+    print(f"Best objective value: {bestResult['objectiveValue']:.6f}")
+    print(f"Best neutralRate: {bestResult['parameters']['neutralRate']:.2f}")
 ```
 
-### Step 5: Analyze Sobol Indices
+### Two parameters
 
 ```python
-# Load results
-results_dir_global = f"{project.projectPath}/globSensStudies/globalSens1"
+evaluator2 = fit.CustomEvaluator(p1)
+evaluator2.loadOptimizationRun("run1")
+evaluator2.setDistanceMetric("CCH")
 
-# Sobol indices from SALib are typically saved in JSON format
-sobol_file = f"{results_dir_global}/globalSens1_sobol_indices.json"
+# Study interaction between two parameters around their optimal values (±20%)
+optimalParams = evaluator2.getOptimalParameters()
+factors = [0.8, 1.0, 1.2]
+twoParamValues = {
+    "neutralRate": [optimalParams["neutralRate"] * f for f in factors],
+    "ionRate": [optimalParams["ionRate"] * f for f in factors],
+}
 
-if os.path.exists(sobol_file):
-    with open(sobol_file) as f:
-        sobol = json.load(f)
-
-    print("\nSobol Sensitivity Indices:")
-    print("\n First-Order Indices (S1) - Direct effect:")
-    for i, param in enumerate(params):
-        if param in sobol['S1']:
-            print(f"  {param:20s}: {sobol['S1'][param]:.4f}")
-
-    print("\n Total-Order Indices (ST) - Total effect including interactions:")
-    for i, param in enumerate(params):
-        if param in sobol['ST']:
-            print(f"  {param:20s}: {sobol['ST'][param]:.4f}")
-
-    # Plot Sobol indices
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-    # S1 plot
-    s1_vals = [sobol['S1'][p] for p in params]
-    ax1.barh(params, s1_vals)
-    ax1.set_xlabel('First-Order Index (S1)')
-    ax1.set_title('Direct Parameter Effects')
-    ax1.grid(True, alpha=0.3)
-
-    # ST plot
-    st_vals = [sobol['ST'][p] for p in params]
-    ax2.barh(params, st_vals, color='orange')
-    ax2.set_xlabel('Total-Order Index (ST)')
-    ax2.set_title('Total Effects (incl. interactions)')
-    ax2.grid(True, alpha=0.3)
-
-    plt.tight_layout()
-    plt.savefig(f"{results_dir_global}/sobol_indices.png", dpi=150)
-    print(f"\nSobol indices plot saved")
-
-    # Compute interaction strength
-    print("\n Interaction Effects (ST - S1):")
-    for i, param in enumerate(params):
-        interaction = sobol['ST'][param] - sobol['S1'][param]
-        print(f"  {param:20s}: {interaction:.4f}")
+evaluator2.setVariableValues(twoParamValues)
+results2 = evaluator2.apply(evaluationName="twoParameterStudy", saveComparison=False)
 ```
 
-### Interpret Global Results
+With `saveComparison=False` only the numbers are kept, not the surfaces.
 
-**Sobol Indices Interpretation:**
+```bash
+python parameterStudies.py
+```
 
-- **S1 (First-Order)**: Direct effect of parameter alone
-  - S1 = 0.6 means 60% of output variance due to this parameter
+Both studies together take under a minute. The output goes to `customEvaluations/singleParameterSweep/` and `customEvaluations/twoParameterStudy/`.
 
-- **ST (Total-Order)**: Total effect including all interactions
-  - ST = 0.8 means 80% of variance when including interactions
+Unlike the local study, the 3 x 3 grid includes the corners, where both parameters are changed together. Comparing the corner (0.8, 1.2) with the corner (1.2, 1.2) shows the interaction between the two rates directly.
 
-- **ST - S1**: Interaction effects
-  - Large difference → parameter interacts strongly with others
-  - Small difference → parameter acts independently
+## Part 3: Global Sensitivity
 
-**Decision rules:**
-- S1 > 0.1: Parameter is important, keep in optimization
-- S1 < 0.01: Parameter is negligible, consider fixing
-- (ST - S1) > 0.2: Strong interactions present
+Script: `examples/sensitivityAnalysis/globalSensitivityStudy.py`
 
-## Step 7: Use Results to Simplify Model
-
-Based on sensitivity analysis, identify parameters to fix:
+A global study samples the whole parameter range and computes Sobol indices: the share of the variance of the objective that each parameter is responsible for.
 
 ```python
-# Assume global sensitivity found:
-# - ionFlux: S1 = 0.45 (important)
-# - etchantFlux: S1 = 0.35 (important)
-# - ionEnergy: S1 = 0.15 (moderate)
-# - neutralStickP: S1 = 0.03 (negligible)
+gss = fit.GlobalSensitivityStudy("gss1", p1)
 
-print("\nParameter Classification:")
-print("  Critical (S1 > 0.3):")
-print("    - ionFlux")
-print("    - etchantFlux")
-print("  Moderate (0.1 < S1 < 0.3):")
-print("    - ionEnergy")
-print("  Negligible (S1 < 0.1):")
-print("    - neutralStickP")
+gss.loadProcessSequence(processPath)
 
-print("\nRecommendation:")
-print("  Fix neutralStickP at optimal value")
-print("  Optimize remaining 3 parameters")
-print("  This reduces search space by 25%!")
+# Declare all parameters used by the process sequence
+gss.setParameterNames(
+    ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
+)
+
+# Keep the remaining parameters fixed at their optimal values
+gss.setFixedParameters(
+    {name: optimum[name] for name in ["ionEnergy", "neutralStickP", "ionPowerCosine"]}
+)
+
+# Set variable parameters with ranges
+gss.setVariableParameters(
+    {
+        "neutralRate": (1.0, 150.0),
+        "ionRate": (0.1, 10.0),
+    }
+)
+
+# Same distance metric as used in the optimization
+gss.setDistanceMetric("CCH")
+
+# First-order and total-order indices only: numSamples * (numParams + 2) = 128
+# evaluations. Second-order indices (secondOrder=True) need at least 500 samples
+# per variable parameter, i.e. 1000 * (2 * 2 + 2) = 6000 evaluations here.
+gss.setSamplingOptions(numSamples=32, secondOrder=False)
+
+# Run the sensitivity analysis
+gss.apply(saveComparison=False)
 ```
 
-### Re-run Optimization with Simplified Model
+The number of evaluations is set by `setSamplingOptions`:
 
-```python
-# Create new optimization with fewer parameters
-opt_simplified = fit.Optimization(project)
-opt_simplified.loadProcessSequence(process_seq_path)
+| Setting | Evaluations | Here |
+|---|---|---|
+| `secondOrder=False` | `numSamples * (numParams + 2)` | 32 * 4 = 128 |
+| `secondOrder=True` | `numSamples * (2 * numParams + 2)` | needs far more samples, 6000 evaluations |
 
-# Only optimize sensitive parameters
-opt_simplified.setParameterNames([
-    "ionFlux",
-    "etchantFlux",
-    "ionEnergy"
-])
-
-opt_simplified.setVariableParameters({
-    "ionFlux": (10.0, 100.0),
-    "etchantFlux": (100.0, 1000.0),
-    "ionEnergy": (20.0, 200.0)
-})
-
-# Fix insensitive parameter
-opt_simplified.setFixedParameters({
-    "neutralStickP": optimal["neutralStickP"]  # Fixed at optimal
-})
-
-opt_simplified.setDistanceMetrics(primaryMetric="CCH")
-opt_simplified.setName("run2_simplified")
-
-print("\nReady to run simplified optimization (3 parameters instead of 4)")
-# opt_simplified.apply(numEvaluations=50)  # Faster convergence!
+```bash
+python globalSensitivityStudy.py
 ```
 
-## Complete Example Script
+The 128 evaluations take about 5-10 minutes. The output goes to `projects/exampleProject/globSensStudies/gss1/`:
 
-```python
-import viennafit as fit
-import viennaps as vps
-import viennals as vls
-import json
+| File | Content |
+|---|---|
+| `parameter_samples.csv` | The sampled parameter sets |
+| `objective_values.csv` | The objective value of each sample |
+| `evaluation_results.json` | Detailed result of each evaluation |
+| `sensitivity_results.json` | The Sobol indices |
 
-# Setup
-vps.setDimension(2)
-vls.setDimension(2)
-project = fit.Project().load("./projects/etchCalibration")
+### Reading the result
 
-# Get optimal parameters
-with open("./projects/etchCalibration/optimizationRuns/"
-          "run1_initialCalibration/run1_initialCalibration-final-results.json") as f:
-    optimal = json.load(f)['bestParameters']
+Two indices are reported per parameter, each with a confidence interval (`firstOrderConf`, `totalOrderConf`):
 
-# === Local Sensitivity ===
-local_study = fit.LocalSensitivityStudy("localSens1", project)
-local_study.loadProcessSequence("path/to/processSequence.py")
-local_study.setParameterNames(list(optimal.keys()))
+- **First-order index S1** (`firstOrder`): the share of the variance explained by this parameter alone.
+- **Total-order index ST** (`totalOrder`): the share explained by this parameter including its interactions with the others.
 
-# Define ranges (±20% around optimal)
-ranges = {param: (val*0.8, val, val*1.2) for param, val in optimal.items()}
-# nEval needs one entry per parameter (5 points each)
-local_study.setParameterSensitivityRanges(ranges, nEval=(5,) * len(ranges))
+How to read them:
 
-local_study.setDistanceMetric("CCH")
-local_study.apply()
+- **ST close to zero**: the parameter does not matter over this range and can be fixed.
+- **ST clearly larger than S1**: the parameter acts mainly through interactions. For the two rates here that is expected, because of the trade-off between them.
+- **Indices that are noisy or slightly negative**: the sample is too small. 32 samples are enough for a ranking, not for precise values; increase `numSamples` for those.
 
-# === Global Sensitivity ===
-global_study = fit.GlobalSensitivityStudy("globalSens1", project)
-global_study.loadProcessSequence("path/to/processSequence.py")
-global_study.setParameterNames(list(optimal.keys()))
-global_study.setVariableParameters({
-    "ionFlux": (10.0, 100.0),
-    "etchantFlux": (100.0, 1000.0),
-    "ionEnergy": (20.0, 200.0),
-    "neutralStickP": (0.01, 0.9)
-})
-global_study.setSamplingOptions(numSamples=128, secondOrder=True)
-global_study.setDistanceMetric("CCH")
-
-# global_study.apply()  # Long runtime!
-```
+!!! warning "Global is not local"
+    A global study describes the whole range inside the bounds, where most parameter sets fit badly. It tells you which parameters decide between a bad and a reasonable fit. How well a parameter is pinned down near the optimum is a question for the local study.
 
 ## Key Takeaways
 
-✅ **Local sensitivity** - Fast, one-at-a-time, around specific point
-✅ **Global sensitivity** - Comprehensive, entire space, finds interactions
-✅ **Use Sobol indices** - S1 for direct effects, ST for total effects
-✅ **Simplify models** - Fix insensitive parameters
-✅ **Prioritize efforts** - Focus on sensitive parameters
-
-## Common Questions
-
-??? question "Local vs Global - which to use?"
-    **Local sensitivity:**
-    - Fast (20-100 evaluations)
-    - Good for understanding around optimum
-    - Use when computational budget limited
-
-    **Global sensitivity:**
-    - Expensive (1000+ evaluations)
-    - Comprehensive, finds interactions
-    - Use when you need full understanding
-
-??? question "How many samples for global sensitivity?"
-    **Guidelines:**
-    - Minimum: 64 samples
-    - Good: 128 samples
-    - Excellent: 512+ samples
-    - Total evals = samples × (2×params + 2)
-
-??? question "What if all parameters seem important?"
-    **Possible reasons:**
-    - Parameters truly all matter
-    - Parameter bounds too wide
-    - Wrong distance metric
-    - Process physics requires all
-
-    **Try:** Narrow bounds around physically realistic values
+- All studies reuse the process sequence and the optimum stored in the optimization run.
+- A local study is cheap and shows how well each parameter is determined at the optimum, one axis at a time.
+- Sweeps with the `CustomEvaluator` are the quickest way to look at specific values or at two parameters together.
+- A global study ranks parameters over their full range and exposes interactions, at a much higher cost.
 
 ## Next Steps
 
-**Continue learning:**
-- [Tutorial 4: Multi-Domain Optimization](tutorial-4-multi-domain.md) - Universal parameters
-
-**Advanced topics:**
-- Morris screening (cheaper than Sobol)
-- Regional sensitivity analysis
-- Metamodel-based sensitivity
-- Time-dependent sensitivity
+- [Tutorial 4: Multi-Domain Optimization](tutorial-4-multi-domain.md) - fit one parameter set to several geometries
+- [Core Concepts](../getting-started/concepts.md) - background on the study types

@@ -10,7 +10,7 @@ This folder contains examples for parameter sensitivity analysis using ViennaFit
 - Uses results from previous optimization runs
 
 ### globalSensitivityStudy.py
-- Global sensitivity analysis using sampling methods
+- Global sensitivity analysis using sampling methods (128 evaluations by default)
 - Evaluates parameter interactions across entire parameter space
 - Provides statistical measures of parameter importance
 
@@ -18,7 +18,6 @@ This folder contains examples for parameter sensitivity analysis using ViennaFit
 - Custom parameter studies using different approaches
 - Single parameter sweeps
 - Two-parameter interaction studies
-- Distance metric comparisons
 
 ## Prerequisites
 

@@ -15,17 +15,18 @@ evaluator = fit.CustomEvaluator(p1)
 
 # Load optimization results from a previous run
 # This assumes you have already run the basicOptimization.py example
-evaluator.loadOptimizationRun("run1")
+evaluator.loadOptimizationRun("run1_2")
 
 # Set distance metric (same as used in optimization)
 evaluator.setDistanceMetric("CCH")
 evaluator.setAdditionalMetrics(["CSF"])
 
 # Define parameter grids to evaluate
-# This will vary neutralRate and ionRate around their optimal values
+# This will sweep neutralRate and ionRate over the region around the optimum
+# (5 x 4 = 20 evaluations)
 variableValues = {
-    "neutralRate": [1.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0],
-    "ionRate": [1.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0],
+    "neutralRate": [70.0, 85.0, 100.0, 115.0, 130.0],
+    "ionRate": [1.0, 2.0, 3.0, 4.0],
 }
 
 evaluator.setVariableValues(variableValues)

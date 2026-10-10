@@ -75,7 +75,7 @@ def processSequence1(domain: vps.Domain, params: dict[str, float]):
 # Set the process sequence for the optimization
 opt1.setProcessSequence(processSequence1)
 
-# Parameters will be automatically detected from function signature
+# Declare all parameters used by the process sequence
 opt1.setParameterNames(
     ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
 )
@@ -85,8 +85,8 @@ opt1.setVariableParameters(
     {
         "neutralStickP": (0.001, 0.9),
         "ionPowerCosine": (1.0, 900.0),
-        "neutralRate": (1.0, 70.0),
-        "ionRate": (1.0, 40.0),
+        "neutralRate": (1.0, 150.0),
+        "ionRate": (0.1, 10.0),
     }
 )
 
@@ -99,8 +99,10 @@ opt1.setDistanceMetrics(
     additionalMetrics=["CA"],
 )
 
+opt1.setOptimizer("cma")
+
 opt1.setName("run1")
 
 opt1.setNotes("Basic optimization of the multiparticle process for deposition.")
 
-opt1.apply(numEvaluations=100, saveComparison=True)
+opt1.apply(numEvaluations=200, saveComparison=True)

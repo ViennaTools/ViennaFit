@@ -16,11 +16,11 @@ evaluator = fit.CustomEvaluator(p1)
 
 # Load optimization results from a previous run
 evaluator.loadOptimizationRun("run1")
-evaluator.setDistanceMetric("CA+CSF")
+evaluator.setDistanceMetric("CCH")
 
 # Define a simple parameter sweep for one parameter
 singleParamValues = {
-    "neutralRate": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+    "neutralRate": [40.0, 60.0, 80.0, 100.0, 120.0, 140.0],
 }
 
 evaluator.setVariableValues(singleParamValues)
@@ -36,12 +36,14 @@ if bestResult:
 print("\n=== Two-Parameter Study Example ===")
 evaluator2 = fit.CustomEvaluator(p1)
 evaluator2.loadOptimizationRun("run1")
-evaluator2.setDistanceMetric("CA+CSF")
+evaluator2.setDistanceMetric("CCH")
 
-# Study interaction between two parameters
+# Study interaction between two parameters around their optimal values (±20%)
+optimalParams = evaluator2.getOptimalParameters()
+factors = [0.8, 1.0, 1.2]
 twoParamValues = {
-    "neutralRate": [20.0, 35.0, 50.0],
-    "ionRate": [10.0, 20.0, 30.0],
+    "neutralRate": [optimalParams["neutralRate"] * f for f in factors],
+    "ionRate": [optimalParams["ionRate"] * f for f in factors],
 }
 
 evaluator2.setVariableValues(twoParamValues)

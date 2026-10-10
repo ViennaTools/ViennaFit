@@ -1,407 +1,203 @@
 # Quick Start
 
-Get your first optimization running in 15 minutes! This guide walks you through a complete optimization workflow from start to finish.
+Run your first optimization with the example scripts that ship with ViennaFit: a deposition model is fitted to a trench profile.
+
+**Estimated time**: 15-20 minutes, most of it waiting for the optimization
 
 ## Overview
 
 In this quick start, you'll:
 
 1. Create a ViennaFit project
-2. Load initial and target domains
-3. Define a simple process sequence
-4. Configure and run an optimization
-5. View and interpret results
+2. Build the initial and target domains from two annotated contours
+3. Run an optimization
+4. Look at the results
 
-**Estimated time**: 15 minutes
+The scripts are short and meant to be read. This page only shows their key lines; [Tutorial 1](../tutorials/tutorial-1-basic-optimization.md) explains them step by step.
 
 ## Prerequisites
 
 - ViennaFit installed ([Installation Guide](installation.md))
-- Basic familiarity with ViennaPS
+- A copy of the ViennaFit repository, for the `examples/` folder
 - Python 3.10+
 
-## Step 1: Setup (2 minutes)
+## The Example
 
-Create a new Python file (`my_first_optimization.py`) and import required modules:
+A trench in SiO2 is filled by a deposition step. Two contours describe the geometry before and after:
 
-```python
-import viennafit as fit
-import viennaps as vps
-import viennals as vls
+| File in `examples/0-example-data/` | Role |
+|---|---|
+| `regular-cropped-SiO2.dat` | Initial trench, 140 nm wide and 300 nm deep |
+| `regular-cropped-Nitride.dat` | Target: the deposited film, with an overhang at the trench opening |
 
-# Set dimensions (must be done before creating domains)
-vps.setDimension(2)
-vls.setDimension(2)
+The optimization looks for the parameters of a neutral-plus-ion deposition model that turn the first contour into the second.
+
+## Step 1: Create the Project
+
+```bash
+cd examples/1-setup
+python initializeProject.py
 ```
 
-!!! tip "Dimension Setting"
-    Always set dimensions at the start of your script. ViennaPS and ViennaLS require this before creating any domains or level sets.
-
-## Step 2: Create Project (1 minute)
-
-Initialize a new ViennaFit project:
+The key line is
 
 ```python
-# Create and initialize project
-project = fit.Project("myFirstOptimization", "./projects")
-project.initialize()
-
-print(f"Project created at: {project.projectPath}")
+project = fit.Project("exampleProject", projectPath).initialize()
 ```
 
-**What happened:**
-- Created directory structure at `./projects/myFirstOptimization/`
-- Generated project metadata file
-- Created subdirectories for domains, results, and studies
+which creates the folder `projects/exampleProject` in the repository root. The script then copies the two `.dat` files into `domains/annotations/` of the project.
 
-## Step 3: Load Domains (3 minutes)
+## Step 2: Assign the Domains
 
-For this example, we'll create simple test domains. In a real scenario, you'd load experimental data.
+```bash
+python assignDomains.py
+```
 
-### Create Initial Domain
+The script reads the two contours, converts them to level sets and stores them in the project:
 
 ```python
-# Create initial domain (simple substrate)
-gridDelta = 5.0
-initialDomain = vps.Domain(
-    gridDelta=gridDelta,
-    xExtent=400.0,
-    yExtent=200.0,
-    boundary=vps.BoundaryType.REFLECTIVE_BOUNDARY
-)
+# Contour file -> polyline mesh
+extentBottom = fit.readPointsFromFile(annotationBottom, meshBottom, gridDelta, mode="2D")
+extentTarget = fit.readPointsFromFile(annotationTarget, meshTarget, gridDelta, mode="2D")
 
-# Add substrate layer
-substrate = vls.Domain(
-    [-200, 200, -100, 100],  # bounds: [xmin, xmax, ymin, ymax]
-    [vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
-     vls.BoundaryConditionEnum.INFINITE_BOUNDARY],
-    gridDelta
-)
-vls.MakeGeometry(substrate, vls.lsBox([0, -50], [400, 30])).apply()
+# Polyline mesh -> level set
+vls.FromSurfaceMesh(domainBottom, meshBottom).apply()
+vls.FromSurfaceMesh(domainTarget, meshTarget).apply()
 
-initialDomain.insertNextLevelSetAsMaterial(substrate, vps.Material.Si)
-
-# Assign to project
-project.setInitialDomain(initialDomain)
-print("Initial domain set")
+# Initial geometry as a ViennaPS domain, target as a level set
+domainInitial.insertNextLevelSetAsMaterial(domainBottom, vps.Material.SiO2)
+p1.setInitialDomain(domainInitial)
+p1.setTargetLevelSet(domainTarget)
 ```
 
-### Create Target Domain
+!!! tip "Look at the domains"
+    Open these two files in ParaView and overlay them before going on:
 
-```python
-# Create target domain (what we want to match)
-targetLevelSet = vls.Domain(
-    [-200, 200, -100, 100],
-    [vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
-     vls.BoundaryConditionEnum.INFINITE_BOUNDARY],
-    gridDelta
-)
-
-# Create target profile (e.g., etched trench)
-vls.MakeGeometry(
-    targetLevelSet,
-    vls.lsBox([80, -50], [320, -20])  # Etched region
-).apply()
-
-# Assign to project
-project.setTargetLevelSet(targetLevelSet)
-print("Target domain set")
-```
-
-!!! info "Real-World Usage"
-    In practice, you'd load target domains from experimental data:
-    ```python
-    targetLevelSet = vls.Domain(...)
-    reader = vls.VTKReader(targetLevelSet)
-    reader.apply("experimental_profile.vtp")
-    project.setTargetLevelSet(targetLevelSet)
+    ```
+    projects/exampleProject/domains/initialDomain/exampleProject-initialDomain-surface.vtp
+    projects/exampleProject/domains/targetDomain/exampleProject-targetDomain-surface.vtp
     ```
 
-## Step 4: Define Process Sequence (5 minutes)
+## Step 3: Run the Optimization
 
-The process sequence is a function that simulates your process with given parameters:
+```bash
+cd ../2-optimization
+python basicOptimization.py
+```
+
+The script defines the process sequence, a function that runs the simulation for one set of parameters and returns the resulting surface:
 
 ```python
-def processSequence(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
-    """
-    Simple isotropic etching process.
-
-    Parameters to optimize:
-    - etchRate: Etching velocity (nm/s)
-    - processTime: Etch duration (seconds)
-    """
-    # Create isotropic etch model
-    model = vps.IsotropicProcess(rate=-params["etchRate"])
-
-    # Set up process
-    process = vps.Process()
-    process.setDomain(domain)
-    process.setProcessModel(model)
-    process.setProcessDuration(params["processTime"])
-
-    # Run simulation
+def processSequence1(domain: vps.Domain, params: dict[str, float]):
+    model = vps.MultiParticleProcess()
+    model.addNeutralParticle({vps.Material.SiO2: params["neutralStickP"]}, label="neutral")
+    model.addIonParticle(
+        sourcePower=params["ionPowerCosine"],
+        meanEnergy=params["ionEnergy"],
+        label="ion",
+    )
+    ...
     process.apply()
-
-    # Return resulting level set
     return domain.getLevelSets()[-1]
 ```
 
-!!! tip "Process Sequence Tips"
-    - Must accept `domain` and `params` arguments
-    - Must return a `vls.Domain` (level set)
-    - Can be as complex as needed (multi-step processes, etc.)
-    - Params dict contains values chosen by optimizer
-
-## Step 5: Configure Optimization (2 minutes)
-
-Set up the optimization with parameter bounds and distance metric:
+and then tells ViennaFit which parameters to fit and how to score a result:
 
 ```python
-# Create optimization object
-opt = fit.Optimization(project)
-opt.setProcessSequence(processSequence)
+opt1 = fit.Optimization(p1)
+opt1.setProcessSequence(processSequence1)
 
-# Define parameters to optimize
-opt.setParameterNames(["etchRate", "processTime"])
-
-# Set parameter bounds (min, max)
-opt.setVariableParameters({
-    "etchRate": (5.0, 50.0),      # nm/s
-    "processTime": (0.5, 3.0)     # seconds
-})
-
-# Choose distance metric
-opt.setDistanceMetrics(primaryMetric="CA")  # Compare Area
-
-# Name this optimization run
-opt.setName("run1")
-opt.setNotes("First optimization - testing CA metric")
-
-print("Optimization configured")
-```
-
-!!! info "Distance Metrics"
-    - **CA** (Compare Area): Simple area difference, fast
-    - **CCH** (Chamfer): Shape similarity, recommended for most cases
-    - **CSF** (Sparse Field): Detailed comparison, slower
-    - **CCD**: Specific dimension matching
-
-    See [Core Concepts](concepts.md#distance-metrics) for details.
-
-## Step 6: Run Optimization (1 minute)
-
-Execute the optimization:
-
-```python
-print("Starting optimization...")
-opt.apply(
-    numEvaluations=50,        # Try 50 parameter combinations
-    saveComparison=True     # Save domain visualizations
+opt1.setParameterNames(
+    ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
 )
-print("Optimization complete!")
+opt1.setVariableParameters(
+    {
+        "neutralStickP": (0.001, 0.9),
+        "ionPowerCosine": (1.0, 900.0),
+        "neutralRate": (1.0, 150.0),
+        "ionRate": (0.1, 10.0),
+    }
+)
+opt1.setFixedParameters({"ionEnergy": 100.0})
+
+opt1.setDistanceMetrics(primaryMetric="CCH", additionalMetrics=["CA"])
+opt1.setOptimizer("cma")
+opt1.setName("run1")
+
+opt1.apply(numEvaluations=200, saveComparison=True)
 ```
 
-**What to expect:**
-- Progress printed to console
-- Runtime: 2-10 minutes (depending on simulation complexity)
-- Results saved automatically
+Four parameters are fitted within their bounds, one is fixed. The score is the Chamfer distance (`CCH`) between the simulated and the target surface.
 
-**Console output example:**
-```
-Evaluation 1/50: Objective = 245.67
-Evaluation 2/50: Objective = 189.23
-Evaluation 3/50: Objective = 156.41
-...
-Best objective: 23.45
-Best parameters: {'etchRate': 18.3, 'processTime': 1.47}
-```
+The 200 evaluations take about 10-15 minutes on a desktop machine.
 
-## Step 7: View Results (1 minute)
+## Step 4: Look at the Results
 
-### Check Files Created
+The run is stored in `projects/exampleProject/optimizationRuns/run1/`:
 
-```python
-import os
-
-results_dir = os.path.join(project.projectPath, "optimizationRuns", "run1")
-print(f"\nResults saved in: {results_dir}")
-print("\nFiles created:")
-for file in os.listdir(results_dir):
-    print(f"  - {file}")
-```
-
-Expected files:
 ```
 run1/
-├── run1-final-results.json          # Best parameters found
-├── run1-startingConfiguration.json  # Initial setup
-├── run1-processSequence.py          # Copy of process function
-├── notes.txt                        # Your notes
-├── progressBest.csv                 # History of improvements
-├── progressAll.csv                  # All evaluations
-├── progress/                        # Visualization files (.vtp)
-└── plots/                           # Convergence plots
+├── run1-final-results.json   # Best score and best parameters
+├── progressAll.csv           # Every evaluation
+├── progressBest.csv          # Only the improvements
+├── progress/                 # Surface of each new best evaluation (.vtp)
+├── plots/                    # Convergence and parameter plots
+├── run1-processSequence.py   # Copy of the process sequence
+└── notes.txt
 ```
 
-### View Best Parameters
+Start with these three:
 
-```python
-import json
+- **`run1-final-results.json`** for the best parameters and the best score. A score of a few nm means the simulated surface lies within about one grid cell of the target.
+- **`plots/run1-convergence-best.png`** to see whether the optimization has levelled off.
+- **`domains/optimalDomains/run1-NNN.vtp`** in ParaView, overlaid with the target surface, to judge the fit by eye.
 
-# Load results
-with open(os.path.join(results_dir, "run1-final-results.json")) as f:
-    results = json.load(f)
-
-print("\nOptimization Results:")
-print(f"Best objective value: {results['bestScore']:.4f}")
-print(f"Best parameters:")
-for param, value in results['bestParameters'].items():
-    print(f"  {param}: {value:.4f}")
-```
-
-### Visualize Convergence
-
-If `saveComparison=True`, convergence plots are in the `plots/` directory:
-
-- `convergence_plot.png` - Objective value vs evaluation number
-- `parameter_evolution.png` - How parameters changed during optimization
-
-Open these with an image viewer to see optimization progress.
-
-## Complete Example Script
-
-Here's the complete code all together:
-
-```python
-import viennafit as fit
-import viennaps as vps
-import viennals as vls
-import json
-import os
-
-# Setup
-vps.setDimension(2)
-vls.setDimension(2)
-
-# Create project
-project = fit.Project("myFirstOptimization", "./projects").initialize()
-
-# Create initial domain
-gridDelta = 5.0
-initialDomain = vps.Domain(
-    gridDelta=gridDelta,
-    xExtent=400.0,
-    yExtent=200.0,
-    boundary=vps.BoundaryType.REFLECTIVE_BOUNDARY
-)
-substrate = vls.Domain(
-    [-200, 200, -100, 100],
-    [vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
-     vls.BoundaryConditionEnum.INFINITE_BOUNDARY],
-    gridDelta
-)
-vls.MakeGeometry(substrate, vls.lsBox([0, -50], [400, 30])).apply()
-initialDomain.insertNextLevelSetAsMaterial(substrate, vps.Material.Si)
-project.setInitialDomain(initialDomain)
-
-# Create target domain
-targetLevelSet = vls.Domain(
-    [-200, 200, -100, 100],
-    [vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
-     vls.BoundaryConditionEnum.INFINITE_BOUNDARY],
-    gridDelta
-)
-vls.MakeGeometry(targetLevelSet, vls.lsBox([80, -50], [320, -20])).apply()
-project.setTargetLevelSet(targetLevelSet)
-
-# Define process sequence
-def processSequence(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
-    model = vps.IsotropicProcess(rate=-params["etchRate"])
-    process = vps.Process()
-    process.setDomain(domain)
-    process.setProcessModel(model)
-    process.setProcessDuration(params["processTime"])
-    process.apply()
-    return domain.getLevelSets()[-1]
-
-# Configure and run optimization
-opt = fit.Optimization(project)
-opt.setProcessSequence(processSequence)
-opt.setParameterNames(["etchRate", "processTime"])
-opt.setVariableParameters({
-    "etchRate": (5.0, 50.0),
-    "processTime": (0.5, 3.0)
-})
-opt.setDistanceMetrics(primaryMetric="CA")
-opt.setName("run1")
-opt.apply(numEvaluations=50, saveComparison=True)
-
-# View results
-results_dir = os.path.join(project.projectPath, "optimizationRuns", "run1")
-with open(os.path.join(results_dir, "run1-final-results.json")) as f:
-    results = json.load(f)
-
-print(f"\nBest objective: {results['bestScore']:.4f}")
-print("Best parameters:", results['bestParameters'])
-```
+!!! note
+    The simulation and the optimizer are both stochastic, so your numbers will differ slightly from run to run. Running the script again creates `run1_1`, `run1_2`, and so on; nothing is overwritten.
 
 ## Next Steps
 
-Congratulations! You've run your first ViennaFit optimization.
-
-To learn more:
-
-1. **[Core Concepts](concepts.md)** - Understand projects, domains, metrics, and parameters in depth
-2. **[Tutorial 1: Basic Optimization](../tutorials/tutorial-1-basic-optimization.md)** - More detailed walkthrough with real process models
-3. **[Tutorial 2: Custom Evaluation](../tutorials/tutorial-2-custom-evaluation.md)** - Explore parameter space beyond optimization
-4. **[Tutorial 3: Sensitivity Analysis](../tutorials/tutorial-3-sensitivity-analysis.md)** - Identify which parameters matter most
+1. **[Core Concepts](concepts.md)** - Projects, domains, metrics and parameters in more depth
+2. **[Tutorial 1: Basic Optimization](../tutorials/tutorial-1-basic-optimization.md)** - The same workflow, explained line by line
+3. **[Tutorial 2: Custom Evaluation](../tutorials/tutorial-2-custom-evaluation.md)** - Explore the neighbourhood of the optimum
+4. **[Tutorial 3: Sensitivity Analysis](../tutorials/tutorial-3-sensitivity-analysis.md)** - Find out which parameters matter
 
 ## Common Next Questions
 
+??? question "How do I use my own data?"
+    Replace the two `.dat` files by your own contours: one point per line as `x y` (in nm), ordered along the surface. Then adapt the level set bounds and the material in `assignDomains.py`, and the process sequence in `basicOptimization.py`.
+
 ??? question "How do I choose the right distance metric?"
-    Start with **CCH** (Chamfer) for most shape-matching tasks. It's robust and handles both global shape and local features well.
+    Start with **CCH** (Chamfer distance). It measures how far the two surfaces are apart, in the length unit of your geometry, which makes the score easy to interpret.
 
-    - Use **CA** for simple area matching (fastest)
-    - Use **CCD** when specific dimensions matter (e.g., trench depth, sidewall angle)
-    - Use **CSF** for very detailed matching (slowest)
+    - Use **CA** when only the amount of material matters
+    - Use **CCD** when specific dimensions matter (e.g. trench depth)
+    - Use **CSF** for a comparison on the level set grid
 
-    See [Core Concepts - Distance Metrics](concepts.md#distance-metrics) for detailed comparison.
+    See [Core Concepts - Distance Metrics](concepts.md#distance-metrics) for details.
 
 ??? question "How many evaluations do I need?"
-    Depends on:
+    It depends on the number of parameters and on how noisy the simulation is. The example uses 200 evaluations for 4 parameters.
 
-    - **Number of parameters**: More parameters need more evaluations
-    - **Parameter landscape**: Complex landscapes need more exploration
-    - **Desired accuracy**: Higher accuracy needs more evaluations
+    Check the convergence plot: if the best score is still dropping at the end, run more evaluations.
 
-    **Rules of thumb:**
-    - 2-3 parameters: 50-100 evaluations
-    - 4-6 parameters: 100-300 evaluations
-    - 7+ parameters: 300-1000+ evaluations
-
-    Monitor convergence plots - if still improving, run more evaluations.
-
-??? question "Can I resume if optimization is interrupted?"
-    Yes! ViennaFit 2.0+ supports loading incomplete runs:
+??? question "What if the optimization is interrupted?"
+    An interrupted run has its progress files, but no final results file, best domain or plots. These can be written afterwards by finalizing the run:
 
     ```python
-    evaluator = fit.CustomEvaluator(project)
-    evaluator.loadOptimizationRun("run1")  # Works even if incomplete
-    best_params = evaluator.loadBestFromProgressCSV("run1")
-    # Use best_params for further refinement
+    project.finalizeOptimizationRun("run1")
     ```
 
-    See [Tutorial 2](../tutorials/tutorial-2-custom-evaluation.md#working-with-incomplete-runs) for details.
+    See [Tutorial 1](../tutorials/tutorial-1-basic-optimization.md#if-a-run-was-stopped-early) for details.
 
-??? question "How do I use different optimizers?"
-    Change the optimizer with `.setOptimizer()`:
+??? question "How do I use a different optimizer?"
+    Change the optimizer with `setOptimizer()`:
 
     ```python
-    opt.setOptimizer("dlib")       # Default, global optimization
-    opt.setOptimizer("nevergrad")  # Evolutionary algorithm
-    opt.setOptimizer("ax")         # Bayesian optimization
+    opt1.setOptimizer("dlib")       # Default
+    opt1.setOptimizer("cma")        # CMA-ES, used in the example
+    opt1.setOptimizer("nevergrad")
+    opt1.setOptimizer("ax")         # Bayesian optimization
     ```
 
-    **dlib**: Good default for most cases
-    **Nevergrad**: Better for complex landscapes
-    **Ax**: Best for expensive simulations (fewer evaluations needed)
+    See [Core Concepts - Optimization](concepts.md#optimization) for details.

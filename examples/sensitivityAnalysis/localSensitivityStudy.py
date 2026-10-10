@@ -1,5 +1,6 @@
 import viennafit as fit
 import viennaps as vps
+import json
 import os
 
 # Load the project
@@ -12,32 +13,35 @@ p1.load(projectToLoad)
 
 lss1 = fit.LocalSensitivityStudy("lss1", p1)
 
-# Use the process sequence from a previous optimization run
-processPath = os.path.abspath(
-    os.path.join(p1.projectPath, "optimizationRuns", "run1", "run1-processSequence.py")
-)
+# Use the process sequence and the optimum from a previous optimization run
+runDir = os.path.abspath(os.path.join(p1.projectPath, "optimizationRuns", "run1"))
+processPath = os.path.join(runDir, "run1-processSequence.py")
+with open(os.path.join(runDir, "run1-final-results.json")) as f:
+    optimum = json.load(f)["bestParameters"]
 
 lss1.loadProcessSequence(processPath)
 
-# Parameters will be automatically detected from function signature
+# Declare all parameters used by the process sequence
 lss1.setParameterNames(
     ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
 )
 
-# Set fixed parameters
+# Keep the remaining parameters fixed at their optimal values
 lss1.setFixedParameters(
-    {"ionEnergy": 100.0, "neutralStickP": 0.03, "ionPowerCosine": 300.0}
+    {name: optimum[name] for name in ["ionEnergy", "neutralStickP", "ionPowerCosine"]}
 )
 
-# Set variable parameters with ranges
+# Set variable parameters as (lowerBound, pointOfInterest, upperBound):
+# each one is varied on its own around the optimum, within the optimization bounds
 lss1.setParameterSensitivityRanges(
     {
-        "neutralRate": (1.0, 40.0, 70.0),
-        "ionRate": (1.0, 5.0, 40.0),
+        "neutralRate": (1.0, optimum["neutralRate"], 150.0),
+        "ionRate": (0.1, optimum["ionRate"], 10.0),
     }
 )
 
-lss1.setDistanceMetric("CA+CSF")
+# Same distance metric as used in the optimization
+lss1.setDistanceMetric("CCH")
 
 lss1.validate()
 

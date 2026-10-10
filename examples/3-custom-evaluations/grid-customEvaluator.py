@@ -21,27 +21,27 @@ evaluator.loadOptimizationRun("run1")
 evaluator.setDistanceMetric("CCH")
 evaluator.setAdditionalMetrics(["CSF"])
 
-# Define parameter grids to evaluate
-# This will vary neutralRate and ionRate around their optimal values
-# neutralRate: 4 values uniformly spaced in ±20 range around 40
-# ionRate: 4 values uniformly spaced in ±0.29 range around 1.44 (±20%)
-variableValues = {
-    "neutralRate": [20.0, 33.3, 46.7, 60.0],
-    "ionRate": [1.15, 1.34, 1.54, 1.73],
-}
-
-evaluator.setVariableValues(variableValues)
-
 # Print the optimal parameters for reference
 optimalParams = evaluator.getOptimalParameters()
 print("Optimal parameters from optimization run:")
 for paramName, value in optimalParams.items():
     print(f"  {paramName}: {value}")
 
+# Define parameter grids to evaluate
+# This will vary neutralRate and ionRate around their optimal values:
+# 4 values each, uniformly spaced within ±20% of the optimum
+factors = [0.8, 0.933, 1.067, 1.2]
+variableValues = {
+    "neutralRate": [optimalParams["neutralRate"] * f for f in factors],
+    "ionRate": [optimalParams["ionRate"] * f for f in factors],
+}
+
+evaluator.setVariableValues(variableValues)
+
 # Run the grid evaluation
 # This will evaluate all combinations of the variable parameters
 # while keeping other parameters at their optimal values
-results = evaluator.apply(evaluationName="parameterSweep1", saveComparison=True)
+results = evaluator.apply(evaluationName="optimumGrid", saveComparison=True)
 
 # Get and display the best result from the grid
 bestResult = evaluator.getBestResult()
