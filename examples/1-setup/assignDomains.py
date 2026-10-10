@@ -63,10 +63,10 @@ extentTarget = fit.readPointsFromFile(
 # ============================================================================
 
 # Create level set domain for bottom (initial substrate geometry)
-# Note: Using custom extent [10, 410, 200, -450] instead of computed extentBottom
+# Note: Using custom extent [10, 410, -450, 200] instead of computed extentBottom
 # This allows precise control over simulation domain boundaries
 domainBottom = vls.Domain(
-    [10, 410, 200, -450],  # [minX, maxX, minY, maxY] in nm
+    [10, 410, -450, 200],  # [minX, maxX, minY, maxY] in nm
     [
         vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,  # X: symmetric (half-domain)
         vls.BoundaryConditionEnum.INFINITE_BOUNDARY,  # Y: infinite depth
@@ -76,7 +76,7 @@ domainBottom = vls.Domain(
 
 # Create level set domain for target (experimental result to match)
 domainTarget = vls.Domain(
-    [10, 410, 200, -450],  # Same extent as bottom for consistency
+    [10, 410, -450, 200],  # Same extent as bottom for consistency
     [
         vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
         vls.BoundaryConditionEnum.INFINITE_BOUNDARY,
@@ -103,7 +103,7 @@ domainInitial = vps.Domain(
     boundary=vps.BoundaryType.REFLECTIVE_BOUNDARY,
 )
 
-# Insert the bottom geometry as the initial material (Silicon substrate)
+# Insert the bottom geometry as the initial material (SiO2 substrate)
 domainInitial.insertNextLevelSetAsMaterial(domainBottom, vps.Material.SiO2)
 
 # ============================================================================

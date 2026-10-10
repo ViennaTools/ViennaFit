@@ -18,6 +18,12 @@ Project initialization and domain creation examples:
 Parameter optimization examples:
 - `basicOptimization.py` - Basic process parameter optimization
 - `customEvaluatorExample.py` - Custom evaluation after an optimization run
+- `optional-finalizeOptimization.py` - Finalize an optimization run that was stopped early
+
+### 3-custom-evaluations/
+Custom evaluations based on a finished optimization run:
+- `grid-customEvaluator.py` - Parameter grid around the optimum
+- `repeated-customEvaluator.py` - Repeated evaluation of the optimum (repeatability)
 
 ### sensitivityAnalysis/
 Parameter sensitivity analysis examples:
@@ -43,7 +49,15 @@ python basicOptimization.py
 python customEvaluatorExample.py  # (after optimization completes)
 ```
 
-### 3. Analysis Phase
+### 3. Custom Evaluations
+Explore the result of the optimization:
+```bash
+cd 3-custom-evaluations/
+python grid-customEvaluator.py
+python repeated-customEvaluator.py
+```
+
+### 4. Analysis Phase
 Run sensitivity analysis examples (after optimization):
 ```bash
 cd sensitivityAnalysis/

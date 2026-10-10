@@ -14,8 +14,12 @@ This folder contains examples for parameter optimization using ViennaFit.
 ### customEvaluatorExample.py
 - Advanced parameter evaluation using CustomEvaluator
 - Loads results from previous optimization runs
-- Evaluates parameter grids around optimal values
+- Evaluates a 5 x 4 grid of `neutralRate` and `ionRate` around the optimum
 - Generates detailed reports and visualizations
+
+### optional-finalizeOptimization.py
+- Only needed if an optimization run was stopped before it completed
+- Writes the final results, best domain and plots for the incomplete run
 
 ## Prerequisites
 
@@ -31,8 +35,9 @@ Before running optimization examples:
 
 ## Distance Metrics
 
-The examples use CCH (Chamfer distance) as the primary metric with CSF as an additional metric:
+The examples use CCH (Chamfer distance) as the primary metric and track one additional metric:
 - **CCH (Compare Chamfer)**: Primary metric - bidirectional distance metric.
-- **CSF (Compare Sparse Field)**: Additional metric - tracked separately.
+- **CA (Compare Area)**: Additional metric in `basicOptimization.py` - tracked separately.
+- **CSF (Compare Sparse Field)**: Additional metric in `customEvaluatorExample.py` - tracked separately.
 
-This configuration optimizes based on Chamfer distance while also tracking sparse field comparison for comprehensive analysis.
+The optimization is driven by the Chamfer distance only; the additional metrics are recorded for analysis.

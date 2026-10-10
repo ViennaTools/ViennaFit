@@ -5,6 +5,20 @@ All notable changes to ViennaFit are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Warm start for the `cma` and `nevergrad` optimizers:
+  `Optimization.setStartingPoint()` starts the search from a given parameter
+  vector instead of the centre of the bounds, for refining an earlier result
+  without discarding it, and `Optimization.setInitialStepSize()` sets the
+  CMA-ES `sigma0` (default 0.3). Both are written to `<run>-warmStart.json`
+  when the run starts and to the final results.
+- `Optimization.setLogScaledParameters()`: the `cma` optimizer normalises the
+  listed parameters in log space, so a step is a ratio rather than a
+  difference. For parameters whose bounds span decades.
+
 ## [2.0.0] - 2026-06-16
 
 ### Added

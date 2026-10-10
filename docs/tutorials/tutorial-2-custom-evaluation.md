@@ -1,538 +1,200 @@
-# Tutorial 2: Custom Parameter Evaluation
+# Tutorial 2: Custom Evaluation
 
-Learn how to explore parameter space, test specific combinations, and perform repeatability analysis using the CustomEvaluator.
+Evaluate parameter sets of your own choice with the process sequence of a finished optimization run: grids around the optimum and repeated runs of the optimum.
 
-**Estimated time:** 25-35 minutes
+This tutorial walks through `examples/2-optimization/customEvaluatorExample.py` and the two scripts in `examples/3-custom-evaluations/`. Every code block below is taken from those scripts.
+
+**Estimated time:** 10-15 minutes
 
 ## What You'll Learn
 
-- Load optimization results for further analysis
-- Set up and run parameter grid evaluations
-- Test specific parameter combinations
-- Perform repeatability testing (variance analysis)
-- Work with incomplete optimization runs
-- Analyze and visualize results
+- Load an optimization run into a `CustomEvaluator`
+- Evaluate a grid of fixed parameter values
+- Evaluate a grid placed relative to the optimum
+- Measure how much the result varies between identical runs
 
 ## Prerequisites
 
-- Completed [Tutorial 1](tutorial-1-basic-optimization.md) or have an existing optimization run
-- Understanding of [Core Concepts - Custom Evaluation](../getting-started/concepts.md#custom-evaluation)
+- Completed [Tutorial 1](tutorial-1-basic-optimization.md), so that the run `run1` exists in `projects/exampleProject`
 
-## Scenario
+## Why Evaluate by Hand?
 
-After completing an optimization, you want to:
-1. Explore the parameter space around the optimum
-2. Test some specific parameter combinations you suspect might work well
-3. Assess simulation repeatability by running identical parameters multiple times
+An optimization returns one best parameter set. It does not tell you how sharp that optimum is, whether other combinations fit nearly as well, or how much of the remaining distance is simulation noise. The `CustomEvaluator` answers these questions by running the same process sequence on parameter values that you pick.
 
-## Step 1: Load Optimization Results
+## Step 1: Load the Optimization Run
 
-Start by loading results from a previous optimization:
+All three scripts start the same way:
 
 ```python
 import viennafit as fit
-import viennaps as vps
-import viennals as vls
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
+import os
 
-# Set dimensions
-vps.setDimension(2)
-vls.setDimension(2)
+# Load the project
+p1 = fit.Project()
+scriptDir = os.path.dirname(os.path.abspath(__file__))
+projectToLoad = os.path.abspath(
+    os.path.join(scriptDir, "../../projects/exampleProject")
+)
+p1.load(projectToLoad)
 
-# Load project
-project = fit.Project()
-project.load("./projects/etchCalibration")
+# Create a custom evaluator instance
+evaluator = fit.CustomEvaluator(p1)
 
-# Create custom evaluator
-evaluator = fit.CustomEvaluator(project)
-
-# Load optimization run
-evaluator.loadOptimizationRun("run1_initialCalibration")
-
-print("Optimization run loaded successfully")
-print(f"Multi-domain mode: {evaluator.isMultiDomainProcess}")
-print(f"Optimal parameters: {evaluator.getOptimalParameters()}")
+# Load optimization results from a previous run
+evaluator.loadOptimizationRun("run1")
 ```
 
-**What happened:**
-- Loaded project structure
-- Created CustomEvaluator instance
-- Loaded process sequence and best parameters from optimization
-- Ready to evaluate new parameter combinations
-
-!!! info "Loading Incomplete Runs"
-    If your optimization was interrupted, ViennaFit 2.0+ can still load it:
-    ```python
-    evaluator.loadOptimizationRun("incomplete_run")
-    # Will print warning but load best parameters from CSV
-    ```
-
-## Step 2: Parameter Grid Evaluation
-
-Systematically explore parameter combinations around the optimum:
+`loadOptimizationRun` loads the process sequence stored in the run folder and the best parameters of that run. Any parameter you do not vary afterwards stays at its optimal value.
 
 ```python
-# Get optimal parameters from optimization
-optimal = evaluator.getOptimalParameters()
+optimalParams = evaluator.getOptimalParameters()
+print("Optimal parameters from optimization run:")
+for paramName, value in optimalParams.items():
+    print(f"  {paramName}: {value}")
+```
 
-print("\nOptimal parameters from optimization:")
-for param, value in optimal.items():
-    print(f"  {param}: {value:.4f}")
+!!! note
+    If you ran the optimization more than once, the later runs are called `run1_1`, `run1_2`, and so on. Pass the name of the run you want to build on.
 
-# Define grid around optimum
-# Vary each parameter by ±20% in 5 steps
-evaluator.setVariableValues({
-    "ionFlux": [
-        optimal["ionFlux"] * 0.8,
-        optimal["ionFlux"] * 0.9,
-        optimal["ionFlux"] * 1.0,  # Optimal
-        optimal["ionFlux"] * 1.1,
-        optimal["ionFlux"] * 1.2
-    ],
-    "etchantFlux": [
-        optimal["etchantFlux"] * 0.8,
-        optimal["etchantFlux"] * 0.9,
-        optimal["etchantFlux"] * 1.0,  # Optimal
-        optimal["etchantFlux"] * 1.1,
-        optimal["etchantFlux"] * 1.2
-    ]
-})
+## Step 2: A Grid of Fixed Values
 
-# Parameters you don't vary are automatically held at their optimal
-# values from the loaded run, so no extra configuration is needed for them.
+Script: `examples/2-optimization/customEvaluatorExample.py`
 
-# Set distance metric (same as optimization)
+```python
+# Set distance metric (same as used in optimization)
 evaluator.setDistanceMetric("CCH")
+evaluator.setAdditionalMetrics(["CSF"])
 
-print(f"\nGrid defined: 5 × 5 = 25 evaluations")
+# This will sweep neutralRate and ionRate over the region around the optimum
+# (5 x 4 = 20 evaluations)
+variableValues = {
+    "neutralRate": [70.0, 85.0, 100.0, 115.0, 130.0],
+    "ionRate": [1.0, 2.0, 3.0, 4.0],
+}
+
+evaluator.setVariableValues(variableValues)
 ```
 
-### Run Grid Evaluation
+`setVariableValues` takes a list of values per parameter and evaluates every combination. The two sticking and angular parameters are not listed, so they stay at their optimum.
+
+`setAdditionalMetrics` records further metrics next to the primary one. `CSF` compares the two level sets on their sparse field, which gives a second opinion on the same pair of surfaces.
 
 ```python
-# Execute grid evaluation
-results = evaluator.apply(
-    evaluationName="parameterGrid_ionAndEtchant",
-    saveComparison=False  # Don't save all 25 VTP files
-)
+results = evaluator.apply(evaluationName="parameterSweep1", saveComparison=True)
 
-print(f"\nGrid evaluation complete!")
-print(f"Total evaluations: {len(results)}")
+bestResult = evaluator.getBestResult()
+if bestResult:
+    print(f"\nBest result from grid evaluation:")
+    print(f"  Objective value: {bestResult['objectiveValue']:.6f}")
+    print(f"  Parameters:")
+    for paramName, value in bestResult["parameters"].items():
+        print(f"    {paramName}: {value:.6f}")
+
+# Save a detailed report
+evaluator.saveGridReport()
 ```
 
-**Runtime:** 5-15 minutes for 25 evaluations
+Run it:
 
-### Analyze Grid Results
-
-```python
-# Find best result from grid
-best_grid = evaluator.getBestResult()
-
-print(f"\nBest result from grid:")
-print(f"  Objective value: {best_grid['objectiveValue']:.4f}")
-print(f"  Parameters:")
-for param, value in best_grid['parameters'].items():
-    print(f"    {param}: {value:.4f}")
-
-# Compare to optimization optimum
-opt_score = min(r['objectiveValue'] for r in results
-                if r['parameters'] == optimal)
-print(f"\nOptimization optimum score: {opt_score:.4f}")
-print(f"Grid best score: {best_grid['objectiveValue']:.4f}")
-print(f"Improvement: {opt_score - best_grid['objectiveValue']:.4f}")
+```bash
+cd examples/2-optimization
+python customEvaluatorExample.py
 ```
 
-### Visualize Parameter Landscape
+The 20 evaluations take about a minute. The results are written to `projects/exampleProject/customEvaluations/parameterSweep1/`:
 
-Create a heatmap of the parameter space:
+| File | Content |
+|---|---|
+| `grid_results_summary.csv` | One row per evaluation: parameter values, metric values, execution time |
+| `grid_evaluation_report.json` | The same, with the configuration of the evaluation |
+| `neutralRate-100_ionRate-2-result.vtp` etc. | Simulated surface of each grid point (with `saveComparison=True`) |
+| `parameterSweep1-processSequence.py` | Copy of the process sequence that was used |
+
+### Reading the grid
+
+The Chamfer distance in nm over the grid, from one run (your numbers will differ):
+
+| `neutralRate` | `ionRate` = 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| 70 | 21.0 | 15.8 | 10.8 | 7.4 |
+| 85 | 12.7 | 7.5 | 3.8 | 6.3 |
+| 100 | 5.1 | **3.1** | 7.5 | 12.9 |
+| 115 | 5.8 | 10.5 | 15.4 | 20.8 |
+| 130 | 13.4 | 18.8 | 23.5 | 28.9 |
+
+The good fits lie on a diagonal: less neutral deposition can be made up for by more ion deposition, and the other way round. This is a trade-off between the two rates, and it is typical for process models. It means the total amount of deposited material is pinned down much better than the split between neutral and ion.
+
+The valley is still narrow: one step off the diagonal the distance doubles, so the fit does constrain both rates.
+
+## Step 3: A Grid Relative to the Optimum
+
+Script: `examples/3-custom-evaluations/grid-customEvaluator.py`
+
+Fixed values have to be edited whenever the optimum moves. The values can also be derived from the optimum itself:
 
 ```python
-# Extract results for 2D heatmap
-grid_data = []
-for result in results:
-    params = result['parameters']
-    grid_data.append({
-        'ionFlux': params.get('ionFlux', optimal['ionFlux']),
-        'etchantFlux': params.get('etchantFlux', optimal['etchantFlux']),
-        'objective': result['objectiveValue']
-    })
+optimalParams = evaluator.getOptimalParameters()
 
-df = pd.DataFrame(grid_data)
+# 4 values each, uniformly spaced within ±20% of the optimum
+factors = [0.8, 0.933, 1.067, 1.2]
+variableValues = {
+    "neutralRate": [optimalParams["neutralRate"] * f for f in factors],
+    "ionRate": [optimalParams["ionRate"] * f for f in factors],
+}
 
-# Create pivot table for heatmap
-pivot = df.pivot_table(
-    values='objective',
-    index='etchantFlux',
-    columns='ionFlux'
-)
+evaluator.setVariableValues(variableValues)
 
-# Plot heatmap
-plt.figure(figsize=(10, 8))
-plt.imshow(pivot.values, cmap='viridis', aspect='auto', origin='lower')
-plt.colorbar(label='Objective Value (lower = better)')
-plt.xlabel('ionFlux')
-plt.ylabel('etchantFlux')
-plt.title('Parameter Space Landscape')
-
-# Add optimal point marker
-opt_ion_idx = 2  # Middle of grid (optimal value)
-opt_etch_idx = 2
-plt.plot(opt_ion_idx, opt_etch_idx, 'r*', markersize=20, label='Optimum')
-
-plt.legend()
-plt.savefig('parameter_landscape.png', dpi=150)
-print("\nParameter landscape heatmap saved")
+results = evaluator.apply(evaluationName="optimumGrid", saveComparison=True)
 ```
 
-## Step 3: Specific Parameter Combinations
-
-Test hand-picked parameter combinations:
-
-```python
-# Define specific combinations to test
-specific_combos = [
-    {
-        "ionFlux": 40.0,
-        "etchantFlux": 700.0,
-        "ionEnergy": 85.0,
-        "neutralStickP": 0.30
-    },
-    {
-        "ionFlux": 45.0,
-        "etchantFlux": 650.0,
-        "ionEnergy": 90.0,
-        "neutralStickP": 0.25
-    },
-    {
-        "ionFlux": 50.0,
-        "etchantFlux": 600.0,
-        "ionEnergy": 95.0,
-        "neutralStickP": 0.20
-    }
-]
-
-# Set up paired evaluation
-evaluator.setVariableValuesPaired(specific_combos)
-evaluator.setDistanceMetric("CCH")
-
-# Run evaluation
-specific_results = evaluator.apply(
-    evaluationName="specificCombinations",
-    saveComparison=True  # Save these for detailed analysis
-)
-
-# Analyze
-print("\nSpecific combinations results:")
-for i, result in enumerate(specific_results):
-    print(f"\nCombination {i+1}:")
-    print(f"  Objective: {result['objectiveValue']:.4f}")
-    for param, value in result['parameters'].items():
-        print(f"  {param}: {value:.4f}")
+```bash
+cd ../3-custom-evaluations
+python grid-customEvaluator.py
 ```
 
-!!! tip "When to Use Paired Evaluation"
-    Use `setVariableValuesPaired()` when:
-    - You have specific combinations from literature
-    - You want to test parameter trade-offs
-    - Grid search is too expensive (too many parameters)
+This gives a 4 x 4 grid (16 evaluations, under a minute) that is centred on the optimum and works for any run. The factors are chosen so that the optimum itself is not on the grid. If the best grid point is clearly better than the optimization result, the optimization had not converged.
 
-## Step 4: Repeatability Testing
+The output goes to `customEvaluations/optimumGrid/`, in the same format as before.
 
-Assess simulation variance by running identical parameters multiple times:
+## Step 4: Repeatability
+
+Script: `examples/3-custom-evaluations/repeated-customEvaluator.py`
+
+The simulation uses Monte Carlo ray tracing, so the same parameters do not give exactly the same surface twice. To see how large this effect is, evaluate the optimum several times:
 
 ```python
-# Load best parameters (can be from CSV directly)
-best_params = evaluator.loadBestFromProgressCSV("run1_initialCalibration")
+bestParams = evaluator.getOptimalParameters()
 
-print(f"\nBest parameters from CSV:")
-for param, value in best_params.items():
-    print(f"  {param}: {value:.4f}")
-
-# Run 10 identical evaluations
-evaluator.setConstantParametersWithRepeats(
-    parameters=best_params,
-    numRepeats=10
-)
+# This runs the same parameters multiple times to assess reproducibility
+evaluator.setConstantParametersWithRepeats(bestParams, numRepeats=10)
 
 evaluator.setDistanceMetric("CCH")
 
-# Execute
-repeat_results = evaluator.apply(
-    evaluationName="repeatabilityTest",
-    saveComparison=False
-)
-
-print(f"\nRepeatability test complete: {len(repeat_results)} runs")
+results = evaluator.apply(evaluationName="repeatedEvaluation", saveComparison=True)
 ```
 
-### Analyze Variance
-
-```python
-# Extract objective values
-objectives = [r['objectiveValue'] for r in repeat_results]
-
-# Compute statistics
-mean_obj = np.mean(objectives)
-std_obj = np.std(objectives)
-cv = (std_obj / mean_obj) * 100  # Coefficient of variation
-
-print(f"\nRepeatability Statistics:")
-print(f"  Mean objective: {mean_obj:.6f}")
-print(f"  Std deviation:  {std_obj:.6f}")
-print(f"  Min:            {min(objectives):.6f}")
-print(f"  Max:            {max(objectives):.6f}")
-print(f"  Range:          {max(objectives) - min(objectives):.6f}")
-print(f"  CV:             {cv:.2f}%")
-
-# Visualize distribution
-plt.figure(figsize=(10, 6))
-plt.subplot(1, 2, 1)
-plt.hist(objectives, bins=10, edgecolor='black', alpha=0.7)
-plt.xlabel('Objective Value')
-plt.ylabel('Frequency')
-plt.title('Distribution of Repeated Evaluations')
-plt.axvline(mean_obj, color='r', linestyle='--', label=f'Mean: {mean_obj:.4f}')
-plt.legend()
-
-plt.subplot(1, 2, 2)
-plt.plot(range(1, 11), objectives, 'o-')
-plt.xlabel('Run Number')
-plt.ylabel('Objective Value')
-plt.title('Repeatability Over Runs')
-plt.axhline(mean_obj, color='r', linestyle='--', label='Mean')
-plt.axhline(mean_obj + 2*std_obj, color='gray', linestyle=':', label='±2σ')
-plt.axhline(mean_obj - 2*std_obj, color='gray', linestyle=':')
-plt.legend()
-
-plt.tight_layout()
-plt.savefig('repeatability_analysis.png', dpi=150)
-print("\nRepeatability plots saved")
+```bash
+python repeated-customEvaluator.py
 ```
 
-### Interpret Repeatability
+Ten runs take about half a minute. The output goes to `customEvaluations/repeatedEvaluation/`. Besides the individual results, ViennaFit compares the ten result surfaces with each other and writes the mean, standard deviation, minimum and maximum of these pairwise distances to `repeatability_stats.json`.
 
-**Good repeatability:**
-- ✅ CV < 5% - Excellent
-- ✅ CV < 10% - Good
-- ⚠️ CV < 20% - Acceptable
+### What the noise tells you
 
-**Poor repeatability:**
-- ❌ CV > 20% - Investigate causes:
-  - Random number seed not controlled
-  - Numerical instabilities
-  - Grid resolution too coarse
-  - Physical instabilities in process
+The spread of the objective value over the ten runs is the noise floor of your setup:
 
-## Step 5: Working with Incomplete Runs
-
-Load and analyze runs that didn't complete:
-
-```python
-# Create new evaluator
-eval_incomplete = fit.CustomEvaluator(project)
-
-# Load incomplete run (no final-results.json)
-eval_incomplete.loadOptimizationRun("incomplete_run_name")
-
-# Check if complete
-if eval_incomplete.isCompleteRun:
-    print("Run completed successfully")
-else:
-    print("⚠ Run is incomplete - using best parameters from CSV")
-
-# Load best parameters from CSV
-best_from_csv = eval_incomplete.loadBestFromProgressCSV("incomplete_run_name")
-
-print(f"\nBest parameters extracted from incomplete run:")
-for param, value in best_from_csv.items():
-    print(f"  {param}: {value:.4f}")
-
-# Can now use for further evaluation
-eval_incomplete.setConstantParametersWithRepeats(best_from_csv, numRepeats=5)
-eval_incomplete.setDistanceMetric("CCH")
-results_from_incomplete = eval_incomplete.apply("continue_from_incomplete")
-```
-
-!!! info "New in ViennaFit 2.0"
-    Incomplete run support automatically:
-    - Loads best parameters from `progressBest.csv`
-    - Loads fixed parameters from `progressAll_metadata.json`
-    - Loads process sequence from `{runName}-processSequence.py`
-    - Sets `isCompleteRun = False` flag
-
-## Step 6: Compare Multiple Runs
-
-Compare results from different evaluations:
-
-```python
-# Load results from multiple evaluations
-import glob
-import json
-
-evaluation_names = [
-    "parameterGrid_ionAndEtchant",
-    "specificCombinations",
-    "repeatabilityTest"
-]
-
-comparison = []
-for eval_name in evaluation_names:
-    report_path = f"{project.projectPath}/customEvaluations/{eval_name}/grid_evaluation_report.json"
-    if os.path.exists(report_path):
-        with open(report_path) as f:
-            report = json.load(f)
-
-        comparison.append({
-            'Evaluation': eval_name,
-            'Total Evals': report['metadata']['totalEvaluations'],
-            'Best Objective': report['summary']['bestObjectiveValue'],
-            'Mean Objective': report['summary']['objectiveValueRange']['mean']
-        })
-
-# Display comparison
-df_comp = pd.DataFrame(comparison)
-print("\nEvaluation Comparison:")
-print(df_comp.to_string(index=False))
-
-# Visualize
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-# Best objective comparison
-axes[0].bar(df_comp['Evaluation'], df_comp['Best Objective'])
-axes[0].set_ylabel('Best Objective Value')
-axes[0].set_title('Best Result by Evaluation')
-axes[0].tick_params(axis='x', rotation=45)
-
-# Total evaluations
-axes[1].bar(df_comp['Evaluation'], df_comp['Total Evals'], color='orange')
-axes[1].set_ylabel('Number of Evaluations')
-axes[1].set_title('Computational Cost')
-axes[1].tick_params(axis='x', rotation=45)
-
-plt.tight_layout()
-plt.savefig('evaluation_comparison.png', dpi=150)
-print("\nComparison plots saved")
-```
-
-## Step 7: Export Results
-
-Export results for external analysis:
-
-```python
-# Export grid results to CSV
-grid_report_path = f"{project.projectPath}/customEvaluations/parameterGrid_ionAndEtchant"
-grid_csv = pd.read_csv(f"{grid_report_path}/grid_results_summary.csv")
-
-print("\nGrid results CSV columns:")
-print(grid_csv.columns.tolist())
-
-# Export selected data
-export_data = grid_csv[['evaluationNumber', 'ionFlux', 'etchantFlux',
-                        'objectiveValue', 'executionTime']]
-export_data.to_csv('grid_results_export.csv', index=False)
-print("Exported grid results to grid_results_export.csv")
-
-# Export as Excel for easy sharing
-with pd.ExcelWriter('custom_evaluations_summary.xlsx') as writer:
-    # Grid results
-    grid_csv.to_excel(writer, sheet_name='ParameterGrid', index=False)
-
-    # Repeatability results
-    repeat_df = pd.DataFrame({
-        'Run': range(1, 11),
-        'Objective': objectives
-    })
-    repeat_df.to_excel(writer, sheet_name='Repeatability', index=False)
-
-    # Summary statistics
-    summary_df = pd.DataFrame({
-        'Metric': ['Mean', 'Std Dev', 'Min', 'Max', 'CV (%)'],
-        'Value': [mean_obj, std_obj, min(objectives), max(objectives), cv]
-    })
-    summary_df.to_excel(writer, sheet_name='Statistics', index=False)
-
-print("Excel summary created: custom_evaluations_summary.xlsx")
-```
-
-## Complete Example Script
-
-```python
-import viennafit as fit
-import viennaps as vps
-import viennals as vls
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Setup
-vps.setDimension(2)
-vls.setDimension(2)
-
-# Load project and optimization results
-project = fit.Project().load("./projects/etchCalibration")
-evaluator = fit.CustomEvaluator(project)
-evaluator.loadOptimizationRun("run1_initialCalibration")
-
-# Get optimal parameters
-optimal = evaluator.getOptimalParameters()
-
-# 1. Parameter grid evaluation
-evaluator.setVariableValues({
-    "ionFlux": [optimal["ionFlux"] * f for f in [0.8, 0.9, 1.0, 1.1, 1.2]],
-    "etchantFlux": [optimal["etchantFlux"] * f for f in [0.8, 0.9, 1.0, 1.1, 1.2]]
-})
-# Non-varied parameters stay at their optimal values automatically
-evaluator.setDistanceMetric("CCH")
-grid_results = evaluator.apply("parameterGrid")
-
-# 2. Repeatability test
-best_params = evaluator.loadBestFromProgressCSV("run1_initialCalibration")
-evaluator.setConstantParametersWithRepeats(best_params, numRepeats=10)
-repeat_results = evaluator.apply("repeatability")
-
-# 3. Analyze
-objectives = [r['objectiveValue'] for r in repeat_results]
-print(f"Mean: {np.mean(objectives):.6f}, Std: {np.std(objectives):.6f}")
-```
+- Differences between two parameter sets that are smaller than this spread mean nothing.
+- An optimization cannot be expected to converge more tightly than this.
+- If the noise is too large for your purpose, raise `raysPerPoint` in the process sequence. The evaluations get slower in return.
 
 ## Key Takeaways
 
-✅ **CustomEvaluator is powerful** - Explore beyond optimization
-✅ **Grid search** - Systematic parameter space exploration
-✅ **Paired values** - Test specific combinations
-✅ **Repeatability testing** - Assess simulation variance
-✅ **Incomplete runs** - ViennaFit 2.0+ handles gracefully
-
-## Common Questions
-
-??? question "How fine should my parameter grid be?"
-    **Balance resolution vs cost:**
-    - Start coarse (3-5 values per parameter)
-    - Refine interesting regions
-    - For 4 parameters at 5 values each = 625 evaluations!
-
-??? question "What's acceptable variance in repeatability?"
-    **Depends on application:**
-    - Research: CV < 5% excellent
-    - Production: CV < 1% may be needed
-    - If high variance, check grid resolution and numerical settings
-
-??? question "Can I use different metrics for custom evaluation?"
-    **Yes!** You can explore with different metrics:
-    ```python
-    evaluator.setDistanceMetric("CA")  # Different from optimization
-    ```
-    This helps understand how metric choice affects results.
+- `loadOptimizationRun` gives you the process sequence and the optimum of a run.
+- `setVariableValues` evaluates all combinations of the values you list; unlisted parameters stay at the optimum.
+- A grid shows trade-offs between parameters that a single optimum hides.
+- `setConstantParametersWithRepeats` measures the noise floor of the simulation.
 
 ## Next Steps
 
-**Continue learning:**
-- [Tutorial 3: Sensitivity Analysis](tutorial-3-sensitivity-analysis.md) - Identify important parameters
-- [Tutorial 4: Multi-Domain Optimization](tutorial-4-multi-domain.md) - Universal parameters
-
-**Advanced topics:**
-- Parameter screening before optimization
-- Response surface modeling
-- Multi-objective optimization (track multiple metrics)
+- [Tutorial 3: Sensitivity Analysis](tutorial-3-sensitivity-analysis.md) - quantify which parameters matter
+- [Core Concepts](../getting-started/concepts.md) - background on metrics and evaluators

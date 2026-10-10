@@ -6,7 +6,7 @@ Welcome to ViennaFit - a Python package for optimizing and calibrating ViennaPS 
 
 ViennaFit automates the task of finding optimal process parameters that make your ViennaPS simulations match experimental results. Instead of manually tweaking parameters through trial and error, ViennaFit uses advanced optimization algorithms to systematically search the parameter space and find the best fit.
 
-Whether you're calibrating an etch model to match measured profiles, exploring how different process conditions affect outcomes, or analyzing which parameters matter most, ViennaFit provides the tools you need.
+Whether you're calibrating a deposition or etch model to match measured profiles, exploring how different process conditions affect outcomes, or analyzing which parameters matter most, ViennaFit provides the tools you need.
 
 ## Key Features
 
@@ -16,7 +16,7 @@ Whether you're calibrating an etch model to match measured profiles, exploring h
 
     ---
 
-    Choose from dlib (global optimization), Nevergrad (evolutionary algorithms), or Ax/BoTorch (Bayesian optimization) depending on your needs.
+    Choose from dlib (global optimization), CMA-ES, Nevergrad, or Ax/BoTorch (Bayesian optimization) depending on your needs.
 
 -   :material-ruler: **8 Distance Metrics**
 
@@ -64,44 +64,53 @@ Whether you're calibrating an etch model to match measured profiles, exploring h
 
 ## Quick Example
 
-Here's a complete optimization in just a few lines:
+The core of the deposition example in `examples/`: fit a neutral-plus-ion deposition model to the profile of a filled trench.
 
 ```python
 import viennafit as fit
 import viennaps as vps
 
-# Create project
-project = fit.Project("etchCalibration", "./projects").initialize()
-project.setInitialDomain(initialDomain)
-project.setTargetLevelSet(targetProfile)
+# Load a project that holds the initial and the target domain
+project = fit.Project()
+project.load("./projects/exampleProject")
 
-# Define process sequence
+# Define the process sequence
 def processSequence(domain: vps.Domain, params: dict[str, float]):
-    # Your simulation using params
-    return simulatedProfile
+    # Run a ViennaPS process on the domain using params ...
+    return domain.getLevelSets()[-1]
 
-# Set up and run optimization
+# Set up and run the optimization
 opt = fit.Optimization(project)
 opt.setProcessSequence(processSequence)
+opt.setParameterNames(
+    ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
+)
 opt.setVariableParameters({
-    "etchRate": (10, 100),
-    "stickingProb": (0.01, 0.9)
+    "neutralStickP": (0.001, 0.9),
+    "ionPowerCosine": (1.0, 900.0),
+    "neutralRate": (1.0, 150.0),
+    "ionRate": (0.1, 10.0),
 })
+opt.setFixedParameters({"ionEnergy": 100.0})
 opt.setDistanceMetrics(primaryMetric="CCH")  # Chamfer distance
-opt.apply(numEvaluations=100)
+opt.setOptimizer("cma")
+opt.setName("run1")
+opt.apply(numEvaluations=200)
 
-# Results saved automatically!
+# Results are saved in the project folder
 ```
+
+The complete, runnable scripts are in the `examples/` folder of the repository. The [Quick Start](getting-started/quick-start.md) shows how to run them.
 
 ## Getting Started
 
 <div class="grid cards" markdown>
 
--   :material-clock-fast: **15-Minute Quickstart**
+-   :material-clock-fast: **Quick Start**
 
     ---
 
-    Get your first optimization running in 15 minutes with our Quick Start guide.
+    Run the example optimization from the `examples/` folder and look at its results.
 
     [:octicons-arrow-right-24: Quick Start](getting-started/quick-start.md)
 
@@ -109,7 +118,7 @@ opt.apply(numEvaluations=100)
 
     ---
 
-    Learn ViennaFit through comprehensive, hands-on tutorials covering all major features.
+    Walk through the example scripts step by step: optimization, custom evaluation and sensitivity analysis.
 
     [:octicons-arrow-right-24: Tutorials](tutorials/tutorial-1-basic-optimization.md)
 
@@ -138,8 +147,8 @@ ViennaFit supports various workflows depending on your goals:
 ### Initial Calibration
 Start from scratch to calibrate your process model to experimental data:
 
-1. Load experimental profile as target domain
-2. Define initial geometry
+1. Annotate the profile before and after the process
+2. Build the initial and target domain from the annotations
 3. Create process sequence with parameters to optimize
 4. Run optimization with appropriate distance metric
 5. Validate results and refine if needed
@@ -194,8 +203,8 @@ See the [CHANGELOG](https://github.com/ViennaTools/ViennaFit/blob/main/CHANGELOG
 
 ViennaFit is used for:
 
+- **Deposition Processes**: Fit sticking coefficients and growth rates to experimental film profiles (the case used in the examples and tutorials)
 - **Plasma Etching**: Calibrate ion and neutral flux parameters to match trench profiles
-- **Deposition Processes**: Fit sticking coefficients and growth rates to experimental film profiles
 - **Multi-Step Processes**: Optimize complex sequences of etching, deposition, and planarization
 - **Process Window Analysis**: Find robust parameter sets that work across different geometries
 - **Model Validation**: Quantify how well process models reproduce experimental observations
@@ -211,8 +220,8 @@ ViennaFit is used for:
 Ready to get started? Here's what we recommend:
 
 1. [Install ViennaFit](getting-started/installation.md) - Set up your environment
-2. [Quick Start](getting-started/quick-start.md) - Run your first optimization in 15 minutes
-3. [Tutorial 1](tutorials/tutorial-1-basic-optimization.md) - Deep dive into optimization workflow
+2. [Quick Start](getting-started/quick-start.md) - Run the example optimization
+3. [Tutorial 1](tutorials/tutorial-1-basic-optimization.md) - The optimization workflow, step by step
 4. [Core Concepts](getting-started/concepts.md) - Understand the fundamentals
 
 Happy optimizing! 🚀

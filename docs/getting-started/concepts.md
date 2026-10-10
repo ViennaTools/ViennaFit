@@ -1,174 +1,138 @@
 # Core Concepts
 
+This page explains the building blocks of ViennaFit. The code snippets use the deposition example from the `examples/` folder, the same one as in the [Quick Start](quick-start.md) and the tutorials.
+
 ## Projects
 
 ### What is a Project?
 
-A **Project** is a container for all work related to one calibration or optimization task. It manages:
+A **Project** is a container for all work related to one calibration task. It manages:
 
 - Initial and target domains
 - Optimization runs
-- Sensitivity studies
 - Custom evaluations
+- Sensitivity studies
 
 ### Directory Structure
 
-Initialization creates the `domains/` folder and `projectName-info.json`. The
-remaining folders are created on demand when you run the corresponding study:
+Initialization creates the `domains/` folder and `projectName-info.json`. The remaining folders are created on demand when you run the corresponding study:
 
 ```
 projectName/
 ├── projectName-info.json         # Project metadata
 ├── domains/
-│   ├── initialDomain/            # Starting geometries (.vpsd files)
-│   ├── targetDomain/             # Goals to match (.lvst files)
-│   ├── annotations/              # Measurement data
-│   └── optimalDomains/           # Best results
+│   ├── annotations/              # Contour data (.dat files)
+│   ├── initialDomain/            # Starting geometry (.vpsd) and meshes
+│   ├── targetDomain/             # Geometry to match (.lvst) and meshes
+│   └── optimalDomains/           # Best result of each optimization run
 ├── optimizationRuns/             # Optimization results
 │   └── run1/
 │       ├── run1-final-results.json
+│       ├── run1-processSequence.py
 │       ├── progressBest.csv
 │       ├── progressAll.csv
-│       └── progress/             # Visualization files
+│       ├── progress/             # Surfaces of the improvements (.vtp)
+│       └── plots/
 ├── customEvaluations/            # Custom parameter explorations
-├── locSensStudies/              # Local sensitivity results
-└── globSensStudies/             # Global sensitivity results
+├── locSensStudies/               # Local sensitivity results
+└── globSensStudies/              # Global sensitivity results
 ```
 
-### Creating a Project
+### Creating and Loading a Project
 
 ```python
 import viennafit as fit
 
-# Create new project
-project = fit.Project(
-    name="etchCalibration",
-    projectPath="./projects"
-).initialize()
+# Create a new project
+project = fit.Project("exampleProject", "./projects").initialize()
 
-# Or load existing project
+# Or load an existing one
 project = fit.Project()
-project.load("./projects/etchCalibration")
+project.load("./projects/exampleProject")
 ```
+
+!!! note
+    A project stores absolute paths. If you move its folder, assign the domains again.
 
 ### Single vs Multi-Domain
 
-**Single-Domain** (default):
-- One initial geometry
-- One target to match
-- Simplest case
-
-**Multi-Domain**:
-- Multiple initial geometries with names
-- Multiple targets to match
+**Single-domain** (default): one initial geometry and one target.
 
 ```python
-# Single-domain (backward compatible)
 project.setInitialDomain(domain)
 project.setTargetLevelSet(target)
-
-# Multi-domain (new in 2.0)
-project.addInitialDomain("wafer1", domain1)
-project.addInitialDomain("wafer2", domain2)
-project.addTargetLevelSet("wafer1", target1)
-project.addTargetLevelSet("wafer2", target2)
 ```
 
-!!! info "Domain Naming"
-    Use descriptive names like `"frontSide"`, `"backSide"`, not just `"domain1"`.
+**Multi-domain**: several named initial geometries, each with its own target. One parameter set is fitted to all of them.
 
-    The name `"default"` is reserved for single-domain compatibility.
+```python
+project.addInitialDomain("narrowTrench", domain1)
+project.addTargetLevelSet("narrowTrench", target1)
+
+project.addInitialDomain("wideTrench", domain2)
+project.addTargetLevelSet("wideTrench", target2)
+```
+
+Initial and target domains are paired by name. See [Tutorial 4](../tutorials/tutorial-4-multi-domain.md).
 
 ## Domains
 
 ### Initial Domain
 
-The **initial domain** is a ViennaPS domain. It is your starting geometry before any processing.
-
-**Contains:**
-- Material layers (Si, SiO2, etc.)
-- Initial geometry
-- Spatial extent and grid resolution
-
-**Created with ViennaPS:**
-```python
-import viennaps as vps
-
-initial = vps.Domain(
-    gridDelta=5.0,              # Grid spacing (nm)
-    xExtent=400.0,              # Width (nm)
-    yExtent=200.0,              # Height (nm)
-    boundary=vps.BoundaryType.REFLECTIVE_BOUNDARY
-)
-
-# Add material layers
-initial.insertNextLevelSetAsMaterial(substrate, vps.Material.Si)
-
-# See geometry creation tools in ViennaPS:
-# psMakeFin, psMakeHole, psMakeTrench, psMakePlane, psMakeStack...
-```
+The **initial domain** is a ViennaPS domain: the geometry before the process, with its materials. The process sequence runs on a copy of it.
 
 ### Target Domain
 
-The **target domain** is what you want your simulation to match - typically from experimental data.
+The **target** is a ViennaLS level set: the surface the simulation should reproduce, typically traced from a cross-section image. It is only used for comparison.
 
-**Source:**
-- Experimental measurements (SEM cross-sections etc.)
-- Loaded from annotated point data (.dat files) or VTK files (.vtp, .vtu)
-- Converted to level set representation
+### From Annotated Contours to Domains
 
-#### Creating Target from Annotated Experimental Data
+Both domains of the example are built from annotation files, as in `examples/1-setup/assignDomains.py`.
 
-The most common workflow uses the `readPointsFromFile` utility to convert experimental measurements into target domains:
+**Step 1: The annotation file**
 
-**Step 1: Prepare Annotation Data**
+A text file with one point per line, ordered along the surface contour:
 
-Annotate your experimental images (SEM, TEM, etc.) by tracing material boundaries and extracting coordinate points. Save as a `.dat` / `.txt` / `.csv` file with space-separated coordinates:
-
-**2D format** (x y per line):
 ```
--100.0 0.0
--95.0 0.0
--90.0 -2.5
--85.0 -7.5
+0.0  116.3
+25.0  116.2
+50.0  116.1
+75.0  116.2
 ...
 ```
 
-**3D format** (x y z per line):
-```
-50.0 100.0 0.0
-52.0 98.5 0.0
-54.0 97.0 0.0
-...
-```
+In 2D each line is `x y`, in 3D `x y z`. The example uses nm.
 
-Points should be **sequential** along the surface contour. Units are typically nanometers (nm) but can be set in ViennaPS accordingly.
-
-**Step 2: Load Points and Create Target Domain**
+**Step 2: Read the points**
 
 ```python
 import viennals as vls
 import viennafit as fit
 
-# Create mesh to hold the points
-meshTarget = vls.Mesh()
+gridDelta = 3  # nm
 
-# Read points from file and get extent
-gridDelta = 5.0  # Grid resolution (nm)
+meshTarget = vls.Mesh()
 extentTarget = fit.readPointsFromFile(
-    "experimental_profile.dat",
+    annotationTarget,   # path to the .dat file
     meshTarget,
     gridDelta,
-    mode="2D",           # "2D" or "3D"
-    reflectX=False,      # Mirror in X axis if needed
-    shiftX=0.0,          # Translate X coordinates if needed
-    shiftY=0.0,          # Translate Y coordinates if needed
-    scaleFactor=1.0      # Scale all coordinates if needed
+    mode="2D",          # "2D" or "3D"
 )
+```
 
-# Create level set domain with computed extent
-target = vls.Domain(
-    extentTarget,
+`readPointsFromFile` connects the points into a polyline mesh and returns the extent `[minX, maxX, minY, maxY]` of the contour, rounded to `gridDelta`.
+
+Optional arguments adjust the coordinates while reading:
+
+- **`scaleFactor`**: scale all coordinates, e.g. `scaleFactor=1000` to convert μm to nm
+- **`shiftX`, `shiftY`, `shiftZ`**: translate the contour, e.g. to align it with the other domain
+- **`reflectX=True`**: mirror the contour in x
+
+**Step 3: Convert to a level set**
+
+```python
+domainTarget = vls.Domain(
+    [10, 410, -450, 200],  # [minX, maxX, minY, maxY] in nm
     [
         vls.BoundaryConditionEnum.REFLECTIVE_BOUNDARY,
         vls.BoundaryConditionEnum.INFINITE_BOUNDARY,
@@ -176,45 +140,24 @@ target = vls.Domain(
     gridDelta,
 )
 
-# Convert mesh to level set representation
-vls.FromSurfaceMesh(target, meshTarget).apply()
+vls.FromSurfaceMesh(domainTarget, meshTarget).apply()
 ```
 
-**Common transformations:**
-- **`reflectX=True`**: Mirror coordinates if annotation coordinate system is flipped
-- **`shiftX/Y/Z`**: Center or align geometry to match initial domain
-- **`scaleFactor`**: Convert units (e.g., `scaleFactor=1000` for μm → nm)
-
-**Example:** See `examples/setup/loadExperimentalData.py` for a complete demonstration using `examples/data/u_shaped_trench.dat`.
-
-#### Creating Target Programmatically
-
-For testing or synthetic cases, create targets directly:
+The initial contour is converted the same way and then inserted into a ViennaPS domain as a material:
 
 ```python
-import viennals as vls
-
-target = vls.Domain([xmin, xmax, ymin, ymax], boundary, gridDelta)
-
-# Create geometric shape
-vls.MakeGeometry(target, vls.lsBox([x, y], [width, height])).apply()
+domainInitial = vps.Domain(
+    gridDelta=gridDelta,
+    xExtent=extentBottom[1] - extentBottom[0],
+    boundary=vps.BoundaryType.REFLECTIVE_BOUNDARY,
+)
+domainInitial.insertNextLevelSetAsMaterial(domainBottom, vps.Material.SiO2)
 ```
 
-### Domain Pairing
+!!! tip
+    Use the same bounds and the same `gridDelta` for the initial and the target level set, and check both surface meshes in ParaView before optimizing.
 
-In multi-domain mode, initial and target domains are paired by name:
-
-```python
-# Initial domain "wafer1" pairs with target "wafer1"
-project.addInitialDomain("wafer1", initial1)
-project.addTargetLevelSet("wafer1", target1)
-
-# Different geometry, same process parameters
-project.addInitialDomain("wafer2", initial2)
-project.addTargetLevelSet("wafer2", target2)
-```
-
-Optimization finds parameters that work well across all pairs.
+Domains do not have to come from annotations. Any ViennaPS domain (for example from the ViennaPS geometry builders) can be the initial domain, and any ViennaLS level set can be the target.
 
 ## Process Sequences
 
@@ -222,508 +165,385 @@ Optimization finds parameters that work well across all pairs.
 
 A **process sequence** is a Python function that:
 
-1. Takes a domain and parameters as input
+1. Takes a domain and a dictionary of parameters
 2. Runs a ViennaPS simulation
-3. Returns the resulting level set
+3. Returns the resulting level set, which is compared with the target
 
 ### Function Signature
 
-**Single-Domain:**
+**Single-domain:**
 ```python
 def processSequence(
-    domain: vps.Domain,         # Initial geometry (copied)
-    params: dict[str, float]    # Parameters chosen by optimizer
+    domain: vps.Domain,         # Copy of the initial domain
+    params: dict[str, float]    # Parameter values for this evaluation
 ) -> vls.Domain:                # Resulting level set
-    # Your simulation code
-    return result
+    ...
 ```
 
-**Multi-Domain:**
+**Multi-domain:**
 ```python
 def processSequence(
-    domains: dict[str, vps.Domain],     # Named domains
-    params: dict[str, float]            # Parameters
+    domains: dict[str, vps.Domain],     # Named copies of the initial domains
+    params: dict[str, float]
 ) -> dict[str, vls.Domain]:             # Named results
-    results = {}
-    for name, domain in domains.items():
-        # Process each domain
-        results[name] = processOne(domain, params)
-    return results
+    ...
 ```
 
-!!! warning "Domain Copying"
-    ViennaFit copies domains before passing to your function. Modify the copy freely - the original is preserved.
+ViennaFit passes a fresh copy of the initial domain for every evaluation, so the function can modify it freely.
 
-### Example Process Sequence
+### Example
+
+The process sequence of `examples/2-optimization/basicOptimization.py`:
 
 ```python
-def etchProcess(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
-    """
-    Simple plasma etching process.
-
-    Parameters:
-    - ionFlux: Ion flux density
-    - neutralFlux: Neutral flux density
-    - meanEnergy: Ion energy
-    """
-    # Create process model
+def processSequence1(domain: vps.Domain, params: dict[str, float]):
     model = vps.MultiParticleProcess()
 
-    # Configure with parameters
+    # Set the parameters for the neutral
+    sticking = {vps.Material.SiO2: params["neutralStickP"]}
+    model.addNeutralParticle(sticking, label="neutral")
+
+    # Set the parameters for the ion
     model.addIonParticle(
-        sourcePower=params["ionFlux"],
-        meanEnergy=params["meanEnergy"],
-        label="ion"
+        sourcePower=params["ionPowerCosine"],
+        meanEnergy=params["ionEnergy"],
+        label="ion",
     )
 
-    model.addNeutralParticle(
-        sticking={vps.Material.Si: params["neutralSticking"]},
-        label="neutral"
-    )
-
-    # Define rate function
     def rateFunction(fluxes, material):
-        if material == vps.Material.Si:
-            return (fluxes["ion"] * params["ionEtchRate"] +
-                    fluxes["neutral"] * params["neutralEtchRate"])
+        if material == vps.Material.SiO2:
+            return (
+                fluxes[0] * params["neutralRate"] + fluxes[1] * params["ionRate"]
+            )
         return 0.0
 
     model.setRateFunction(rateFunction)
 
-    # Run simulation
     process = vps.Process()
+    process.setFluxEngineType(vps.FluxEngineType.CPU_DISK)
     process.setDomain(domain)
     process.setProcessModel(model)
-    process.setProcessDuration(1.0)  # 1 second
+    process.setProcessDuration(1.0)
+
+    rayTracing = vps.RayTracingParameters()
+    rayTracing.raysPerPoint = 300
+    process.setParameters(rayTracing)
+
     process.apply()
 
-    # Return result
     return domain.getLevelSets()[-1]
 ```
 
-### Multi-Step Processes
+The positive rate makes the surface grow, so this is a deposition. `domain.getLevelSets()[-1]` is the topmost level set, the surface after the process.
 
-Process sequences can include multiple steps:
+A sequence may contain as many process steps as needed, as long as it returns one level set per domain.
 
-```python
-def complexProcess(domain: vps.Domain, params: dict[str, float]) -> vls.Domain:
-    # Step 1: Deposition
-    deposit = vps.IsotropicProcess(rate=params["depositRate"])
-    vps.Process(domain, deposit, params["depositTime"]).apply()
+### Where the Sequence is Stored
 
-    # Step 2: Etch
-    etch = vps.IsotropicProcess(rate=-params["etchRate"])
-    vps.Process(domain, etch, params["etchTime"]).apply()
-
-    # Step 3: Planarization
-    vps.Planarize(domain, 0.0).apply()
-
-    return domain.getLevelSets()[-1]
-```
+Pass the function with `setProcessSequence(function)`, or keep it in its own file and use `loadProcessSequence("path/to/sequence.py")`. Either way a copy is written into the run folder (`run1-processSequence.py`), so later studies can reuse exactly the model that was fitted.
 
 ## Distance Metrics
 
 ### What are Distance Metrics?
 
-**Distance metrics** quantify how well your simulation matches the target. They return a single number (lower = better match).
+A **distance metric** reduces the difference between the simulated and the target geometry to a single number. Lower is better, and the optimizer minimizes it.
 
 ### Available Metrics
 
-| Metric | Full Name | Best For | Speed | Sensitivity |
-|--------|-----------|----------|-------|-------------|
-| **CA** | Compare Area | Area matching | Fast | Coarse |
-| **CCH** | Compare Chamfer | Shape similarity | Fast | High |
-| **CSF** | Compare Sparse Field | Detailed matching | Fast | Very High |
-| **CCD** | Compare Critical Dimensions | Specific measurements | Fast | Targeted |
+| Metric | Name | What it measures |
+|--------|------|------------------|
+| **CCH** | Chamfer | RMS distance between the two surfaces, in the length unit of the geometry |
+| **CA** | Area | Area in which the two geometries do not overlap |
+| **CSF** | Sparse field | RMS difference of the level set values on the grid points at the surface |
+| **CCD** | Critical dimensions | RMS error of selected dimensions |
+
+Further variants (`CSF-IS`, `CNB`, `CA+CSF`, `CA+CNB`) are available as well.
 
 ### Choosing a Metric
 
-**Decision Flow:**
-```
-What matters most?
+- **CCH** is a good default. Its value is a distance (nm in the example), so "CCH = 3" directly says the surfaces are about 3 nm apart.
+- **CA** only sees how much the geometries differ in area. Use it when the amount of material matters more than the shape.
+- **CSF** compares on the level set grid and reacts to small local differences.
+- **CCD** ignores everything except the dimensions you select.
 
-├─ Specific dimensions (depth, width)?
-│  └─ Use CCD with measurement points
+### Setting the Metric
 
-├─ Overall shape similarity?
-│  └─ Use CCH (Chamfer distance)
-
-├─ Simple area difference?
-│  └─ Use CA (fastest)
-
-└─ Very detailed matching?
-   └─ Use CSF (slowest, most sensitive)
-```
-
-### CA - Compare Area
-
-Measures difference in total area/volume.
-
-**Formula:**
-```
-CA = |Area(simulation) - Area(target)|
-```
-
-**Use when:**
-- You care about total material removed/added
-- Shape details don't matter
-
-**Example:**
 ```python
-opt.setDistanceMetrics(primaryMetric="CA")
-```
-
-### CCH - Compare Chamfer
-
-Chamfer distance: average distance from each surface point to nearest target point.
-
-**Bidirectional:**
-- Forward: simulation → target
-- Backward: target → simulation
-- Final = max(forward, backward)
-
-**Use when:**
-- Shape similarity is important
-- You want robust matching
-- Good default choice
-
-**Example:**
-```python
-opt.setDistanceMetrics(primaryMetric="CCH")
-```
-
-### CSF - Compare Sparse Field
-
-Sum of squared differences at grid points in narrow band.
-
-**Very sensitive** to small differences.
-
-**Use when:**
-- You need very precise matching
-- Computation time is acceptable
-- Small shape variations matter
-
-**Example:**
-```python
-opt.setDistanceMetrics(
-    primaryMetric="CSF",
-    sparseFieldExpansionWidth=200  # This is explained in the function itself
+opt1.setDistanceMetrics(
+    primaryMetric="CCH",       # Minimized by the optimizer
+    additionalMetrics=["CA"],  # Recorded for every evaluation, not optimized
 )
 ```
 
-### CCD - Compare Critical Dimensions
+Additional metrics appear as extra columns in the progress files (`CA_value`, ...). They are useful as a cross-check: two metrics that disagree about which result is better tell you something about the fit.
 
-RMSE of specific dimension measurements.
+Studies other than the optimization use `setDistanceMetric("CCH")`, and the `CustomEvaluator` adds further metrics with `setAdditionalMetrics(["CSF"])`.
 
-**Requires measurement points:**
+### CCD - Critical Dimensions
+
+CCD needs to know which dimensions to measure. Each range scans along one axis and takes the minimum or maximum of the surface there:
+
 ```python
-opt.setDistanceMetrics(
+opt1.setDistanceMetrics(
     primaryMetric="CCD",
     criticalDimensionRanges=[
         {
-            'axis': 'y',           # Measure in y direction
-            'min': 80,             # x position range
-            'max': 120,
-            'findMaximum': True    # Find max y value
+            "axis": "x",          # Scan along x ...
+            "min": 180,           # ... between x = 180
+            "max": 240,           # ... and x = 240
+            "findMaximum": False  # and take the lowest point: the trench bottom
         },
-        {
-            'axis': 'x',
-            'min': -50,            # y position range
-            'max': -30,
-            'findMaximum': False   # Find min x value
-        }
-    ]
+    ],
 )
 ```
 
-**Use when:**
-- Specific dimensions are critical (trench depth, width, etc.)
-- You have measurement specifications
-- Other shape variations are acceptable
+### CSF - Expansion Width
 
-### Combined Metrics
-
-Use multiple metrics:
-
-```python
-opt.setDistanceMetrics(
-    primaryMetric="CSF",           # Optimize using combined
-    additionalMetrics=["CCH", "CCD"]  # Track but don't optimize
-)
-```
-
-**Primary** metric is optimized. **Additional** metrics are computed and tracked for analysis.
+For CSF the target level set is expanded before the comparison so that it overlaps the simulated surface. The width can be set with `sparseFieldExpansionWidth` (default 200) in `setDistanceMetrics`.
 
 ## Parameters
 
-### Variable Parameters
-
-**Variable parameters** are what you're optimizing. Each needs bounds.
+Every key that the process sequence reads from `params` is a parameter. Each one is declared and then made either variable or fixed.
 
 ```python
-opt.setVariableParameters({
-    "etchRate": (10.0, 100.0),      # Min 10, Max 100
-    "stickingProb": (0.01, 0.99),   # Min 0.01, Max 0.99
-    "ionEnergy": (5.0, 150.0)       # Min 5, Max 150
-})
+# Declare all parameters used by the process sequence
+opt1.setParameterNames(
+    ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
+)
+
+# Variable parameters: fitted within (lowerBound, upperBound)
+opt1.setVariableParameters(
+    {
+        "neutralStickP": (0.001, 0.9),
+        "ionPowerCosine": (1.0, 900.0),
+        "neutralRate": (1.0, 150.0),
+        "ionRate": (0.1, 10.0),
+    }
+)
+
+# Fixed parameters: constant
+opt1.setFixedParameters({"ionEnergy": 100.0})
 ```
 
-**Bounds should:**
-- Cover physically realistic range
-- Not be too wide (slows convergence)
-- Not be too narrow (misses optimum)
+**Rules:**
 
-**Tips:**
-- Start with wide bounds, narrow after initial run
-- Use log scale for parameters spanning orders of magnitude
-- Check physics, set a range which makes sense
+1. Call `setParameterNames` first.
+2. The names must match the keys used in the process sequence.
+3. Every declared parameter is either variable or fixed, never both.
 
-### Fixed Parameters
+### Choosing Bounds
 
-**Fixed parameters** stay constant during optimization.
+- Cover every value you consider plausible, but not much more: very wide bounds slow the optimization down.
+- Know what a unit of each parameter does. In the example one unit of `ionRate` deposits about ten times as much as one unit of `neutralRate`, which is why their ranges differ so much.
+- If the optimum sits on a bound, widen that bound and run again.
+- For parameters whose bounds span several orders of magnitude, `setLogScaledParameters([...])` lets the `cma` optimizer search them on a logarithmic scale.
 
-```python
-opt.setFixedParameters({
-    "temperature": 300.0,    # Room temperature
-    "pressure": 1.0,         # 1 Torr
-    "gridDelta": 5.0         # Grid resolution
-})
-```
+### When to Fix a Parameter
 
-**Use fixed parameters for:**
-- Known values from experimental conditions
-- Parameters determined separately
-- Simplifying optimization (fewer dimensions)
-
-### Parameter Names
-
-Parameter names must be declared **before** setting fixed and variable parameters using `setParameterNames()`.
-
-**Important rules:**
-
-1. **All parameters must be declared**: Every parameter used in your process sequence must appear in the parameter names list
-2. **No overlap**: A parameter cannot be both fixed and variable
-3. **Complete partition**: Every declared parameter must be classified as either fixed or variable
-
-**Example:**
-```python
-# Step 1: Declare all parameter names
-opt.setParameterNames(["etchRate", "time", "temperature", "pressure"])
-
-# Step 2: Classify parameters
-opt.setVariableParameters({
-    "etchRate": (10, 100),    # Will be optimized
-    "time": (0.5, 5.0)        # Will be optimized
-})
-
-opt.setFixedParameters({
-    "temperature": 300.0,     # Constant
-    "pressure": 1.0           # Constant
-})
-
-# Variable + Fixed = All parameter names
-# {"etchRate", "time"} ∪ {"temperature", "pressure"} = {"etchRate", "time", "temperature", "pressure"} ✓
-```
-
-**Matching process sequence:**
-
-Parameter names must match the keys used in your process sequence:
-
-```python
-# In optimization setup
-opt.setParameterNames(["etchRate", "time"])
-opt.setVariableParameters({
-    "etchRate": (10, 100),
-    "time": (0.5, 5.0)
-})
-
-# In process sequence - use same key names
-def process(domain, params):
-    rate = params["etchRate"]  # Must match "etchRate"
-    time = params["time"]      # Must match "time"
-    # ...
-```
+- Its value is known from the experiment
+- The target does not constrain it (see [Sensitivity Analysis](#sensitivity-analysis))
+- You want fewer dimensions for a first, faster run
 
 ## Optimization
 
 ### How Optimization Works
 
-0. **Optional: Initialize**: Choose starting parameters (random or specified)
-1. **Evaluate**: Run process sequence, compute distance metric
-2. **Update**: Algorithm chooses next parameters to try
-3. **Repeat**: Until convergence or max evaluations reached
-
-### Optimization Algorithms
-
-**dlib** (default):
-- Global optimization
-- Good for most cases
-- Robust to noise
-
-**Nevergrad:**
-- Automatic adaptation of strategy during the optimization run
-- Can be slower to converge but better at exploring local minima
-
-**Ax/BoTorch:**
-- Bayesian optimization
-- Uses batches instead of single evaluations
-- As a result usually needs less evaluations overall
-- User chooses batch size etc.
+1. **Propose**: the optimizer chooses a set of parameter values within the bounds
+2. **Evaluate**: the process sequence runs on a copy of the initial domain, and the result is compared with the target
+3. **Repeat**: until the requested number of evaluations is reached
 
 ```python
-opt.setOptimizer("dlib")       # Default
-opt.setOptimizer("nevergrad")  # Alternative
-opt.setOptimizer("ax")         # Bayesian (requires extra packages)
+opt1 = fit.Optimization(project)
+opt1.setProcessSequence(processSequence1)
+# ... parameters and metrics as above ...
+opt1.setOptimizer("cma")
+opt1.setName("run1")
+opt1.setNotes("Basic optimization of the multiparticle process for deposition.")
+
+opt1.apply(numEvaluations=200, saveComparison=True)
 ```
 
+### Optimizers
+
+| Name | Method | Notes |
+|------|--------|-------|
+| `"dlib"` | Global optimization | Default |
+| `"cma"` | CMA-ES (evolution strategy) | Used in the example; copes well with noisy objectives |
+| `"nevergrad"` | Nevergrad | Adapts its strategy during the run |
+| `"ax"` / `"botorch"` | Bayesian optimization | Works in batches; configured with `setNumBatches()` and `setBatchSize()` instead of `numEvaluations` |
+
+Related settings:
+
+- **`setStartingPoint({...})`**: start from given values instead of the centre of the bounds
+- **`setEarlyStopping(patienceEvaluations=...)`**: stop when there has been no improvement for that many evaluations
 
 ### Results
 
-After optimization completes:
+A run called `run1` writes to `optimizationRuns/run1/`:
 
-**Files created:**
-```
-optimizationRuns/runName/
-├── runName-final-results.json    # Best parameters
-├── progressBest.csv               # Improvement history
-├── progressAll.csv                # History of all evaluations
-├── plots/                         # Convergence plots
-└── progress/                      # Visualization files
-```
+| File | Content |
+|---|---|
+| `run1-final-results.json` | Best score, best parameters, bounds, optimizer, number of evaluations |
+| `progressAll.csv` | Every evaluation: parameters, metric values, timings |
+| `progressBest.csv` | Only the evaluations that improved on the best so far |
+| `progress/` | Surface of each new best evaluation |
+| `plots/` | Convergence and parameter plots |
+| `run1-processSequence.py` | Copy of the process sequence |
+| `notes.txt` | Text given to `setNotes` |
 
-**Best parameters in JSON:**
+The best surface is also copied to `domains/optimalDomains/`.
+
 ```json
 {
-  "bestParameters": {
-    "etchRate": 45.3,
-    "stickingProb": 0.23,
-    "ionEnergy": 75.8
-  },
-  "bestScore": 12.45,
-  "bestEvaluation#": 87
+    "bestScore": 2.65,
+    "bestEvaluation#": 202,
+    "bestParameters": {
+        "ionEnergy": 100.0,
+        "neutralStickP": 0.408,
+        "ionPowerCosine": 92.0,
+        "neutralRate": 96.2,
+        "ionRate": 2.08
+    }
 }
 ```
 
-## Sensitivity Analysis
-
-### Purpose
-
-**Sensitivity analysis** identifies which parameters matter most.
-
-**Questions it answers:**
-- Which parameters significantly affect results?
-- Which can be fixed without hurting performance?
-- How do parameters interact?
-
-### Local Sensitivity
-
-**One-at-a-time** variation around a point.
-
-```python
-study = fit.LocalSensitivityStudy("local1", project)
-study.setParameterSensitivityRanges({
-    "param1": (low, mid, high),    # Evaluate at 3 points
-    "param2": (low, mid, high)
-})
-study.apply()
-```
-
-**Use when:**
-- You have an optimum and want to understand nearby behavior
-- Fast results needed
-- Parameter interactions not critical
-
-### Global Sensitivity
-
-**Sobol indices** over entire parameter space.
-
-```python
-study = fit.GlobalSensitivityStudy("global1", project)
-study.setVariableParameters({
-    "param1": (min, max),
-    "param2": (min, max)
-})
-study.setSamplingOptions(numSamples=100, secondOrder=True)
-study.apply()
-```
-
-**Sobol Indices:**
-- **S1** (first-order): Direct effect of parameter
-- **ST** (total): Direct + interaction effects
-- **S2** (second-order): Pairwise interactions
-
-**Use when:**
-- You want to understand global behavior
-- Parameter interactions important
-- You have computational budget
+If a run with the same name exists, the new one is stored as `run1_1`, `run1_2`, and so on. A run that was interrupted can be completed with `project.finalizeOptimizationRun("run1")`.
 
 ## Custom Evaluation
 
-Beyond optimization, you can:
-
-### Grid Search
-
-Systematically evaluate parameter combinations:
+A `CustomEvaluator` runs the process sequence of an existing optimization run on parameter values that you choose. Parameters you do not mention stay at the optimum of that run.
 
 ```python
 evaluator = fit.CustomEvaluator(project)
 evaluator.loadOptimizationRun("run1")
-
-evaluator.setVariableValues({
-    "param1": [10, 20, 30, 40, 50],
-    "param2": [0.1, 0.2, 0.3, 0.4]
-})
-
-results = evaluator.apply("gridSearch1")
+evaluator.setDistanceMetric("CCH")
 ```
 
-Creates 5 × 4 = 20 evaluations.
+### Grid
+
+All combinations of the listed values:
+
+```python
+evaluator.setVariableValues({
+    "neutralRate": [70.0, 85.0, 100.0, 115.0, 130.0],
+    "ionRate": [1.0, 2.0, 3.0, 4.0],
+})
+
+results = evaluator.apply(evaluationName="parameterSweep1", saveComparison=True)
+evaluator.saveGridReport()
+```
+
+This gives 5 x 4 = 20 evaluations.
 
 ### Specific Combinations
 
-Test exact parameter sets:
+Only the parameter sets you list:
 
 ```python
 evaluator.setVariableValuesPaired([
-    {"param1": 25, "param2": 0.15},
-    {"param1": 35, "param2": 0.25},
-    {"param1": 45, "param2": 0.35}
+    {"neutralRate": 85.0, "ionRate": 3.0},
+    {"neutralRate": 100.0, "ionRate": 2.0},
+    {"neutralRate": 115.0, "ionRate": 1.0},
 ])
 
-results = evaluator.apply("specific3")
+results = evaluator.apply(evaluationName="specificCombinations")
 ```
 
-### Repeatability Testing
+### Repeatability
 
-Run identical parameters multiple times to assess variance:
+The same parameters several times, to measure the noise of the simulation:
 
 ```python
-best = evaluator.loadBestFromProgressCSV("run1")
+bestParams = evaluator.getOptimalParameters()
+evaluator.setConstantParametersWithRepeats(bestParams, numRepeats=10)
 
-evaluator.setConstantParametersWithRepeats(best, numRepeats=10)
-results = evaluator.apply("repeatability")
-
-# Analyze variance
-import numpy as np
-values = [r["objectiveValue"] for r in results]
-print(f"Mean: {np.mean(values):.4f}")
-print(f"Std: {np.std(values):.4f}")
+results = evaluator.apply(evaluationName="repeatedEvaluation")
 ```
+
+Differences between two results that are smaller than this noise are not meaningful.
+
+See [Tutorial 2](../tutorials/tutorial-2-custom-evaluation.md).
+
+## Sensitivity Analysis
+
+**Sensitivity analysis** tells you which parameters the fit actually depends on:
+
+- Which parameters are well determined by the target?
+- Which can be fixed without making the fit worse?
+- Do parameters compensate for each other?
+
+### Local Sensitivity
+
+One parameter at a time is moved through a range around a point of interest, usually the optimum.
+
+```python
+lss1 = fit.LocalSensitivityStudy("lss1", project)
+lss1.loadProcessSequence(processPath)
+lss1.setParameterNames(
+    ["neutralStickP", "ionPowerCosine", "neutralRate", "ionRate", "ionEnergy"]
+)
+lss1.setFixedParameters(
+    {name: optimum[name] for name in ["ionEnergy", "neutralStickP", "ionPowerCosine"]}
+)
+
+# (lowerBound, pointOfInterest, upperBound)
+lss1.setParameterSensitivityRanges(
+    {
+        "neutralRate": (1.0, optimum["neutralRate"], 150.0),
+        "ionRate": (0.1, optimum["ionRate"], 10.0),
+    }
+)
+
+lss1.setDistanceMetric("CCH")
+lss1.apply()
+```
+
+**Use when** you have an optimum and want to know how sharply each parameter is determined. It is cheap, but it does not show interactions between parameters.
+
+### Global Sensitivity
+
+The whole parameter range is sampled and Sobol indices are computed.
+
+```python
+gss = fit.GlobalSensitivityStudy("gss1", project)
+# ... process sequence, parameter names and fixed parameters as above ...
+
+gss.setVariableParameters(
+    {
+        "neutralRate": (1.0, 150.0),
+        "ionRate": (0.1, 10.0),
+    }
+)
+
+gss.setDistanceMetric("CCH")
+gss.setSamplingOptions(numSamples=32, secondOrder=False)
+gss.apply(saveComparison=False)
+```
+
+**Sobol indices:**
+
+- **S1** (first-order): effect of the parameter on its own
+- **ST** (total-order): effect including interactions with other parameters
+- **S2** (second-order, with `secondOrder=True`): pairwise interactions; needs far more samples
+
+**Use when** you want a ranking of the parameters over their full range and can afford the evaluations: `numSamples * (numParams + 2)` without second-order indices.
+
+See [Tutorial 3](../tutorials/tutorial-3-sensitivity-analysis.md).
 
 ## Summary
 
-**Projects** organize everything → **Domains** define problem → **Process Sequences** run simulations → **Distance Metrics** score results → **Optimizers** find best parameters
+**Projects** hold everything → **Domains** define the problem → **Process sequences** run the simulation → **Distance metrics** score the result → **Optimizers** search for the best parameters
 
 Key takeaways:
 
-- Always set dimensions before creating domains
-- Choose distance metric based on what you're matching
-- Start with reasonable parameter bounds
-- Monitor convergence - more evaluations if still improving
-- Use sensitivity analysis to understand your model
+- Set the dimension in ViennaPS and ViennaLS before creating domains
+- Check the initial and target surface before optimizing
+- Declare every parameter, with bounds or a fixed value
+- After a run, check the fit, the convergence and whether a parameter sits on a bound
+- Use custom evaluations and sensitivity studies to learn how far the result can be trusted
 
 ## Next Steps
 
-- **[Tutorial 1](../tutorials/tutorial-1-basic-optimization.md)**: Complete optimization walkthrough
+- **[Tutorial 1](../tutorials/tutorial-1-basic-optimization.md)**: The optimization workflow, step by step
 - **[Tutorial 2](../tutorials/tutorial-2-custom-evaluation.md)**: Custom parameter exploration
 - **[Tutorial 3](../tutorials/tutorial-3-sensitivity-analysis.md)**: Sensitivity analysis in practice

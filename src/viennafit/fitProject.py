@@ -1384,3 +1384,61 @@ class Project:
             )
 
         return summary.generateMarkdownReport(outputPath)
+
+
+def _finalizeRunCLI():
+    """Console-script entry point (``viennafit-finalize``).
+
+    Finalize an optimization run given the path to its run directory. Mirrors
+    ``viennafit-view-best``: the enclosing project is located automatically by
+    walking up to the folder containing ``domains/``, so only the run directory
+    needs to be passed. Finalization writes ``<run>-final-results.json`` from the
+    best evaluation, copies the best domain files to ``domains/optimalDomains``,
+    generates the run plots, and updates the project optimization summary.
+    """
+    import argparse
+    from .fitParaviewViewer import _findProjectDir
+
+    parser = argparse.ArgumentParser(
+        prog="viennafit-finalize",
+        description=(
+            "Finalize an optimization run: create final-results.json from the "
+            "best evaluation, copy optimal domains, generate plots, and update "
+            "the optimization summary."
+        ),
+    )
+    parser.add_argument(
+        "optimizationRunDir", help="Path to the optimization run directory"
+    )
+    parser.add_argument(
+        "--no-domain-files",
+        dest="copyDomainFiles",
+        action="store_false",
+        default=True,
+        help="Do not copy the best domain files to domains/optimalDomains",
+    )
+    parser.add_argument(
+        "--no-plots",
+        dest="generatePlots",
+        action="store_false",
+        default=True,
+        help="Do not generate visualization plots",
+    )
+    args = parser.parse_args()
+
+    runDir = os.path.abspath(args.optimizationRunDir)
+    if not os.path.isdir(runDir):
+        parser.error(f"Not a directory: {runDir}")
+
+    runName = os.path.basename(runDir.rstrip(os.sep))
+    projectDir = _findProjectDir(runDir)
+
+    project = Project()
+    project.load(projectDir)
+
+    success = project.finalizeOptimizationRun(
+        runName,
+        copyDomainFiles=args.copyDomainFiles,
+        generatePlots=args.generatePlots,
+    )
+    raise SystemExit(0 if success else 1)
