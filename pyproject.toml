@@ -45,7 +45,7 @@ dependencies = [
     # viennaps <= 4.6.2 with the older registry (v11), so the two cannot share
     # types and `import viennaps` fails. viennaps does not cap ViennaLS itself.
     # Drop once ViennaPS ships wheels built against pybind11 3.1.
-    "viennals<5.9",
+    "viennals<5.10",
     "dlib-bin>=19.24.6",
     "cma>=3.2.2",
     "numpy>=1.26",
